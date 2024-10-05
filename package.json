@@ -1,0 +1,24 @@
+{
+  "name": "script",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "save": "node ./dest/src/SaveSessions.js",
+    "load": "node ./dest/src/LoadSessions.js",
+    "auto": "node ./dest/src/autosuggest.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/events": "^3.0.3",
+    "blessed": "^0.1.81",
+    "events": "^3.3.0",
+    "node-pty": "^1.0.0",
+    "typescript": "^5.6.2"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/node": "^22.7.4"
+  }
+}
