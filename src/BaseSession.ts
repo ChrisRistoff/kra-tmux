@@ -52,15 +52,11 @@ export class BaseSessions extends Base {
 
         let splitDirection = PaneSplitDirection.Vertical;
 
-        // Logic to determine split direction
         if (paneIndex > 0) {
-            // Determine the arrangement based on the pane index
             const parentIndex = Math.floor((paneIndex - 1) / 2);
 
-            // Here we assume that even indexes will lead to horizontal splits,
-            // this logic may need to be adjusted based on how you are actually splitting panes.
             if (parentIndex % 2 === 0) {
-                splitDirection = PaneSplitDirection.Horizontal; // Assuming horizontal if parent index is even
+                splitDirection = PaneSplitDirection.Horizontal;
             }
         }
 
