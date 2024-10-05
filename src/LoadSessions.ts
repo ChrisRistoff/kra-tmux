@@ -2,7 +2,7 @@ import * as bash from 'child_process';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import { SessionEvent } from './events/SessionEvents';
-import { PaneSplitDirection, TmuxSessions } from './types/SessionTypes';
+import { TmuxSessions } from './types/SessionTypes';
 
 class LoadSessions extends BaseSessions {
     public backupFile: string;
@@ -74,33 +74,29 @@ class LoadSessions extends BaseSessions {
         const sourceTmux = 'tmux source ~/.tmux/.tmux.conf';
         bash.execSync(sourceTmux);
 
-        bash.execSync(`tmux new-session -d -s ${sessionName}`);
+        const createSession = `tmux new-session -d -s ${sessionName}`
+        bash.execSync(createSession);
 
-        // Loop through each window starting from the second window
         this.savedSessions[sessionName].windows.forEach((window, windowIndex) => {
-            bash.execSync(`tmux new-window -t ${sessionName} -n ${window.windowName} -c ${window.currentPath}`);
 
-            // Loop through each pane in the window
+            const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ${window.currentPath}`
+            bash.execSync(createWindow);
+
             window.panes.forEach((pane, paneIndex) => {
-                let direction;
-                if (pane.splitDirection === PaneSplitDirection.Vertical) {
-                    direction = 'v';
-                } else {
-                    direction = 'h';
-                }
-
                 if (paneIndex > 0) {
-                    bash.execSync(`tmux split-window -t ${sessionName}:${windowIndex} -${direction} -c ${pane.currentPath}`);
+                    const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -${pane.splitDirection} -c ${pane.currentPath}`
+                    bash.execSync(createPane);
                 }
 
                 if (pane.currentCommand) {
                     bash.execSync(`tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} '${pane.currentCommand}' C-m`);
                 }
 
-                bash.execSync(`tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`);
+                const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`
+                bash.execSync(resizePane);
             });
 
-            // set layout after all panes are created
+            // set layout after all panes are created until I find a solution for the positions and sizes
             bash.execSync(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
         });
     }

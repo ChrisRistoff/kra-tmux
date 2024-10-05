@@ -1,3 +1,5 @@
+import { PaneSplitDirection } from "../enums/SessionEnums"
+
 export type TmuxSessions = {
     [key: string]: {
         windows: Window[]
@@ -26,9 +28,4 @@ export type DateForFileName = {
     month: string,
     day: string,
     time: string,
-}
-
-export enum PaneSplitDirection {
-    Vertical = 'vertical',
-    Horizontal= 'horizontal'
 }

@@ -1,6 +1,7 @@
 import * as bash from 'child_process';
-import { TmuxSessions, Window, Pane, PaneSplitDirection } from './types/SessionTypes';
+import { TmuxSessions, Window, Pane } from './types/SessionTypes';
 import { Base } from './Base';
+import { PaneSplitDirection } from './enums/SessionEnums';
 
 export class BaseSessions extends Base {
     public currentSessions: TmuxSessions;
@@ -19,9 +20,7 @@ export class BaseSessions extends Base {
 
             for (let i = 0; i < windows.length; i++) {
                 const window = this.formatWindow(windows[i]);
-                const test = bash.execSync(`tmux display-message -p "#{window_layout}" -t ${session}:${window.windowName}`)
 
-                console.log(test)
                 if (this.currentSessions[session]) {
                     this.currentSessions[session].windows.push(window);
                 } else {
