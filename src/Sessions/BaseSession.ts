@@ -1,7 +1,8 @@
-import * as bash from './helpers/bashHelper';
-import { TmuxSessions, Window, Pane } from './types/SessionTypes';
-import { Base } from './Base';
-import { PaneSplitDirection } from './enums/SessionEnums';
+import * as bash from '../helpers/bashHelper'
+import { Base } from '../Base';
+import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
+import { PaneSplitDirection } from '../enums/SessionEnums';
+import { format } from 'path';
 
 export class BaseSessions extends Base {
     public currentSessions: TmuxSessions;
@@ -11,14 +12,22 @@ export class BaseSessions extends Base {
         this.currentSessions = {};
     }
 
-    public setCurrentSessions(): void {
-        const output = bash.execCommand(`tmux list-sessions -F '#S'`);
-        const sessions = output.toString().trim().split('\n');
+    public async setCurrentSessions(): Promise<void> {
+        let output;
+        try {
+            output = await bash.execCommand(`tmux list-sessions -F '#S'`);
+        } catch (error) {
+            console.log('No active sessions found!')
+            return;
+        }
+
+        const sessions = output.stdout.toString().trim().split('\n');
 
         for (const session of sessions) {
-            const windows = bash.execCommand(`tmux list-windows -t ${session} -F "#{window_index}:#{window_name}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`).toString().trim().split('\n');
+            const windows = await bash.execCommand(`tmux list-windows -t ${session} -F "#{window_index}:#{window_name}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`);
+            const windowsArray = windows.stdout.toString().trim().split('\n');
 
-            for (const window of windows) {
+            for (const window of windowsArray) {
                 const formattedWindow = this.formatWindow(window);
 
                 if (this.currentSessions[session]) {
@@ -30,12 +39,13 @@ export class BaseSessions extends Base {
                 }
             }
 
-            for (let i = 0; i < windows.length; i++) {
+            for (let i = 0; i < windowsArray.length; i++) {
                 const windowIndex = i;
-                const panes = bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_index}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`).toString().trim().split('\n');
+                const panes = await bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_index}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`);
+                const panesArray = panes.stdout.toString().trim().split('\n');
 
-                for (let i = 0; i < panes.length; i++) {
-                    const pane = this.formatPane(panes[i])
+                for (let i = 0; i < panesArray.length; i++) {
+                    const pane = this.formatPane(panesArray[i])
                     this.currentSessions[session].windows[windowIndex].panes.push(pane);
                 }
             }
@@ -48,7 +58,6 @@ export class BaseSessions extends Base {
             return true;
         } catch (error: unknown) {
             if (error instanceof Error) {
-                console.error('Error checking session:', error);
                 if (error.message.includes(`can't find session`)) {
                     return false;
                 }
@@ -79,6 +88,46 @@ export class BaseSessions extends Base {
         }
     }
 
+    public async attachToSession(session: string): Promise<void> {
+        if (!this.checkTmuxSessionExists(session)) {
+            console.log(`Session does not exist: ${session}`);
+            return;
+        }
+
+        console.log(`Attaching to tmux session: ${session}`);
+        await bash.runCommand('tmux', ['attach-session', '-t', session], {
+            stdio: 'inherit',
+            shell: true,
+            env: { ...process.env, TMUX: '' },
+        });
+    }
+
+    public async spawnATempSession(): Promise<void> {
+        await bash.runCommand('tmux', ['new-session', '-d', '-s', 'myTempSession'], {
+            stdio: 'inherit',
+            shell: true,
+            env: { ...process.env, TMUX: '' },
+        });
+
+        console.log('Temporary tmux session "myTempSession" created.');
+    }
+
+    public async killTempSession(): Promise<void> {
+        if (await this.checkTmuxSessionExists('myTempSession')) {
+            await bash.execCommand('tmux kill-session -t myTempSession');
+
+            console.log('Killed temporary tmux session "myTempSession".');
+        } else {
+            console.log('Temporary tmux session "myTempSession" does not exist.');
+        }
+    }
+
+    public async sourceTmuxConfig(): Promise<void> {
+        const sourceTmux = 'tmux source ~/.tmux/.tmux.conf';
+        await bash.execCommand(sourceTmux);
+        console.log('Sourced tmux configuration file.');
+    }
+
     private formatPane(pane: string): Pane {
         const [index, currentCommand, currentPath, size] = pane.split(':');
         const [width, height] = size.split('x')
@@ -106,7 +155,7 @@ export class BaseSessions extends Base {
 
 
     private formatWindow(window: string): Window {
-        const [windowName, currentCommand, currentPath, size]= window.split(':');
+        const [windowName, currentCommand, currentPath, size] = window.split(':');
 
         const dimensions = size.split('x');
 

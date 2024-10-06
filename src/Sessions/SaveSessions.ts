@@ -1,4 +1,4 @@
-import * as bash from 'child_process';
+import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -11,7 +11,15 @@ export class Save extends BaseSessions {
     }
 
     public async saveSessionsToFile(): Promise<void> {
+        this.setCurrentSessions();
+
         const sessionString = JSON.stringify(this.currentSessions, null, 2);
+
+        if (sessionString === '{}') {
+            console.log('No sessions found to save!');
+            return;
+        }
+
         const dateArray = new Date().toString().split(' ');
 
         let timeArray = dateArray[4].split(':')
@@ -22,7 +30,7 @@ export class Save extends BaseSessions {
         const fileName = yearMonthDayTime.join('-')
         const filePath = path.join(os.homedir(), `.tmux/sessions/${fileName}`);
 
-        bash.exec(`if [ ! "~/.tmux/sessions" ]; then
+        await bash.execCommand(`if [ ! "~/.tmux/sessions" ]; then
                     mkdir "~/.tmux/sessions"
                 fi
         `);
@@ -32,9 +40,3 @@ export class Save extends BaseSessions {
         console.log('Save Successful!');
     }
 }
-
-const save = new Save();
-
-save.setCurrentSessions();
-save.printSessions();
-save.saveSessionsToFile();
