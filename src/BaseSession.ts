@@ -11,21 +11,21 @@ export class BaseSessions extends Base {
         this.currentSessions = {};
     }
 
-    public getCurrentSessions(): void {
+    public setCurrentSessions(): void {
         const output = bash.execSync(`tmux list-sessions -F '#S'`);
         const sessions = output.toString().trim().split('\n');
 
         for (const session of sessions) {
             const windows = bash.execSync(`tmux list-windows -t ${session} -F "#{window_index}:#{window_name}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`).toString().trim().split('\n');
 
-            for (let i = 0; i < windows.length; i++) {
-                const window = this.formatWindow(windows[i]);
+            for (const window of windows) {
+                const formattedWindow = this.formatWindow(window);
 
                 if (this.currentSessions[session]) {
-                    this.currentSessions[session].windows.push(window);
+                    this.currentSessions[session].windows.push(formattedWindow);
                 } else {
                     this.currentSessions[session] = {
-                        windows: [window]
+                        windows: [formattedWindow]
                     }
                 }
             }
@@ -38,8 +38,28 @@ export class BaseSessions extends Base {
                     const pane = this.formatPane(panes[i])
                     this.currentSessions[session].windows[windowIndex].panes.push(pane);
                 }
-
             }
+        }
+    }
+
+    public printSessions(): void {
+        for (const sess in this.currentSessions) {
+            const currentSession = this.currentSessions[sess];
+            let panesCount = 0
+            let path = '';
+
+            for (const window of currentSession.windows) {
+                path = !path ? window.currentPath : path;
+
+                panesCount += window.panes.length;
+            }
+
+            console.table({
+                Name: sess,
+                Path: path,
+                Widnows: currentSession.windows.length,
+                Panes: panesCount,
+            })
         }
     }
 
@@ -87,29 +107,6 @@ export class BaseSessions extends Base {
             width,
             height,
             panes: []
-        }
-    }
-
-    public printSessions(): void {
-        for (const sess in this.currentSessions) {
-            const currentSession = this.currentSessions[sess];
-            let panesCount = 0
-            let path = '';
-
-            for (let i = 0; i < currentSession.windows.length; i++) {
-                const currentWindow = currentSession.windows[i];
-
-                path = !path ? currentWindow.currentPath : path;
-
-                panesCount += currentWindow.panes.length;
-            }
-
-            console.table({
-                Name: sess,
-                Path: path,
-                Widnows: currentSession.windows.length,
-                Panes: panesCount,
-            })
         }
     }
 }

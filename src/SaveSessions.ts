@@ -35,6 +35,6 @@ export class Save extends BaseSessions {
 
 const save = new Save();
 
-save.getCurrentSessions();
+save.setCurrentSessions();
 save.printSessions();
 save.saveSessionsToFile();

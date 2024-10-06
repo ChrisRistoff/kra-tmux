@@ -4,7 +4,7 @@ import { BaseSessions } from './BaseSession';
 import { SessionEvent } from './events/SessionEvents';
 import { TmuxSessions } from './types/SessionTypes';
 
-class LoadSessions extends BaseSessions {
+export class LoadSessions extends BaseSessions {
     public backupFile: string;
     public savedSessions: TmuxSessions;
 
@@ -13,15 +13,14 @@ class LoadSessions extends BaseSessions {
         this.backupFile = 'tmux_session_backup.txt';
         this.savedSessions = {};
 
-        this.events.addAsyncEventListener(SessionEvent.OnSessionsRequest, async () => {
-            this.getCurrentSessions();
+/*         this.events.addAsyncEventListener(SessionEvent.OnSessionsRequest, async () => {
+            this.setCurrentSessions();
             this.getSessionsFromSaved();
-        })
+        }) */
     }
 
     public async getSortedSessionDates(): Promise<string[]> {
         const sessionsDates = await fs.readdir(this.sessionsFilePath);
-
 
         sessionsDates.sort((a, b) => {
             return new Date(b).getTime() - new Date(a).getTime()
@@ -40,17 +39,15 @@ class LoadSessions extends BaseSessions {
     }
 
     public printSavedSessions(): void {
-        for (const sess in this.savedSessions) {
+        for (const sess in Object.keys(this.savedSessions)) {
             const currentSession = this.savedSessions[sess];
             let panesCount = 0
             let path = '';
 
-            for (let i = 0; i < currentSession.windows.length; i++) {
-                const currentWindow = currentSession.windows[i];
+            for (const window of currentSession.windows) {
+                path = !path ? window.currentPath : path;
 
-                path = !path ? currentWindow.currentPath : path;
-
-                panesCount += currentWindow.panes.length;
+                panesCount += window.panes.length;
             }
 
             console.table({
@@ -84,7 +81,7 @@ class LoadSessions extends BaseSessions {
 
             window.panes.forEach((pane, paneIndex) => {
                 if (paneIndex > 0) {
-                    const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -${pane.splitDirection} -c ${pane.currentPath}`
+                    const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -c ${pane.currentPath}`
                     bash.execSync(createPane);
                 }
 
@@ -106,7 +103,7 @@ class LoadSessions extends BaseSessions {
         await this.loadLatestSession();
     }
 }
-
+/*
 const loading = new LoadSessions();
 loading.events.emit(SessionEvent.OnSessionsRequest);
-loading.main();
+loading.main(); */
