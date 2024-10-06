@@ -1,7 +1,6 @@
-import * as bash from 'child_process';
+import * as bash from './helpers/bashHelper'
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
-import { SessionEvent } from './events/SessionEvents';
 import { TmuxSessions } from './types/SessionTypes';
 
 export class LoadSessions extends BaseSessions {
@@ -12,11 +11,6 @@ export class LoadSessions extends BaseSessions {
         super()
         this.backupFile = 'tmux_session_backup.txt';
         this.savedSessions = {};
-
-/*         this.events.addAsyncEventListener(SessionEvent.OnSessionsRequest, async () => {
-            this.setCurrentSessions();
-            this.getSessionsFromSaved();
-        }) */
     }
 
     public async getSortedSessionDates(): Promise<string[]> {
@@ -60,41 +54,88 @@ export class LoadSessions extends BaseSessions {
     }
 
     public async loadLatestSession(): Promise<void> {
-        await this.getSessionsFromSaved();
+        try {
+            // create a new temporary session in detached mode
+            await bash.runCommand('tmux', ['new-session', '-d', '-s', 'myTempSession'], {
+                stdio: 'inherit',
+                shell: true,
+                env: { ...process.env, TMUX: '' }, // Unset TMUX environment variable
+            });
+            console.log('Temporary tmux session "myTempSession" created.');
 
-        for (const sess in this.savedSessions) {
-            this.createTmuxSession(sess)
+            // source the tmux configuration file
+            const sourceTmux = 'tmux source ~/.tmux/.tmux.conf';
+            await bash.execCommand(sourceTmux);
+            console.log('Sourced tmux configuration file.');
+
+            // load saved sessions
+            await this.getSessionsFromSaved();
+
+            if (!this.savedSessions || Object.keys(this.savedSessions).length === 0) {
+                console.error('No saved sessions found.');
+                return;
+            }
+
+            // create each saved tmux session
+            for (const sess of Object.keys(this.savedSessions)) {
+                if (await this.checkTmuxSessionExists(sess)) {
+                    console.log(`Session ${sess} already exists`);
+                } else {
+                    console.log(`Creating tmux session: ${sess}`);
+                    await this.createTmuxSession(sess);
+                }
+            }
+
+            // check if the tmux server is running before trying to kill the session
+            if (await this.checkTmuxSessionExists('myTempSession')) {
+                const killTempSession = 'tmux kill-session -t myTempSession';
+                await bash.execCommand(killTempSession);
+
+                console.log('Killed temporary tmux session "myTempSession".');
+            } else {
+                console.log('Temporary tmux session "myTempSession" does not exist.');
+            }
+
+
+            // attach to the first saved session
+            const firstSession = Object.keys(this.savedSessions)[0];
+            console.log(`Attaching to tmux session: ${firstSession}`);
+            await bash.runCommand('tmux', ['attach-session', '-t', firstSession], {
+                stdio: 'inherit',
+                shell: true,
+                env: { ...process.env, TMUX: '' }, // Unset TMUX environment variable
+            });
+
+        } catch (error) {
+            console.error('Error in loadLatestSession:', error);
         }
     }
 
-    public createTmuxSession(sessionName: string): void {
-        const sourceTmux = 'tmux source ~/.tmux/.tmux.conf';
-        bash.execSync(sourceTmux);
-
+    public async createTmuxSession(sessionName: string): Promise<void> {
         const createSession = `tmux new-session -d -s ${sessionName}`
-        bash.execSync(createSession);
+        await bash.execCommand(createSession);
 
-        this.savedSessions[sessionName].windows.forEach((window, windowIndex) => {
+        this.savedSessions[sessionName].windows.forEach(async (window, windowIndex) => {
 
             const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ${window.currentPath}`
-            bash.execSync(createWindow);
+            await bash.execCommand(createWindow);
 
-            window.panes.forEach((pane, paneIndex) => {
+            window.panes.forEach(async (pane, paneIndex) => {
                 if (paneIndex > 0) {
                     const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -c ${pane.currentPath}`
-                    bash.execSync(createPane);
+                    await bash.execCommand(createPane);
                 }
 
                 if (pane.currentCommand) {
-                    bash.execSync(`tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} '${pane.currentCommand}' C-m`);
+                    await bash.execCommand(`tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} '${pane.currentCommand}' C-m`);
                 }
 
                 const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`
-                bash.execSync(resizePane);
+                await bash.execCommand(resizePane);
             });
 
             // set layout after all panes are created until I find a solution for the positions and sizes
-            bash.execSync(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
+            await bash.execCommand(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
         });
     }
 
@@ -103,7 +144,6 @@ export class LoadSessions extends BaseSessions {
         await this.loadLatestSession();
     }
 }
-/*
+
 const loading = new LoadSessions();
-loading.events.emit(SessionEvent.OnSessionsRequest);
-loading.main(); */
+loading.main();
