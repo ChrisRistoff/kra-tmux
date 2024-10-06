@@ -3,7 +3,7 @@ import { AllowedCommandsToFail } from '../types/bashTypes';
 
 const allowedCommandsForNoCode: AllowedCommandsToFail = {
     // NOTE: Example usage
-    // 'tmux': new Set(['attach-session'])
+    'tmux': new Set(['attach-session'])
 }
 
 export async function runCommand(command: string, args? : string[], options = {}): Promise<void> {

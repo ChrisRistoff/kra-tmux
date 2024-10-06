@@ -1,7 +1,7 @@
 import { LoadSessions } from "./LoadSessions";
 import * as fs from 'fs/promises';
 
-class ManageSavedSessions extends LoadSessions {
+export class ManageSavedSessions extends LoadSessions {
     constructor () {
         super();
     }
@@ -18,6 +18,3 @@ class ManageSavedSessions extends LoadSessions {
         this.deleteLastSavedSession();
     }
 }
-
-const manager = new ManageSavedSessions();
-manager.main();

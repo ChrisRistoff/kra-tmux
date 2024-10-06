@@ -1,7 +1,7 @@
-import * as bash from './helpers/bashHelper'
+import * as bash from '../helpers/bashHelper'
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
-import { TmuxSessions } from './types/SessionTypes';
+import { TmuxSessions } from '../types/SessionTypes';
 
 export class LoadSessions extends BaseSessions {
     public backupFile: string;
@@ -109,16 +109,8 @@ export class LoadSessions extends BaseSessions {
                 await bash.execCommand(resizePane);
             });
 
-            // set layout after all panes are created until I find a solution for the positions and sizes
+            // NOTE: set layout after all panes are created until I find a solution for the positions and sizes
             await bash.execCommand(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
         });
     }
-
-    public async main (): Promise<void> {
-        this.printSavedSessions();
-        await this.loadLatestSession();
-    }
 }
-
-const loading = new LoadSessions();
-loading.main();

@@ -1,8 +1,10 @@
 {
-  "name": "script",
+  "name": "kra-workflow",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "bin": {
+    "kra": "dest/src/main.js"
+  },
   "scripts": {
     "save": "node ./dest/src/SaveSessions.js",
     "load": "node ./dest/src/LoadSessions.js",
