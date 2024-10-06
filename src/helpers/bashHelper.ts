@@ -1,4 +1,10 @@
 import { spawn, exec } from 'child_process';
+import { AllowedCommandsToFail } from '../types/bashTypes';
+
+const allowedCommandsForNoCode: AllowedCommandsToFail = {
+    // NOTE: Example usage
+    // 'tmux': new Set(['attach-session'])
+}
 
 export async function runCommand(command: string, args? : string[], options = {}): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -6,6 +12,8 @@ export async function runCommand(command: string, args? : string[], options = {}
 
         process.on('close', (code) => {
             if (code === 0) {
+                resolve();
+            } else if (isCommandValidWithNoCode(command, args)) {
                 resolve();
             } else {
                 reject(new Error(`Command "${command} ${args?.join(' ')}" failed with code ${code}`));
@@ -27,3 +35,21 @@ export async function execCommand(command: string): Promise<{ stdout: string, st
         });
     });
 };
+
+function isCommandValidWithNoCode(command: string, args: string[] | undefined): boolean {
+    if (!allowedCommandsForNoCode[command]) {
+        return false;
+    }
+
+    if (!args) {
+        return false;
+    }
+
+    for (let i = 0; i < allowedCommandsForNoCode[command].size ; i++) {
+        if (!allowedCommandsForNoCode[command].has(args[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}

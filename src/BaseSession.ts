@@ -48,7 +48,6 @@ export class BaseSessions extends Base {
             return true;
         } catch (error: unknown) {
             if (error instanceof Error) {
-                console.error('Error checking session:', error);
                 if (error.message.includes(`can't find session`)) {
                     return false;
                 }
@@ -77,6 +76,46 @@ export class BaseSessions extends Base {
                 Panes: panesCount,
             })
         }
+    }
+
+    public async attachToSession(session: string): Promise<void> {
+        if (!this.checkTmuxSessionExists(session)) {
+            console.log(`Session does not exist: ${session}`);
+            return;
+        }
+
+        console.log(`Attaching to tmux session: ${session}`);
+        await bash.runCommand('tmux', ['attach-session', '-t', session], {
+            stdio: 'inherit',
+            shell: true,
+            env: { ...process.env, TMUX: '' },
+        });
+    }
+
+    public async spawnATempSession(): Promise<void> {
+        await bash.runCommand('tmux', ['new-session', '-d', '-s', 'myTempSession'], {
+            stdio: 'inherit',
+            shell: true,
+            env: { ...process.env, TMUX: '' },
+        });
+
+        console.log('Temporary tmux session "myTempSession" created.');
+    }
+
+    public async killTempSession(): Promise<void> {
+        if (await this.checkTmuxSessionExists('myTempSession')) {
+            await bash.execCommand('tmux kill-session -t myTempSession');
+
+            console.log('Killed temporary tmux session "myTempSession".');
+        } else {
+            console.log('Temporary tmux session "myTempSession" does not exist.');
+        }
+    }
+
+    public async sourceTmuxConfig(): Promise<void> {
+        const sourceTmux = 'tmux source ~/.tmux/.tmux.conf';
+        await bash.execCommand(sourceTmux);
+        console.log('Sourced tmux configuration file.');
     }
 
     private formatPane(pane: string): Pane {

@@ -55,28 +55,17 @@ export class LoadSessions extends BaseSessions {
 
     public async loadLatestSession(): Promise<void> {
         try {
-            // create a new temporary session in detached mode
-            await bash.runCommand('tmux', ['new-session', '-d', '-s', 'myTempSession'], {
-                stdio: 'inherit',
-                shell: true,
-                env: { ...process.env, TMUX: '' }, // Unset TMUX environment variable
-            });
-            console.log('Temporary tmux session "myTempSession" created.');
-
-            // source the tmux configuration file
-            const sourceTmux = 'tmux source ~/.tmux/.tmux.conf';
-            await bash.execCommand(sourceTmux);
-            console.log('Sourced tmux configuration file.');
-
-            // load saved sessions
+            await this.spawnATempSession();
+            await this.sourceTmuxConfig();
             await this.getSessionsFromSaved();
 
             if (!this.savedSessions || Object.keys(this.savedSessions).length === 0) {
                 console.error('No saved sessions found.');
+                await this.killTempSession();
+
                 return;
             }
 
-            // create each saved tmux session
             for (const sess of Object.keys(this.savedSessions)) {
                 if (await this.checkTmuxSessionExists(sess)) {
                     console.log(`Session ${sess} already exists`);
@@ -86,25 +75,11 @@ export class LoadSessions extends BaseSessions {
                 }
             }
 
-            // check if the tmux server is running before trying to kill the session
-            if (await this.checkTmuxSessionExists('myTempSession')) {
-                const killTempSession = 'tmux kill-session -t myTempSession';
-                await bash.execCommand(killTempSession);
+            await this.killTempSession();
 
-                console.log('Killed temporary tmux session "myTempSession".');
-            } else {
-                console.log('Temporary tmux session "myTempSession" does not exist.');
-            }
-
-
-            // attach to the first saved session
+            // NOTE: Object doesnt guarantee order so probably a good idea to use an array
             const firstSession = Object.keys(this.savedSessions)[0];
-            console.log(`Attaching to tmux session: ${firstSession}`);
-            await bash.runCommand('tmux', ['attach-session', '-t', firstSession], {
-                stdio: 'inherit',
-                shell: true,
-                env: { ...process.env, TMUX: '' }, // Unset TMUX environment variable
-            });
+            await this.attachToSession(firstSession);
 
         } catch (error) {
             console.error('Error in loadLatestSession:', error);
