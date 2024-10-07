@@ -45,7 +45,7 @@ export class BaseSessions extends Base {
                 const panesArray = panes.stdout.toString().trim().split('\n');
 
                 for (let i = 0; i < panesArray.length; i++) {
-                    const pane = this.formatPane(panesArray[i])
+                    const pane = await this.formatPane(panesArray[i])
                     this.currentSessions[session].windows[windowIndex].panes.push(pane);
                 }
             }
@@ -128,11 +128,13 @@ export class BaseSessions extends Base {
         console.log('Sourced tmux configuration file.');
     }
 
-    private formatPane(pane: string): Pane {
+    private async formatPane(pane: string): Promise<Pane> {
         const [index, currentCommand, currentPath, size] = pane.split(':');
         const [width, height] = size.split('x')
 
         const paneIndex = parseInt(index, 10);
+
+        const gitRepoLink = await this.getGitRepoLink(currentPath);
 
         let splitDirection = PaneSplitDirection.Vertical;
 
@@ -148,6 +150,7 @@ export class BaseSessions extends Base {
             splitDirection,
             currentCommand,
             currentPath,
+            gitRepoLink,
             width,
             height,
         };
@@ -157,6 +160,8 @@ export class BaseSessions extends Base {
     private async formatWindow(window: string): Promise<Window> {
         const [_windowIndex, windowName, currentCommand, currentPath, size] = window.split(':');
 
+        const gitRepoLink = await this.getGitRepoLink(currentPath);
+
         const dimensions = size.split('x');
 
         const width = dimensions[0];
@@ -164,11 +169,25 @@ export class BaseSessions extends Base {
 
         return {
             windowName,
+            gitRepoLink,
             currentCommand,
             currentPath,
             width,
             height,
             panes: []
         }
+    }
+
+    private async getGitRepoLink(path: string): Promise<string> {
+        let result = '';
+
+        try {
+            const stdout = await bash.execCommand(`git -C ${path} remote get-url origin`);
+            result = stdout.stdout
+        } catch (error) {
+            console.log(`Path: ${path} is not a git repo`);
+        }
+
+        return result;
     }
 }

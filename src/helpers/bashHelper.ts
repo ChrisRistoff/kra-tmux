@@ -3,7 +3,8 @@ import { AllowedCommandsToFail } from '../types/bashTypes';
 
 const allowedCommandsForNoCode: AllowedCommandsToFail = {
     // NOTE: Example usage
-    'tmux': new Set(['attach-session'])
+    'tmux': new Set(['attach-session']),
+    'git': new Set(['get-url'])
 }
 
 export async function runCommand(command: string, args? : string[], options = {}): Promise<void> {
@@ -46,10 +47,10 @@ function isCommandValidWithNoCode(command: string, args: string[] | undefined): 
     }
 
     for (let i = 0; i < allowedCommandsForNoCode[command].size ; i++) {
-        if (!allowedCommandsForNoCode[command].has(args[i])) {
-            return false;
+        if (allowedCommandsForNoCode[command].has(args[i])) {
+            return true;
         }
     }
 
-    return true;
+    return false;
 }
