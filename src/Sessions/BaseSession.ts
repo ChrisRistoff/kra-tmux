@@ -28,7 +28,7 @@ export class BaseSessions extends Base {
             const windowsArray = windows.stdout.toString().trim().split('\n');
 
             for (const window of windowsArray) {
-                const formattedWindow = this.formatWindow(window);
+                const formattedWindow = await this.formatWindow(window);
 
                 if (this.currentSessions[session]) {
                     this.currentSessions[session].windows.push(formattedWindow);
@@ -154,8 +154,8 @@ export class BaseSessions extends Base {
     }
 
 
-    private formatWindow(window: string): Window {
-        const [windowName, currentCommand, currentPath, size] = window.split(':');
+    private async formatWindow(window: string): Promise<Window> {
+        const [_windowIndex, windowName, currentCommand, currentPath, size] = window.split(':');
 
         const dimensions = size.split('x');
 

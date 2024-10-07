@@ -9,6 +9,7 @@ export type TmuxSessions = {
 export type Window = {
     windowName: string,
     currentCommand: string,
+    gitLink: string,
     currentPath: string,
     width: string,
     height: string,
