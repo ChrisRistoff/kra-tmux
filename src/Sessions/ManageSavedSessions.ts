@@ -13,8 +13,4 @@ export class ManageSavedSessions extends LoadSessions {
         await fs.rm(path);
         console.log(`session dated ${sessions[0]} was removed`)
     }
-
-    public async main(): Promise<void> {
-        this.deleteLastSavedSession();
-    }
 }

@@ -26,10 +26,11 @@ const main = async () => {
             await mainLoadSessions(args);
             break;
         case 'ls':
+            await manageSessions.setCurrentSessions();
             manageSessions.printSessions();
             break;
-        case 'rm':
-            manageSessions.deleteLastSavedSession();
+        case 'delete':
+            await manageSessions.deleteLastSavedSession();
         case 'kill':
             await bash.execCommand('tmux kill-server');
         default:
@@ -43,9 +44,7 @@ async function mainSaveSessions(): Promise<void> {
 }
 
 async function mainLoadSessions(args: string[]) {
-    args.shift();
-
-    if (!args[0] || args[0] === '-l') {
+    if (!args[1] || args[1] === '-l') {
         await loadSessions.loadLatestSession();
     } else {
         console.log(`Invalid argument "${args[0]}"`);

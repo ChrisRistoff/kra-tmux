@@ -1,7 +1,7 @@
 import * as bash from '../helpers/bashHelper'
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
-import { TmuxSessions } from '../types/SessionTypes';
+import { Pane, TmuxSessions } from '../types/SessionTypes';
 
 export class LoadSessions extends BaseSessions {
     public backupFile: string;
@@ -25,6 +25,11 @@ export class LoadSessions extends BaseSessions {
 
     public async getSessionsFromSaved(): Promise<void> {
         const sessionDates = await this.getSortedSessionDates();
+
+        if (!sessionDates.length) {
+            console.log('No saved sessions found.');
+        }
+
         const filePath = `${this.sessionsFilePath}/${sessionDates[0]}`
 
         const latestSessions = await fs.readFile(filePath);
@@ -39,8 +44,7 @@ export class LoadSessions extends BaseSessions {
             let path = '';
 
             for (const window of currentSession.windows) {
-                path = !path ? window.currentPath : path;
-
+                path = path || window.currentPath;
                 panesCount += window.panes.length;
             }
 
@@ -87,30 +91,52 @@ export class LoadSessions extends BaseSessions {
     }
 
     public async createTmuxSession(sessionName: string): Promise<void> {
-        const createSession = `tmux new-session -d -s ${sessionName}`
+        const createSession = `tmux new-session -d -s ${sessionName}`;
         await bash.execCommand(createSession);
 
-        this.savedSessions[sessionName].windows.forEach(async (window, windowIndex) => {
-
-            const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ${window.currentPath}`
+        for (const [windowIndex, window] of this.savedSessions[sessionName].windows.entries()) {
+            const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ~/`;
             await bash.execCommand(createWindow);
 
-            window.panes.forEach(async (pane, paneIndex) => {
+            // Pane creation and commands
+            for (const [paneIndex, pane] of window.panes.entries()) {
                 if (paneIndex > 0) {
-                    const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -c ${pane.currentPath}`
+                    const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -c ~/`;
                     await bash.execCommand(createPane);
                 }
 
+                await this.navigateToFolder(pane, paneIndex);
+
                 if (pane.currentCommand) {
-                    await bash.execCommand(`tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} '${pane.currentCommand}' C-m`);
+                    // await bash.execCommand(`tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} '${pane.currentCommand}' C-m`);
                 }
 
-                const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`
+                const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`;
                 await bash.execCommand(resizePane);
-            });
+            }
 
             // NOTE: set layout after all panes are created until I find a solution for the positions and sizes
             await bash.execCommand(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
-        });
+        }
+    }
+
+    private async navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
+        const pathArray = pane.currentPath.split('/');
+
+        for (let i = 3; i < pathArray.length; i++) {
+            const folderPath = pathArray[i];
+            console.log(`Checking existence of directory: ${folderPath}`);
+
+            const checkDirectory = `tmux send-keys -t ${paneIndex} "[ -d '${folderPath}' ] && echo 'Directory exists' || (echo 'Directory does not exist, cloning...' && git clone ${pane.gitRepoLink} ${folderPath})" C-m`;
+
+            try {
+                await bash.execCommand(checkDirectory);
+                const navigateCommand = `tmux send-keys -t ${paneIndex} "cd ${folderPath} && echo 'Navigated to ${folderPath}'" C-m`;
+                await bash.execCommand(navigateCommand);
+                console.log(`Directory ${folderPath} exists`);
+            } catch (error) {
+                console.error(`Error while checking or navigating: ${error}`);
+            }
+        }
     }
 }

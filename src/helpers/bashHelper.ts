@@ -2,8 +2,7 @@ import { spawn, exec } from 'child_process';
 import { AllowedCommandsToFail } from '../types/bashTypes';
 
 const allowedCommandsForNoCode: AllowedCommandsToFail = {
-    // NOTE: Example usage
-    'tmux': new Set(['attach-session']),
+    'tmux': new Set(['attach-session', 'has-session', 'kill-server']),
     'git': new Set(['get-url'])
 }
 

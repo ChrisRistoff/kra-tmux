@@ -2,7 +2,6 @@ import * as bash from '../helpers/bashHelper'
 import { Base } from '../Base';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
 import { PaneSplitDirection } from '../enums/SessionEnums';
-import { format } from 'path';
 
 export class BaseSessions extends Base {
     public currentSessions: TmuxSessions;
@@ -74,8 +73,7 @@ export class BaseSessions extends Base {
             let path = '';
 
             for (const window of currentSession.windows) {
-                path = !path ? window.currentPath : path;
-
+                path = path || window.currentPath;
                 panesCount += window.panes.length;
             }
 
@@ -156,16 +154,14 @@ export class BaseSessions extends Base {
         };
     }
 
-
     private async formatWindow(window: string): Promise<Window> {
         const [_windowIndex, windowName, currentCommand, currentPath, size] = window.split(':');
 
-        const gitRepoLink = await this.getGitRepoLink(currentPath);
-
         const dimensions = size.split('x');
-
         const width = dimensions[0];
         const height = dimensions[1];
+
+        let gitRepoLink = await this.getGitRepoLink(currentPath);
 
         return {
             windowName,
@@ -180,14 +176,14 @@ export class BaseSessions extends Base {
 
     private async getGitRepoLink(path: string): Promise<string> {
         let result = '';
-
         try {
             const stdout = await bash.execCommand(`git -C ${path} remote get-url origin`);
             result = stdout.stdout
         } catch (error) {
-            console.log(`Path: ${path} is not a git repo`);
         }
 
-        return result;
+        const finalResult = result.split('\n')
+
+        return finalResult[0];
     }
 }
