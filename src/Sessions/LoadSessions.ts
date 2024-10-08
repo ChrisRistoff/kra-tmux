@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as nvim from '../helpers/neovimHelper'
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
+import { removeLastWindowTempHack } from '../removeLastWindowTempHack';
 
 export class LoadSessions extends BaseSessions {
     public backupFile: string;
@@ -94,6 +95,7 @@ export class LoadSessions extends BaseSessions {
     public async createTmuxSession(sessionName: string): Promise<void> {
         const createSession = `tmux new-session -d -s ${sessionName}`;
         await bash.execCommand(createSession);
+        let windowCounter = 0;
 
         for (const [windowIndex, window] of this.savedSessions[sessionName].windows.entries()) {
             const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ~/`;
@@ -118,7 +120,10 @@ export class LoadSessions extends BaseSessions {
 
             // NOTE: set layout after all panes are created until I find a solution for the positions and sizes
             await bash.execCommand(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
+
         }
+
+        await removeLastWindowTempHack(sessionName);
     }
 
     private async navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
