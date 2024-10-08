@@ -1,3 +1,3 @@
-export type AllowedCommandsToFail = {
+export type AllowedCommandsForNoCode = {
     [key: string]: Set<string>;
 }

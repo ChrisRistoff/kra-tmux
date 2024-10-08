@@ -1,6 +1,4 @@
 import { EventEmitter } from 'events'
-import * as os from 'os';
-import * as path from 'path';
 
 export class Base {
     public events;
@@ -22,6 +20,6 @@ export class Base {
             }
         }
 
-        this.sessionsFilePath = path.join(os.homedir(), `.tmux/sessions/`);
+        this.sessionsFilePath = `${__dirname}/../../tmux-files/sessions`;
     }
 }

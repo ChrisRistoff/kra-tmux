@@ -1,7 +1,4 @@
-import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
 import { BaseSessions } from './BaseSession';
 
 export class Save extends BaseSessions {
@@ -28,12 +25,7 @@ export class Save extends BaseSessions {
 
         const yearMonthDayTime = [dateArray[3], dateArray[1], dateArray[2], timeString]
         const fileName = yearMonthDayTime.join('-')
-        const filePath = path.join(os.homedir(), `.tmux/sessions/${fileName}`);
-
-        await bash.execCommand(`if [ ! "~/.tmux/sessions" ]; then
-                    mkdir "~/.tmux/sessions"
-                fi
-        `);
+        const filePath = `${__dirname}/../../../tmux-files/sessions/${fileName}`;
 
         await fs.writeFile(filePath, sessionString, 'utf-8');
 

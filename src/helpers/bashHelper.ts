@@ -1,7 +1,7 @@
 import { spawn, exec } from 'child_process';
-import { AllowedCommandsToFail } from '../types/bashTypes';
+import { AllowedCommandsForNoCode } from '../types/bashTypes';
 
-const allowedCommandsForNoCode: AllowedCommandsToFail = {
+const allowedCommandsForNoCode: AllowedCommandsForNoCode = {
     'tmux': new Set(['attach-session', 'has-session', 'kill-server']),
     'git': new Set(['get-url'])
 }

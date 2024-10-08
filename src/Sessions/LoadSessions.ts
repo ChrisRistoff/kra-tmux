@@ -1,5 +1,6 @@
-import * as bash from '../helpers/bashHelper'
+import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
+import * as nvim from '../helpers/neovimHelper'
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 
@@ -11,16 +12,6 @@ export class LoadSessions extends BaseSessions {
         super()
         this.backupFile = 'tmux_session_backup.txt';
         this.savedSessions = {};
-    }
-
-    public async getSortedSessionDates(): Promise<string[]> {
-        const sessionsDates = await fs.readdir(this.sessionsFilePath);
-
-        sessionsDates.sort((a, b) => {
-            return new Date(b).getTime() - new Date(a).getTime()
-        })
-
-        return sessionsDates;
     }
 
     public async getSessionsFromSaved(): Promise<void> {
@@ -35,6 +26,16 @@ export class LoadSessions extends BaseSessions {
         const latestSessions = await fs.readFile(filePath);
 
         this.savedSessions = JSON.parse(latestSessions.toString())
+    }
+
+    public async getSortedSessionDates(): Promise<string[]> {
+        const sessionsDates = await fs.readdir(this.sessionsFilePath);
+
+        sessionsDates.sort((a, b) => {
+            return new Date(b).getTime() - new Date(a).getTime()
+        })
+
+        return sessionsDates;
     }
 
     public printSavedSessions(): void {
@@ -107,8 +108,8 @@ export class LoadSessions extends BaseSessions {
 
                 await this.navigateToFolder(pane, paneIndex);
 
-                if (pane.currentCommand) {
-                    // await bash.execCommand(`tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} '${pane.currentCommand}' C-m`);
+                if (pane.currentCommand === "nvim") {
+                    await nvim.loadNvimSession(sessionName, windowIndex, paneIndex);
                 }
 
                 const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`;
