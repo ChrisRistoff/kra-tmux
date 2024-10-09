@@ -1,3 +1,4 @@
 node_modules/
-tmux-files/
+tmux-files/sessions/*
+tmux-files/nvim-sessions/*
 dest/
