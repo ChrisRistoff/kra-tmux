@@ -1,4 +1,5 @@
 import * as bash from '../helpers/bashHelper';
+import * as ui from '../UI/loadSessionsUI';
 import * as fs from 'fs/promises';
 import * as nvim from '../helpers/neovimHelper'
 import { BaseSessions } from './BaseSession';
@@ -16,13 +17,9 @@ export class LoadSessions extends BaseSessions {
     }
 
     public async getSessionsFromSaved(): Promise<void> {
-        const sessionDates = await this.getSortedSessionDates();
+        const fileName = await ui.searchAndSelectSavedSessions(await this.getSavedSessionsNames());
 
-        if (!sessionDates.length) {
-            console.log('No saved sessions found.');
-        }
-
-        const filePath = `${this.sessionsFilePath}/${sessionDates[0]}`
+        const filePath = `${this.sessionsFilePath}/${fileName}`
 
         const latestSessions = await fs.readFile(filePath);
 
@@ -92,10 +89,19 @@ export class LoadSessions extends BaseSessions {
         }
     }
 
+    public async getSavedSessionsNames(): Promise<string[]> {
+        try {
+            const files = await fs.readdir(this.sessionsFilePath);
+            return files
+        } catch (error) {
+            console.error('Error reading directory:', error);
+            return [];
+        }
+    }
+
     public async createTmuxSession(sessionName: string): Promise<void> {
         const createSession = `tmux new-session -d -s ${sessionName}`;
         await bash.execCommand(createSession);
-        let windowCounter = 0;
 
         for (const [windowIndex, window] of this.savedSessions[sessionName].windows.entries()) {
             const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ~/`;
