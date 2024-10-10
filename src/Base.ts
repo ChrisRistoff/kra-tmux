@@ -27,7 +27,6 @@ export class Base {
     public async killTmuxServer(): Promise<void> {
         try {
             await bash.execCommand('tmux kill-server');
-            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
             console.log('No Server Running');
         }
@@ -36,9 +35,12 @@ export class Base {
     public async detachSession(): Promise<void> {
         try {
             await bash.execCommand('tmux detach');
-            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
             console.log('failed to detach')
         }
+    }
+
+    public async debounce(time: number): Promise<void> {
+        await new Promise(resolve => setTimeout(resolve, time));
     }
 }
