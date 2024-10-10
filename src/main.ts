@@ -3,7 +3,6 @@
 import { LoadSessions } from "./Sessions/LoadSessions";
 import { ManageSavedSessions } from "./Sessions/ManageSavedSessions";
 import { Save } from "./Sessions/SaveSessions";
-import * as bash from './helpers/bashHelper'
 
 const saveSession = new Save();
 const loadSessions = new LoadSessions();
@@ -19,7 +18,6 @@ const main = async () => {
 
     switch (args[0]) {
         case 'save':
-            await saveSession.setCurrentSessions();
             await mainSaveSessions();
             break;
         case 'load':
@@ -30,9 +28,11 @@ const main = async () => {
             manageSessions.printSessions();
             break;
         case 'delete':
-            await manageSessions.deleteLastSavedSession();
+            await manageSessions.deleteSession();
+            break;
         case 'kill':
-            await bash.execCommand('tmux kill-server');
+            await manageSessions.killTmuxServer();
+            break;
         default:
             console.log(`Unknown command: ${args[0]}`);
             break;
@@ -43,8 +43,10 @@ async function mainSaveSessions(): Promise<void> {
     await saveSession.saveSessionsToFile();
 }
 
-async function mainLoadSessions(args: string[]) {
+async function mainLoadSessions(args: string[]): Promise<void> {
     if (!args[1] || args[1] === '-l') {
+        await loadSessions.handleSessionIfAlreadyRunning();
+        console.log('session handled')
         await loadSessions.loadLatestSession();
     } else {
         console.log(`Invalid argument "${args[0]}"`);

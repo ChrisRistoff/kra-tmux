@@ -6,7 +6,7 @@ export class ManageSavedSessions extends LoadSessions {
         super();
     }
 
-    public async deleteLastSavedSession(): Promise<void> {
+    public async deleteSession(): Promise<void> {
         const sessions = await this.getSortedSessionDates();
         const path = `${this.sessionsFilePath}/${sessions[0]}`
 

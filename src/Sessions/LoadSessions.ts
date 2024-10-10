@@ -1,14 +1,17 @@
 import * as bash from '../helpers/bashHelper';
+import * as generalUI from '../UI/generalUI';
 import * as ui from '../UI/loadSessionsUI';
 import * as fs from 'fs/promises';
 import * as nvim from '../helpers/neovimHelper'
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { removeLastWindowTempHack } from '../removeLastWindowTempHack';
+import { Save } from '../Sessions/SaveSessions';
 
 export class LoadSessions extends BaseSessions {
     public backupFile: string;
     public savedSessions: TmuxSessions;
+    public saveSessions: Save = new Save();
 
     constructor () {
         super()
@@ -60,6 +63,7 @@ export class LoadSessions extends BaseSessions {
         try {
             await this.spawnATempSession();
             await this.sourceTmuxConfig();
+
             await this.getSessionsFromSaved();
 
             if (!this.savedSessions || Object.keys(this.savedSessions).length === 0) {
@@ -83,10 +87,35 @@ export class LoadSessions extends BaseSessions {
             // NOTE: Object doesnt guarantee order so probably a good idea to use an array
             const firstSession = Object.keys(this.savedSessions)[0];
             await this.attachToSession(firstSession);
-
         } catch (error) {
             console.error('Error in loadLatestSession:', error);
         }
+    }
+
+    public async handleSessionIfAlreadyRunning(): Promise<void> {
+        await this.setCurrentSessions();
+        let shouldSaveCurrentSessions = false;
+        let serverIsRunning = false;
+
+        if (JSON.stringify(this.currentSessions) !== '{}') {
+            this.printSessions();
+            serverIsRunning = true;
+            shouldSaveCurrentSessions = await generalUI.promptUserYesOrNo('Would you like to save current sessions?');
+        }
+
+        if (serverIsRunning && shouldSaveCurrentSessions) {
+            await this.saveSessions.setCurrentSessions();
+            await this.saveSessions.saveSessionsToFile();
+            await this.killTmuxServer();
+        }
+
+        if (serverIsRunning && !shouldSaveCurrentSessions) {
+            await this.killTmuxServer();
+        }
+    }
+
+    public async shouldSaveCurrentSessions(): Promise<boolean> {
+        return await generalUI.promptUserYesOrNo('Would you like to save current sessions?');
     }
 
     public async getSavedSessionsNames(): Promise<string[]> {
@@ -139,7 +168,7 @@ export class LoadSessions extends BaseSessions {
             const folderPath = pathArray[i];
             console.log(`Checking existence of directory: ${folderPath}`);
 
-            const checkDirectory = `tmux send-keys -t ${paneIndex} "[ -d '${folderPath}' ] && echo 'Directory exists' || (echo 'Directory does not exist, cloning...' && git clone ${pane.gitRepoLink} ${folderPath})" C-m`;
+            const checkDirectory = `tmux send-keys -t ${paneIndex} "[ -d '${folderPath}' ] && echo 'Directory exists' || (git clone ${pane.gitRepoLink} ${folderPath})" C-m`;
 
             try {
                 await bash.execCommand(checkDirectory);

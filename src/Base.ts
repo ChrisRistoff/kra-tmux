@@ -1,4 +1,5 @@
-import { EventEmitter } from 'events'
+import { EventEmitter } from 'events';
+import * as bash from './helpers/bashHelper';
 
 export class Base {
     public events;
@@ -21,5 +22,23 @@ export class Base {
         }
 
         this.sessionsFilePath = `${__dirname}/../../tmux-files/sessions`;
+    }
+
+    public async killTmuxServer(): Promise<void> {
+        try {
+            await bash.execCommand('tmux kill-server');
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+            console.log('No Server Running');
+        }
+    }
+
+    public async detachSession(): Promise<void> {
+        try {
+            await bash.execCommand('tmux detach');
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+            console.log('failed to detach')
+        }
     }
 }
