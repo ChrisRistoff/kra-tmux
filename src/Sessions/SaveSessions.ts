@@ -2,7 +2,7 @@ import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
-
+import * as loadingUI from '../UI/loadSessionsUI'
 export class Save extends BaseSessions {
 
     constructor () {
@@ -46,13 +46,22 @@ export class Save extends BaseSessions {
         const message = `Would you like to use ${branchName} as part of your name for your save?`;
         const shouldSaveBranchNameAsFileName = await generalUI.promptUserYesOrNo(message);
 
-        if (!shouldSaveBranchNameAsFileName) {
-            return await generalUI.askUserForInput('Please write a name for save: ');
+        const itemsArray = await fs.readdir(this.sessionsFilePath)
+
+        const options: loadingUI.SearchOptions = {
+            prompt: 'Please write a name for save: ',
+            itemsArray,
         }
 
-        const fileName = await generalUI.askUserForInput(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
+        if (!shouldSaveBranchNameAsFileName) {
+            const sessionName = await loadingUI.searchAndSelectSavedSessions(options.itemsArray);
+            return sessionName!
+        }
 
-        return `${branchName}-${fileName}`;
+        // const fileName = await generalUI.askUserForInput(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
+        console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`)
+        const sessionName = await loadingUI.searchAndSelectSavedSessions(options.itemsArray);
+        return `${branchName}-${sessionName}`;
     }
 
     // NOTE: Unused

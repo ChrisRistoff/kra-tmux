@@ -3,7 +3,7 @@ import autocompletePrompt from 'inquirer-autocomplete-prompt';
 
 inquirer.registerPrompt('autocomplete', autocompletePrompt);
 
-type SearchOptions = {
+export type SearchOptions = {
   prompt: string;
   itemsArray: string[];
 }
