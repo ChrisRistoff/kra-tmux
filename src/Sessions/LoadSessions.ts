@@ -8,13 +8,11 @@ import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
 
 export class LoadSessions extends BaseSessions {
-    public backupFile: string;
     public savedSessions: TmuxSessions;
     public saveSessions: Save = new Save();
 
     constructor () {
         super()
-        this.backupFile = 'tmux_session_backup.txt';
         this.savedSessions = {};
     }
 
@@ -39,7 +37,7 @@ export class LoadSessions extends BaseSessions {
     }
 
     public printSavedSessions(): void {
-        for (const sess in Object.keys(this.savedSessions)) {
+        for (const sess in this.savedSessions) {
             const currentSession = this.savedSessions[sess];
             let panesCount = 0
             let path = '';
