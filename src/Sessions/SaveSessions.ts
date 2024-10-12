@@ -2,7 +2,6 @@ import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
-import * as loadingUI from '../UI/loadSessionsUI'
 export class Save extends BaseSessions {
 
     constructor () {
@@ -48,23 +47,33 @@ export class Save extends BaseSessions {
 
         const itemsArray = await fs.readdir(this.sessionsFilePath)
 
-        const options: loadingUI.SearchOptions = {
-            prompt: 'Please write a name for save: ',
+        const options: generalUI.SearchOptions = {
+            prompt: 'Please write a name for your save: ',
             itemsArray,
         }
 
         if (!shouldSaveBranchNameAsFileName) {
-            const sessionName = await loadingUI.searchAndSelectSavedSessions(options.itemsArray);
+            const sessionName = await generalUI.searchAndSelect(options);
             return sessionName!
         }
 
-        // const fileName = await generalUI.askUserForInput(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
-        console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`)
-        const sessionName = await loadingUI.searchAndSelectSavedSessions(options.itemsArray);
+
+        const sessionName = await generalUI.searchAndSelect(options);
+
+        const nameOfBranchOnOldSave = sessionName?.split('-')[0];
+
+        if (nameOfBranchOnOldSave === branchName) {
+            return sessionName!
+        }
+
+        if (!sessionName!) {
+            return ''
+        }
+
         return `${branchName}-${sessionName}`;
     }
 
-    // NOTE: Unused
+    // NOTE: Unused, staying here for now until I decide if I will use a db and restructure
     public getDateForFileName(): string {
         const dateArray = new Date().toString().split(' ');
 

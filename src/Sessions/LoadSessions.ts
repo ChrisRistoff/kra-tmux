@@ -9,7 +9,7 @@ import { Save } from '../Sessions/SaveSessions';
 
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;
-    public saveSessions: Save = new Save();
+    public saveSessionsObject: Save = new Save();
 
     constructor () {
         super()
@@ -24,16 +24,6 @@ export class LoadSessions extends BaseSessions {
         const latestSessions = await fs.readFile(filePath);
 
         this.savedSessions = JSON.parse(latestSessions.toString())
-    }
-
-    public async getSortedSessionDates(): Promise<string[]> {
-        const sessionsDates = await fs.readdir(this.sessionsFilePath);
-
-        sessionsDates.sort((a, b) => {
-            return new Date(b).getTime() - new Date(a).getTime()
-        })
-
-        return sessionsDates;
     }
 
     public printSavedSessions(): void {
@@ -81,7 +71,7 @@ export class LoadSessions extends BaseSessions {
 
             await this.killTempSession();
 
-            // NOTE: Object doesnt guarantee order so probably a good idea to use an array
+            // NOTE: Object doesn't guarantee order so probably a good idea to use an array
             const firstSession = Object.keys(this.savedSessions)[0];
             await this.attachToSession(firstSession);
         } catch (error) {
@@ -97,12 +87,11 @@ export class LoadSessions extends BaseSessions {
         if (JSON.stringify(this.currentSessions) !== '{}') {
             this.printSessions();
             serverIsRunning = true;
-            shouldSaveCurrentSessions = await generalUI.promptUserYesOrNo('Would you like to save current sessions?');
+            shouldSaveCurrentSessions = await generalUI.promptUserYesOrNo('Would you like to save currently running sessions?');
         }
 
         if (serverIsRunning && shouldSaveCurrentSessions) {
-            await this.saveSessions.setCurrentSessions();
-            await this.saveSessions.saveSessionsToFile();
+            await this.saveSessionsObject.saveSessionsToFile();
             await this.killTmuxServer();
             await this.debounce(200);
         }
@@ -111,10 +100,6 @@ export class LoadSessions extends BaseSessions {
             await this.killTmuxServer();
             await this.debounce(200);
         }
-    }
-
-    public async shouldSaveCurrentSessions(): Promise<boolean> {
-        return await generalUI.promptUserYesOrNo('Would you like to save current sessions?');
     }
 
     public async getSavedSessionsNames(): Promise<string[]> {
