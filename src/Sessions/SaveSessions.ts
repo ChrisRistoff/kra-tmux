@@ -2,6 +2,7 @@ import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
+
 export class Save extends BaseSessions {
 
     constructor () {

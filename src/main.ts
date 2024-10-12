@@ -3,6 +3,7 @@
 import { LoadSessions } from "./Sessions/LoadSessions";
 import { ManageSavedSessions } from "./Sessions/ManageSavedSessions";
 import { Save } from "./Sessions/SaveSessions";
+import * as nvim from './helpers/neovimHelper'
 
 const saveSession = new Save();
 const loadSessions = new LoadSessions();
@@ -17,6 +18,9 @@ const main = async () => {
     }
 
     switch (args[0]) {
+        case 'settings':
+            await nvim.openVim(`~/programming/kra-tmux/tmux-files/tmux-settings.txt`)
+            break;
         case 'save':
             await mainSaveSessions();
             break;
