@@ -1,5 +1,4 @@
 import * as bash from '../helpers/bashHelper'
-import * as nvim from '../helpers/neovimHelper'
 import { Base } from '../Base';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
 import { PaneSplitDirection } from '../enums/SessionEnums';
@@ -46,11 +45,6 @@ export class BaseSessions extends Base {
 
                 for (let i = 0; i < panesArray.length; i++) {
                     const pane = await this.formatPane(panesArray[i])
-
-                    if (pane.currentCommand === "nvim") {
-                        await nvim.saveNvimSession(session, windowIndex, i);
-                    }
-
                     this.currentSessions[session].windows[windowIndex].panes.push(pane);
                 }
             }

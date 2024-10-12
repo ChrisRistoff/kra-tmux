@@ -4,6 +4,9 @@ import { LoadSessions } from "./Sessions/LoadSessions";
 import { ManageSavedSessions } from "./Sessions/ManageSavedSessions";
 import { Save } from "./Sessions/SaveSessions";
 import * as nvim from './helpers/neovimHelper'
+import * as toml from 'toml'
+import * as fs from 'fs/promises'
+import { Settings } from "./types/SettingsTyeps";
 
 const saveSession = new Save();
 const loadSessions = new LoadSessions();
@@ -19,7 +22,24 @@ const main = async () => {
 
     switch (args[0]) {
         case 'settings':
-            await nvim.openVim(`~/programming/kra-tmux/tmux-files/tmux-settings.txt`)
+            const settingsFilePath = `~/programming/kra-tmux/tmux-files/settings.toml`
+            await nvim.openVim(settingsFilePath)
+            const settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+            const settings: Settings = await toml.parse(settingsFileString)
+
+            console.log({
+                name: settings.name,
+                work: settings.work,
+                version: settings.version,
+            });
+
+            /*note: settings will be an Object
+            {
+                work: boolean,
+                name: string,
+                version: number,
+            }
+            see in SettingsType */
             break;
         case 'save':
             await mainSaveSessions();

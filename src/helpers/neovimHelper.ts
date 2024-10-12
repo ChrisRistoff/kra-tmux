@@ -1,13 +1,29 @@
+import * as fs from 'fs';
 import * as bash from '../helpers/bashHelper'
 import { spawn } from 'child_process';
 
-export async function saveNvimSession(session: string, windowIndex: number, paneIndex: number): Promise<void> {
-    const command = `tmux send-keys -t ${session}:${windowIndex}.${paneIndex} ":mksession ${__dirname}/../../../tmux-files/nvim-sessions/${session}_${windowIndex}_${paneIndex}.vim" C-m`;
+export async function saveNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number): Promise<void> {
+    const nvimSessionsPath = `${__dirname}/../../../tmux-files/nvim-sessions`;
+    const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}.vim`;
+
+    if (!fs.existsSync(nvimSessionsPath)) {
+        fs.mkdirSync(nvimSessionsPath, { recursive: true} )
+    }
+
+    if (!fs.existsSync(`${nvimSessionsPath}/${folderName}`)) {
+        fs.mkdirSync(`${nvimSessionsPath}/${folderName}`, { recursive: true} )
+    }
+
+    if (fs.existsSync(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`)) {
+        fs.unlinkSync(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
+    }
+
+    const command = `tmux send-keys -t ${session}:${windowIndex}.${paneIndex} ":mksession ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}" C-m`;
     await bash.execCommand(command);
 }
 
-export async function loadNvimSession(session: string, windowIndex: number, paneIndex: number) {
-    const command = `tmux send-keys -t ${session}:${windowIndex}.${paneIndex} "nvim -S ${__dirname}/../../../tmux-files/nvim-sessions/${session}_${windowIndex}_${paneIndex}.vim" C-m`;
+export async function loadNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number) {
+    const command = `tmux send-keys -t ${session}:${windowIndex}.${paneIndex} "nvim -S ${__dirname}/../../../tmux-files/nvim-sessions/${folderName}/${session}_${windowIndex}_${paneIndex}.vim" C-m`;
     await bash.execCommand(command);
 }
 

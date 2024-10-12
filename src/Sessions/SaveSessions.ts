@@ -2,6 +2,7 @@ import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
+import * as nvim from '../helpers/neovimHelper'
 
 export class Save extends BaseSessions {
 
@@ -21,6 +22,21 @@ export class Save extends BaseSessions {
 
         const fileName = await this.getFileNameFromUser();
 
+        for (const session of Object.keys(this.currentSessions)) {
+            const currentSession = this.currentSessions[session];
+
+            for (let i = 0; i < currentSession.windows.length; i++) {
+                const windowIndex = i;
+                const currentWindow = currentSession.windows[i];
+
+                for (let i = 0; i < currentWindow.panes.length; i++) {
+                    if (currentWindow.panes[i].currentCommand === 'nvim') {
+                        await nvim.saveNvimSession(fileName, session, windowIndex, i);
+                    }
+                }
+            }
+        }
+
         const filePath = `${__dirname}/../../../tmux-files/sessions/${fileName}`;
 
         await fs.writeFile(filePath, sessionString, 'utf-8');
@@ -36,7 +52,6 @@ export class Save extends BaseSessions {
         } catch (error) {
             branchName = '';
         }
-
 
         if (!branchName) {
             return await generalUI.askUserForInput('Please write a name for save: ');
@@ -57,7 +72,6 @@ export class Save extends BaseSessions {
             const sessionName = await generalUI.searchAndSelect(options);
             return sessionName!
         }
-
 
         const sessionName = await generalUI.searchAndSelect(options);
 

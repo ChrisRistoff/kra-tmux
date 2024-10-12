@@ -49,6 +49,4 @@ export class ManageSavedSessions extends LoadSessions {
             })
         }
     }
-
-
 }

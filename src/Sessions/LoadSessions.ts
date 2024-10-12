@@ -10,19 +10,26 @@ import { Save } from '../Sessions/SaveSessions';
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;
     public saveSessionsObject: Save = new Save();
+    private saveFileToLoadName: string;
 
     constructor () {
         super()
         this.savedSessions = {};
+        this.saveFileToLoadName = '';
     }
 
     public async getSessionsFromSaved(): Promise<void> {
         const fileName = await ui.searchAndSelectSavedSessions(await this.getSavedSessionsNames());
 
+        if (!fileName) {
+            return;
+        }
+
         const filePath = `${this.sessionsFilePath}/${fileName}`
 
         const latestSessions = await fs.readFile(filePath);
 
+        this.saveFileToLoadName = fileName;
         this.savedSessions = JSON.parse(latestSessions.toString())
     }
 
@@ -132,7 +139,7 @@ export class LoadSessions extends BaseSessions {
                 await this.navigateToFolder(pane, paneIndex);
 
                 if (pane.currentCommand === "nvim") {
-                    await nvim.loadNvimSession(sessionName, windowIndex, paneIndex);
+                    await nvim.loadNvimSession(this.saveFileToLoadName, sessionName, windowIndex, paneIndex);
                 }
 
                 const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`;
