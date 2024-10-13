@@ -30,13 +30,13 @@ export class LoadSessions extends BaseSessions {
         const latestSessions = await fs.readFile(filePath);
 
         this.saveFileToLoadName = fileName;
-        this.savedSessions = JSON.parse(latestSessions.toString())
+        this.savedSessions = JSON.parse(latestSessions.toString());
     }
 
     public printSavedSessions(): void {
         for (const sess in this.savedSessions) {
             const currentSession = this.savedSessions[sess];
-            let panesCount = 0
+            let panesCount = 0;
             let path = '';
 
             for (const window of currentSession.windows) {
@@ -141,14 +141,17 @@ export class LoadSessions extends BaseSessions {
                 if (pane.currentCommand === "nvim") {
                     await nvim.loadNvimSession(this.saveFileToLoadName, sessionName, windowIndex, paneIndex);
                 }
-
-                const resizePane = `tmux resize-pane -t ${sessionName}:${windowIndex}.${paneIndex} -x ${pane.width} -y ${pane.height}`;
-                await bash.execCommand(resizePane);
             }
 
-            // NOTE: set layout after all panes are created until I find a solution for the positions and sizes
-            await bash.execCommand(`tmux select-layout -t ${sessionName}:${windowIndex} tiled`);
+            const applyLayout = `tmux select-layout -t ${sessionName}:${windowIndex} ${window.layout}`;
+            await bash.execCommand(applyLayout);
+
+            await bash.execCommand(`tmux select-pane -t ${sessionName}:${windowIndex}.0`);
         }
+
+        const firstWindowName = this.savedSessions[sessionName].windows[0].windowName;
+        const renameFirstWindow = `tmux rename-window -t ${sessionName}:0 ${firstWindowName}`;
+        await bash.execCommand(renameFirstWindow);
     }
 
     private async navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {

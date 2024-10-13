@@ -1,7 +1,6 @@
 import * as bash from '../helpers/bashHelper'
 import { Base } from '../Base';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
-import { PaneSplitDirection } from '../enums/SessionEnums';
 
 export class BaseSessions extends Base {
     public currentSessions: TmuxSessions;
@@ -23,7 +22,7 @@ export class BaseSessions extends Base {
         const sessions = output.stdout.toString().trim().split('\n');
 
         for (const session of sessions) {
-            const windows = await bash.execCommand(`tmux list-windows -t ${session} -F "#{window_index}:#{window_name}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`);
+            const windows = await bash.execCommand(`tmux list-windows -t ${session} -F "#{window_name}:#{pane_current_command}:#{pane_current_path}:#{window_layout}"`);
             const windowsArray = windows.stdout.toString().trim().split('\n');
 
             for (const window of windowsArray) {
@@ -40,7 +39,7 @@ export class BaseSessions extends Base {
 
             for (let i = 0; i < windowsArray.length; i++) {
                 const windowIndex = i;
-                const panes = await bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_index}:#{pane_current_command}:#{pane_current_path}:#{pane_width}x#{pane_height}"`);
+                const panes = await bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_current_command}:#{pane_current_path}:#{pane_left}x#{pane_top}"`);
                 const panesArray = panes.stdout.toString().trim().split('\n');
 
                 for (let i = 0; i < panesArray.length; i++) {
@@ -55,11 +54,9 @@ export class BaseSessions extends Base {
         try {
             await bash.execCommand(`tmux has-session -t ${sessionName}`);
             return true;
-        } catch (error: unknown) {
-            if (error instanceof Error) {
-                if (error.message.includes(`can't find session`)) {
-                    return false;
-                }
+        } catch (error) {
+            if (error instanceof Error && error.message.includes(`can't find session`)) {
+                return false;
             }
 
             throw new Error(`Unexpected error while checking session: ${error}`);
@@ -127,49 +124,32 @@ export class BaseSessions extends Base {
     }
 
     private async formatPane(pane: string): Promise<Pane> {
-        const [index, currentCommand, currentPath, size] = pane.split(':');
-        const [width, height] = size.split('x')
-
-        const paneIndex = parseInt(index, 10);
+        const [currentCommand, currentPath, paneLeft, paneTop] = pane.split(':');
 
         const gitRepoLink = await this.getGitRepoLink(currentPath);
 
-        let splitDirection = PaneSplitDirection.Vertical;
-
-        if (paneIndex > 0) {
-            const parentIndex = Math.floor((paneIndex - 1) / 2);
-
-            if (parentIndex % 2 === 0) {
-                splitDirection = PaneSplitDirection.Horizontal;
-            }
-        }
-
         return {
-            splitDirection,
             currentCommand,
             currentPath,
             gitRepoLink,
-            width,
-            height,
+            paneLeft,
+            paneTop,
         };
     }
 
     private async formatWindow(window: string): Promise<Window> {
-        const [_windowIndex, windowName, currentCommand, currentPath, size] = window.split(':');
+        const [windowName, currentCommand, currentPath, layout] = window.split(':');
 
-        const dimensions = size.split('x');
-        const width = dimensions[0];
-        const height = dimensions[1];
+        console.log(window.split(':'))
 
         let gitRepoLink = await this.getGitRepoLink(currentPath);
 
         return {
             windowName,
+            layout,
             gitRepoLink,
             currentCommand,
             currentPath,
-            width,
-            height,
             panes: []
         }
     }

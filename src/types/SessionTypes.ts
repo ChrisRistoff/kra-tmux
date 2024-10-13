@@ -1,5 +1,3 @@
-import { PaneSplitDirection } from "../enums/SessionEnums"
-
 export type TmuxSessions = {
     [key: string]: {
         windows: Window[]
@@ -9,20 +7,18 @@ export type TmuxSessions = {
 export type Window = {
     windowName: string,
     currentCommand: string,
+    layout: string,
     currentPath: string,
     gitRepoLink: string,
-    width: string,
-    height: string,
     panes: Pane[]
 }
 
 export type Pane = {
-    splitDirection: PaneSplitDirection,
     currentCommand: string,
     currentPath: string,
     gitRepoLink: string,
-    height: string,
-    width: string,
+    paneLeft: string,
+    paneTop: string,
 }
 
 export type DateForFileName = {
