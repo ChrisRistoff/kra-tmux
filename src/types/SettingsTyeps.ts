@@ -1,5 +1,9 @@
 export type Settings = {
     work: boolean,
-    version: number,
-    name: string
+
+    workWindowNameForWatch: string,
+    workCommandForWatch: string,
+
+    personalWindowNameForWatch: string,
+    personalCommandForWatch: string,
 }

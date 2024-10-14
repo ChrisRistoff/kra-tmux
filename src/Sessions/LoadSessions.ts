@@ -7,7 +7,6 @@ import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
 import { Settings } from '../types/SettingsTyeps';
-import { WorkCommands, PersCommands } from '../enums/Commands';
 
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;
@@ -152,19 +151,19 @@ export class LoadSessions extends BaseSessions {
 
             const settings: Settings = await this.getSettings();
 
-            if (settings.work && window.windowName === 'build-watch') {
+            if (settings.work && window.windowName === settings.workWindowNameForWatch) {
                 await bash.sendKeysToTmuxTargetSession({
                     sessionName,
                     windowIndex,
                     paneIndex: 0,
-                    command: WorkCommands.Build,
+                    command: settings.workCommandForWatch,
                 })
-            } else if (!settings.work && window.windowName === 'watch') {
+            } else if (!settings.work && window.windowName === settings.personalWindowNameForWatch) {
                 await bash.sendKeysToTmuxTargetSession({
                     sessionName,
                     windowIndex,
                     paneIndex: 0,
-                    command: PersCommands.Watch,
+                    command: settings.personalCommandForWatch,
                 })
             }
         }
