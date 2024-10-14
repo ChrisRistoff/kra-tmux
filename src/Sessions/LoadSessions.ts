@@ -56,30 +56,20 @@ export class LoadSessions extends BaseSessions {
 
     public async loadLatestSession(): Promise<void> {
         try {
-            await this.spawnATempSession();
-            await this.sourceTmuxConfig();
-
             await this.getSessionsFromSaved();
 
             if (!this.savedSessions || Object.keys(this.savedSessions).length === 0) {
                 console.error('No saved sessions found.');
-                await this.killTempSession();
 
                 return;
             }
 
             for (const sess of Object.keys(this.savedSessions)) {
-                if (await this.checkTmuxSessionExists(sess)) {
-                    console.log(`Session ${sess} already exists`);
-                } else {
-                    console.log(`Creating tmux session: ${sess}`);
-                    await this.createTmuxSession(sess);
-                }
+                await this.createTmuxSession(sess);
             }
 
-            await this.killTempSession();
+            await this.sourceTmuxConfig();
 
-            // NOTE: Object doesn't guarantee order so probably a good idea to use an array
             const firstSession = Object.keys(this.savedSessions)[0];
             await this.attachToSession(firstSession);
         } catch (error) {
@@ -166,7 +156,10 @@ export class LoadSessions extends BaseSessions {
                     command: settings.personalCommandForWatch,
                 })
             }
+
         }
+
+        bash.execCommand('tmux select-window -t 0');
 
         const firstWindowName = this.savedSessions[sessionName].windows[0].windowName;
         const renameFirstWindow = `tmux rename-window -t ${sessionName}:0 ${firstWindowName}`;

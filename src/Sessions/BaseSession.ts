@@ -97,26 +97,6 @@ export class BaseSessions extends Base {
         });
     }
 
-    public async spawnATempSession(): Promise<void> {
-        await bash.runCommand('tmux', ['new-session', '-d', '-s', 'myTempSession'], {
-            stdio: 'inherit',
-            shell: true,
-            env: { ...process.env, TMUX: '' },
-        });
-
-        console.log('Temporary tmux session "myTempSession" created.');
-    }
-
-    public async killTempSession(): Promise<void> {
-        if (await this.checkTmuxSessionExists('myTempSession')) {
-            await bash.execCommand('tmux kill-session -t myTempSession');
-
-            console.log('Killed temporary tmux session "myTempSession".');
-        } else {
-            console.log('Temporary tmux session "myTempSession" does not exist.');
-        }
-    }
-
     public async sourceTmuxConfig(): Promise<void> {
         const sourceTmux = `tmux source ${__dirname}/../../../tmux-files/.tmux.conf`;
         await bash.execCommand(sourceTmux);
@@ -139,8 +119,6 @@ export class BaseSessions extends Base {
 
     private async formatWindow(window: string): Promise<Window> {
         const [windowName, currentCommand, currentPath, layout] = window.split(':');
-
-        console.log(window.split(':'))
 
         let gitRepoLink = await this.getGitRepoLink(currentPath);
 
