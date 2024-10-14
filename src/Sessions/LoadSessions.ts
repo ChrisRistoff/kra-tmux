@@ -6,6 +6,7 @@ import * as nvim from '../helpers/neovimHelper'
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
+import { Settings } from '../types/SettingsTyeps';
 
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;
@@ -147,6 +148,12 @@ export class LoadSessions extends BaseSessions {
             await bash.execCommand(applyLayout);
 
             await bash.execCommand(`tmux select-pane -t ${sessionName}:${windowIndex}.0`);
+
+            const settings: Settings = await this.getSettings();
+
+            if (settings.work && window.windowName === 'build-watch' && sessionName === 'buildSession' && windowIndex === 0) {
+                await bash.execCommand(`tmux send-keys -t ${sessionName}:${windowIndex}.0 "npm run watch:uk" C-m`)
+            }
         }
 
         const firstWindowName = this.savedSessions[sessionName].windows[0].windowName;

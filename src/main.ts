@@ -6,7 +6,6 @@ import { Save } from "./Sessions/SaveSessions";
 import * as nvim from './helpers/neovimHelper'
 import * as toml from 'toml'
 import * as fs from 'fs/promises'
-import { Settings } from "./types/SettingsTyeps";
 
 const saveSession = new Save();
 const loadSessions = new LoadSessions();
@@ -22,24 +21,7 @@ const main = async () => {
 
     switch (args[0]) {
         case 'settings':
-            const settingsFilePath = `~/programming/kra-tmux/tmux-files/settings.toml`
-            await nvim.openVim(settingsFilePath)
-            const settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
-            const settings: Settings = await toml.parse(settingsFileString)
-
-            console.log({
-                name: settings.name,
-                work: settings.work,
-                version: settings.version,
-            });
-
-            /*note: settings will be an Object
-            {
-                work: boolean,
-                name: string,
-                version: number,
-            }
-            see in SettingsType */
+            await handleChangeSettings();
             break;
         case 'save':
             await mainSaveSessions();
@@ -74,6 +56,29 @@ async function mainLoadSessions(args: string[]): Promise<void> {
         await loadSessions.loadLatestSession();
     } else {
         console.log(`Invalid argument "${args[0]}"`);
+    }
+}
+
+async function handleChangeSettings(): Promise<void> {
+    const settingsFilePath = `~/programming/kra-tmux/tmux-files/settings.toml`
+    let settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+    const oldSettings = await toml.parse(settingsFileString)
+    await nvim.openVim(settingsFilePath)
+    settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+    const newSettings = await toml.parse(settingsFileString)
+
+    console.log('Changed settings below:')
+
+    for (const setting of Object.keys(oldSettings)) {
+        if (oldSettings[setting] !== newSettings[setting]) {
+            console.table({
+                'Setting': setting
+            })
+            console.table({
+                'Old value': `${oldSettings[setting]}`,
+                'New setting': `${newSettings[setting]}`
+            })
+        }
     }
 }
 

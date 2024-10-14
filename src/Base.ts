@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 import * as bash from './helpers/bashHelper';
+import * as toml from 'toml'
+import * as fs from 'fs/promises'
 
 export class Base {
     public events;
@@ -42,5 +44,10 @@ export class Base {
 
     public async debounce(time: number): Promise<void> {
         await new Promise(resolve => setTimeout(resolve, time));
+    }
+
+    public async getSettings() {
+        const settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+        return await toml.parse(settingsFileString)
     }
 }

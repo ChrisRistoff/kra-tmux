@@ -29,7 +29,7 @@ export async function loadNvimSession(folderName: string, session: string, windo
 
 export async function openVim(filePath: string): Promise<void> {
     return new Promise((resolve, reject) => {
-        const vimProcess = spawn('vim', [filePath], {
+        const vimProcess = spawn('nvim', [filePath], {
             stdio: 'inherit',
             shell: true,
         });
