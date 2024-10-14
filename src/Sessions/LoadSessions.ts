@@ -143,7 +143,7 @@ export class LoadSessions extends BaseSessions {
                 }
             }
 
-            const applyLayout = `tmux select-layout -t ${sessionName}:${windowIndex} ${window.layout}`;
+            const applyLayout = `tmux select-layout -t ${sessionName}:${windowIndex} "${window.layout}"`;
             await bash.execCommand(applyLayout);
 
             await bash.execCommand(`tmux select-pane -t ${sessionName}:${windowIndex}.0`);
