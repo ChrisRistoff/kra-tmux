@@ -7,6 +7,7 @@ import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
 import { Settings } from '../types/SettingsTyeps';
+import { WorkCommands } from '../enums/workCommands';
 
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;
@@ -131,7 +132,7 @@ export class LoadSessions extends BaseSessions {
             }
 
             // Pane creation and commands
-            for (const [paneIndex, pane] of window.panes.entries()) {
+            window.panes.forEach( async (pane, paneIndex) => {
                 if (paneIndex > 0) {
                     const createPane = `tmux split-window -t ${sessionName}:${windowIndex} -c ~/`;
                     await bash.execCommand(createPane);
@@ -142,7 +143,7 @@ export class LoadSessions extends BaseSessions {
                 if (pane.currentCommand === "nvim") {
                     await nvim.loadNvimSession(this.saveFileToLoadName, sessionName, windowIndex, paneIndex);
                 }
-            }
+            })
 
             const applyLayout = `tmux select-layout -t ${sessionName}:${windowIndex} "${window.layout}"`;
             await bash.execCommand(applyLayout);
@@ -151,8 +152,13 @@ export class LoadSessions extends BaseSessions {
 
             const settings: Settings = await this.getSettings();
 
-            if (settings.work && window.windowName === 'build-watch' && sessionName === 'buildSession' && windowIndex === 0) {
-                await bash.execCommand(`tmux send-keys -t ${sessionName}:${windowIndex}.0 "npm run watch:uk" C-m`)
+            if (settings.work && window.windowName === 'build-watch') {
+                await bash.sendKeysToTmuxTargetSession({
+                    sessionName,
+                    windowIndex,
+                    paneIndex: 0,
+                    command: WorkCommands.Build,
+                })
             }
         }
 
@@ -164,18 +170,26 @@ export class LoadSessions extends BaseSessions {
     private async navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
         const pathArray = pane.currentPath.split('/');
 
-        await bash.execCommand(`tmux send-keys -t ${paneIndex} "cd" C-m`)
+        await bash.sendKeysToTmuxTargetSession({
+            paneIndex: paneIndex,
+            command: 'cd'
+        })
 
         for (let i = 3; i < pathArray.length; i++) {
             const folderPath = pathArray[i];
             console.log(`Checking existence of directory: ${folderPath}`);
 
-            const checkDirectory = `tmux send-keys -t ${paneIndex} "[ -d '${folderPath}' ] && echo 'Directory exists' || (git clone ${pane.gitRepoLink} ${folderPath})" C-m`;
-
             try {
-                await bash.execCommand(checkDirectory);
-                const navigateCommand = `tmux send-keys -t ${paneIndex} "cd ${folderPath} && echo 'Navigated to ${folderPath}'" C-m`;
-                await bash.execCommand(navigateCommand);
+                await bash.sendKeysToTmuxTargetSession({
+                    paneIndex,
+                    command: `[ -d '${folderPath}' ] && echo 'Directory exists' || (git clone ${pane.gitRepoLink} ${folderPath})`,
+                })
+
+                await bash.sendKeysToTmuxTargetSession({
+                    paneIndex,
+                    command: `cd ${folderPath} && echo 'Navigated to ${folderPath}'`,
+                })
+
                 console.log(`Directory ${folderPath} exists`);
             } catch (error) {
                 console.error(`Error while checking or navigating: ${error}`);

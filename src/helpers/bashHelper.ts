@@ -1,6 +1,13 @@
 import { spawn, exec } from 'child_process';
 import { AllowedCommandsForNoCode } from '../types/bashTypes';
 
+type SendKeysArguments = {
+    sessionName?: string
+    windowIndex?: number
+    paneIndex?: number
+    command: string,
+}
+
 const allowedCommandsForNoCode: AllowedCommandsForNoCode = {
     'tmux': new Set(['attach-session', 'has-session', 'kill-server']),
     'git': new Set(['get-url'])
@@ -52,4 +59,34 @@ function isCommandValidWithNoCode(command: string, args: string[] | undefined): 
     }
 
     return false;
+}
+
+export async function sendKeysToTmuxTargetSession(options: SendKeysArguments): Promise<void> {
+    let commandString = 'tmux send-keys'
+    const windowIndexIsValid = typeof options.windowIndex === 'number';
+    const paneIndexIsValid = typeof options.paneIndex === 'number';
+
+    if (options.sessionName || windowIndexIsValid || paneIndexIsValid) {
+        commandString += ' -t '
+    }
+
+    if (options.sessionName) {
+        commandString += options.sessionName
+    }
+
+    if (windowIndexIsValid) {
+        commandString += commandString[commandString.length - 1] === ' '
+            ? options.windowIndex
+            : `:${options.windowIndex}`
+    }
+
+    if (paneIndexIsValid) {
+        commandString += commandString[commandString.length - 1] === ' '
+            ? options.paneIndex
+            : `.${options.paneIndex}`
+    }
+
+    commandString += ` "${options.command}" C-m`;
+
+    await execCommand(commandString);
 }

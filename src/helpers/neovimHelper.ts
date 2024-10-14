@@ -18,13 +18,21 @@ export async function saveNvimSession(folderName: string, session: string, windo
         fs.unlinkSync(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
     }
 
-    const command = `tmux send-keys -t ${session}:${windowIndex}.${paneIndex} ":mksession ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}" C-m`;
-    await bash.execCommand(command);
+    await bash.sendKeysToTmuxTargetSession({
+        sessionName: session,
+        windowIndex,
+        paneIndex,
+        command: `:mksession ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`,
+    })
 }
 
 export async function loadNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number) {
-    const command = `tmux send-keys -t ${session}:${windowIndex}.${paneIndex} "nvim -S ${__dirname}/../../../tmux-files/nvim-sessions/${folderName}/${session}_${windowIndex}_${paneIndex}.vim" C-m`;
-    await bash.execCommand(command);
+    await bash.sendKeysToTmuxTargetSession({
+        sessionName: session,
+        windowIndex,
+        paneIndex,
+        command: `nvim -S ${__dirname}/../../../tmux-files/nvim-sessions/${folderName}/${session}_${windowIndex}_${paneIndex}.vim`,
+    })
 }
 
 export async function openVim(filePath: string): Promise<void> {
