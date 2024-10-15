@@ -1,5 +1,4 @@
 import { LoadSessions } from "./LoadSessions";
-import * as saveUI from '../UI/loadSessionsUI';
 import * as generalUI from '../UI/generalUI';
 import * as fs from 'fs/promises';
 import { TmuxSessions } from "../types/SessionTypes";
@@ -12,10 +11,14 @@ export class ManageSavedSessions extends LoadSessions {
     public async deleteSession(): Promise<void> {
         const savedServers = await this.getSavedSessionsNames()
 
-        const fileName = await saveUI.searchAndSelectSavedSessions(savedServers);
+        const fileName = await generalUI.searchSelectAndReturnFromArray({
+            prompt: "Please select a server from the list to delte",
+            itemsArray: savedServers,
+        });
+
         const filePath = `${this.sessionsFilePath}/${fileName}`
 
-        const sessions = await this.setSavedSessionsByFilePath(filePath);
+        const sessions = await this.getSavedSessionsByFilePath(filePath);
         this.printTargetSessions(sessions);
 
         const willDelete = await generalUI.promptUserYesOrNo(`Are you sure you want to delete save ${fileName}`)
@@ -25,7 +28,7 @@ export class ManageSavedSessions extends LoadSessions {
         }
     }
 
-    public async setSavedSessionsByFilePath(filePath: string): Promise<TmuxSessions> {
+    public async getSavedSessionsByFilePath(filePath: string): Promise<TmuxSessions> {
         const latestSessions = await fs.readFile(filePath);
         return JSON.parse(latestSessions.toString())
     }

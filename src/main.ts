@@ -51,7 +51,7 @@ async function mainSaveSessions(): Promise<void> {
 
 async function mainLoadSessions(args: string[]): Promise<void> {
     if (!args[1] || args[1] === '-l') {
-        await loadSessions.handleSessionIfAlreadyRunning();
+        await loadSessions.handleSessionsIfServerIsRunning();
         console.log('session handled')
         await loadSessions.loadLatestSession();
     } else {

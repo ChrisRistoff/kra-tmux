@@ -20,7 +20,10 @@ export class LoadSessions extends BaseSessions {
     }
 
     public async getSessionsFromSaved(): Promise<void> {
-        const fileName = await ui.searchAndSelectSavedSessions(await this.getSavedSessionsNames());
+        const fileName = await ui.searchSelectAndReturnFromArray({
+            itemsArray: await this.getSavedSessionsNames(),
+            prompt: "Select a session to load from the list:",
+        });
 
         if (!fileName) {
             return;
@@ -77,7 +80,7 @@ export class LoadSessions extends BaseSessions {
         }
     }
 
-    public async handleSessionIfAlreadyRunning(): Promise<void> {
+    public async handleSessionsIfServerIsRunning(): Promise<void> {
         await this.setCurrentSessions();
         let shouldSaveCurrentSessions = false;
         let serverIsRunning = false;

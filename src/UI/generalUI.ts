@@ -6,7 +6,6 @@ export type SearchOptions = {
 }
 
 export async function promptUserYesOrNo(message: string): Promise<boolean> {
-
     const { proceed }: { proceed: boolean } = await inquirer.prompt([
         {
         type: 'confirm',
@@ -60,7 +59,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
         },
     ]);
 
-    if (userSelection === currentUserInput) {
+    if (!currentUserInput || userSelection === currentUserInput) {
         return userSelection;
     }
 
@@ -68,7 +67,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
         {
             type: 'list',
             name: 'finalChoice',
-            message: `Select between input and matching item.`,
+            message: `Which one do you want to use for the name of your save?`,
             choices: [
                 { name: `Use your input: "${currentUserInput}"`, value: currentUserInput},
                 { name: `Use your selection: ${userSelection}`, value: userSelection }
@@ -77,4 +76,27 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
     ]);
 
     return finalChoice;
+}
+
+export async function searchSelectAndReturnFromArray(options: SearchOptions): Promise<string | undefined> {
+    const { selectedOption } = await inquirer.prompt([
+        {
+        type: 'autocomplete',
+        name: 'selectedOption',
+        message: options.prompt,
+        source: (_answersSoFar: any, input: string) => {
+            if (!input) {
+              return options.itemsArray;
+            }
+
+            const searchTerm = input.toLowerCase();
+            return options.itemsArray.filter(option =>
+                option.toLowerCase().includes(searchTerm)
+            );
+        },
+        pageSize: 20,
+        },
+    ]);
+
+    return selectedOption;
 }
