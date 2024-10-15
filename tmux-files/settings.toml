@@ -1,7 +1,0 @@
-work = false
-
-workWindowNameForWatch='watch-build'
-workCommandForWatch='npm run watch:uk'
-
-personalWindowNameForWatch='watch'
-personalCommandForWatch='tsc --watch'
