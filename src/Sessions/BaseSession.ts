@@ -3,11 +3,14 @@ import { Base } from '../Base';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
 
 export class BaseSessions extends Base {
+    public sessionsFilePath;
     public currentSessions: TmuxSessions;
 
     constructor () {
         super()
         this.currentSessions = {};
+
+        this.sessionsFilePath = `${__dirname}/../../../tmux-files/sessions`;
     }
 
     public async setCurrentSessions(): Promise<void> {
@@ -101,6 +104,22 @@ export class BaseSessions extends Base {
         const sourceTmux = `tmux source ${__dirname}/../../../tmux-files/.tmux.conf`;
         await bash.execCommand(sourceTmux);
         console.log('Sourced tmux configuration file.');
+    }
+
+    public async killTmuxServer(): Promise<void> {
+        try {
+            await bash.execCommand('tmux kill-server');
+        } catch (error) {
+            console.log('No Server Running');
+        }
+    }
+
+    public async detachSession(): Promise<void> {
+        try {
+            await bash.execCommand('tmux detach');
+        } catch (error) {
+            console.log('failed to detach')
+        }
     }
 
     private async formatPane(pane: string): Promise<Pane> {

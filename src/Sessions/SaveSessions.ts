@@ -2,8 +2,6 @@ import * as bash from '../helpers/bashHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
-import * as nvim from '../helpers/neovimHelper'
-
 export class Save extends BaseSessions {
 
     constructor () {
@@ -22,21 +20,6 @@ export class Save extends BaseSessions {
 
         const fileName = await this.getFileNameFromUser();
 
-        for (const session of Object.keys(this.currentSessions)) {
-            const currentSession = this.currentSessions[session];
-
-            for (let i = 0; i < currentSession.windows.length; i++) {
-                const windowIndex = i;
-                const currentWindow = currentSession.windows[i];
-
-                for (let i = 0; i < currentWindow.panes.length; i++) {
-                    if (currentWindow.panes[i].currentCommand === 'nvim') {
-                        await nvim.saveNvimSession(fileName, session, windowIndex, i);
-                    }
-                }
-            }
-        }
-
         const filePath = `${__dirname}/../../../tmux-files/sessions/${fileName}`;
 
         await fs.writeFile(filePath, sessionString, 'utf-8');
@@ -47,47 +30,39 @@ export class Save extends BaseSessions {
     public async getFileNameFromUser(): Promise<string> {
         let branchName : string;
 
-        const searchOptions: generalUI.SearchOptions = {
-            prompt: 'Please write a name for your save: ',
-            itemsArray: await fs.readdir(this.sessionsFilePath),
-        }
-
         try {
             branchName = await bash.execCommand('git rev-parse --abbrev-ref HEAD').then(res => res.stdout);
         } catch (error) {
             branchName = '';
         }
 
+
         if (!branchName) {
-            return await generalUI.searchAndSelect(searchOptions);
+            return await generalUI.askUserForInput('Please write a name for save: ');
         }
 
         branchName = branchName.split('\n')[0];
         const message = `Would you like to use ${branchName} as part of your name for your save?`;
         const shouldSaveBranchNameAsFileName = await generalUI.promptUserYesOrNo(message);
 
+        const itemsArray = await fs.readdir(this.sessionsFilePath)
+
+        const options: generalUI.SearchOptions = {
+            prompt: 'Please write a name for save: ',
+            itemsArray,
+        }
+
         if (!shouldSaveBranchNameAsFileName) {
-            const sessionName = await generalUI.searchAndSelect(searchOptions);
+            const sessionName = await generalUI.searchAndSelect(options);
             return sessionName!
         }
 
-        const sessionName = await generalUI.searchAndSelect(searchOptions);
-
-        const nameOfBranchOnOldSave = sessionName?.split('-')[0];
-
-        if (nameOfBranchOnOldSave === branchName) {
-            return sessionName!
-        }
-
-        if (!sessionName!) {
-            return ''
-        }
-
-        return `${branchName}-${sessionName}`;
+        console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`)
+        const sessionName = await generalUI.searchAndSelect(options);
+        return `${branchName}-${sessionName}-${this.getDate()}`;
     }
 
-    // NOTE: Unused, staying here for now until I decide if I will use a db and restructure
-    public getDateForFileName(): string {
+    public getDate(): string {
         const dateArray = new Date().toString().split(' ');
 
         let timeArray = dateArray[4].split(':')
