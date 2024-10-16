@@ -1,11 +1,9 @@
 import { EventEmitter } from 'events';
-import * as bash from './helpers/bashHelper';
 import * as toml from 'toml'
 import * as fs from 'fs/promises'
 
 export class Base {
     public events;
-    public sessionsFilePath;
     private emitter: EventEmitter= new EventEmitter();
 
     constructor () {
@@ -21,24 +19,6 @@ export class Base {
             addAsyncEventListener: (event: string, callback = async (): Promise<void> => {}) => {
                 this.emitter.addListener(event, callback);
             }
-        }
-
-        this.sessionsFilePath = `${__dirname}/../../tmux-files/sessions`;
-    }
-
-    public async killTmuxServer(): Promise<void> {
-        try {
-            await bash.execCommand('tmux kill-server');
-        } catch (error) {
-            console.log('No Server Running');
-        }
-    }
-
-    public async detachSession(): Promise<void> {
-        try {
-            await bash.execCommand('tmux detach');
-        } catch (error) {
-            console.log('failed to detach')
         }
     }
 
