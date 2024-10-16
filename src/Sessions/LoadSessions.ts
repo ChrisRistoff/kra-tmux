@@ -1,6 +1,5 @@
 import * as bash from '../helpers/bashHelper';
 import * as generalUI from '../UI/generalUI';
-import * as ui from '../UI/loadSessionsUI';
 import * as fs from 'fs/promises';
 import * as nvim from '../helpers/neovimHelper'
 import { BaseSessions } from './BaseSession';
@@ -20,8 +19,10 @@ export class LoadSessions extends BaseSessions {
     }
 
     public async getSessionsFromSaved(): Promise<void> {
-        const fileName = await ui.searchSelectAndReturnFromArray({
-            itemsArray: await this.getSavedSessionsNames(),
+        const itemsArray = await this.getSavedSessionsNames();
+
+        const fileName = await generalUI.searchSelectAndReturnFromArray({
+            itemsArray,
             prompt: "Select a session to load from the list:",
         });
 
@@ -151,6 +152,7 @@ export class LoadSessions extends BaseSessions {
                     paneIndex: 0,
                     command: settings.workCommandForWatch,
                 })
+
             } else if (!settings.work && window.windowName === settings.personalWindowNameForWatch) {
                 await bash.sendKeysToTmuxTargetSession({
                     sessionName,

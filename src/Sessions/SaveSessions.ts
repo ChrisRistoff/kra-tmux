@@ -47,6 +47,11 @@ export class Save extends BaseSessions {
     public async getFileNameFromUser(): Promise<string> {
         let branchName : string;
 
+        const searchOptions: generalUI.SearchOptions = {
+            prompt: 'Please write a name for your save: ',
+            itemsArray: await fs.readdir(this.sessionsFilePath),
+        }
+
         try {
             branchName = await bash.execCommand('git rev-parse --abbrev-ref HEAD').then(res => res.stdout);
         } catch (error) {
@@ -54,26 +59,19 @@ export class Save extends BaseSessions {
         }
 
         if (!branchName) {
-            return await generalUI.askUserForInput('Please write a name for save: ');
+            return await generalUI.searchAndSelect(searchOptions);
         }
 
         branchName = branchName.split('\n')[0];
         const message = `Would you like to use ${branchName} as part of your name for your save?`;
         const shouldSaveBranchNameAsFileName = await generalUI.promptUserYesOrNo(message);
 
-        const itemsArray = await fs.readdir(this.sessionsFilePath)
-
-        const options: generalUI.SearchOptions = {
-            prompt: 'Please write a name for your save: ',
-            itemsArray,
-        }
-
         if (!shouldSaveBranchNameAsFileName) {
-            const sessionName = await generalUI.searchAndSelect(options);
+            const sessionName = await generalUI.searchAndSelect(searchOptions);
             return sessionName!
         }
 
-        const sessionName = await generalUI.searchAndSelect(options);
+        const sessionName = await generalUI.searchAndSelect(searchOptions);
 
         const nameOfBranchOnOldSave = sessionName?.split('-')[0];
 

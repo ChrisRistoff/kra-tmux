@@ -1,4 +1,7 @@
 import inquirer from 'inquirer';
+import autocompletePrompt from 'inquirer-autocomplete-prompt';
+
+inquirer.registerPrompt('autocomplete', autocompletePrompt);
 
 export type SearchOptions = {
   prompt: string;
@@ -31,6 +34,7 @@ export async function askUserForInput(message: string): Promise<string> {
 }
 
 export async function searchAndSelect(options: SearchOptions): Promise<string> {
+    console.log(options.itemsArray)
     let currentUserInput;
     const { userSelection } = await inquirer.prompt([
         {
