@@ -23,11 +23,11 @@ export const tmuxCommands: TmuxCommands = {
 }
 
 async function handleChangeSettings(): Promise<void> {
-    const settingsFilePath = `~/programming/kra-tmux/tmux-files/settings.toml`
-    let settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+    const settingsFilePath = `~/programming/settings.toml`
+    let settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8')
     const oldSettings = await toml.parse(settingsFileString)
     await nvim.openVim(settingsFilePath)
-    settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+    settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8')
     const newSettings = await toml.parse(settingsFileString)
 
     console.log('Changed settings below:')

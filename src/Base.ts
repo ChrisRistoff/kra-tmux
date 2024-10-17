@@ -27,7 +27,7 @@ export class Base {
     }
 
     public async getSettings() {
-        const settingsFileString = await fs.readFile(`${__dirname}/../../tmux-files/settings.toml`, 'utf8')
+        const settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8')
         return await toml.parse(settingsFileString)
     }
 }
