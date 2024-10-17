@@ -9,64 +9,61 @@ type PathInfoObject = {
 
 export class GitUntracked extends BaseGit {
     private pathInfoFileName: string;
-    private filesFolderName: string;
+    private untrackedFilesFolderName: string;
     constructor() {
         super();
 
         this.pathInfoFileName = 'pathInfo';
-        this.filesFolderName = 'untracked';
+        this.untrackedFilesFolderName = 'untracked';
     }
 
     // NOTE: CLEAN UP
     public async loadUntrackedFile(): Promise<void> {
         const gitBranchName = await this.getCurrentBranch();
 
-        const storedUntrackedFiles = fs.readdirSync(`${this.gitFilesFolderPath}/${this.filesFolderName}/${gitBranchName}`);
+        const savedUntrackedFiles = fs.readdirSync(`${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}`);
 
         const options: generalUI.SearchOptions = {
             prompt: "Pick a file to retrieve from stored untracked files: ",
-            itemsArray: storedUntrackedFiles.filter(file => file !== this.pathInfoFileName),
+            itemsArray: savedUntrackedFiles.filter(file => file !== this.pathInfoFileName),
         }
 
-        let fileToRetrieve = await generalUI.searchSelectAndReturnFromArray(options);
+        let fileToLoadName = await generalUI.searchSelectAndReturnFromArray(options);
 
-        const pathInfoObject: PathInfoObject = JSON.parse(fs.readFileSync(`${this.gitFilesFolderPath}/${this.filesFolderName}/${gitBranchName}/${this.pathInfoFileName}`).toString())
+        const pathInfoObject: PathInfoObject = JSON.parse(fs.readFileSync(`${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}/${this.pathInfoFileName}`).toString())
 
-        const fileToRetrievePathArray = pathInfoObject[fileToRetrieve].split('/');
+        const fileToRetrievePathArray = pathInfoObject[fileToLoadName].split('/');
         fileToRetrievePathArray.pop()
 
         const fileToRetrievePath = fileToRetrievePathArray.join('/');
 
-        await bash.execCommand(`mv ${this.gitFilesFolderPath}/${this.filesFolderName}/${gitBranchName}/${fileToRetrieve} ${fileToRetrievePath}`);
-        console.log(`File ${fileToRetrieve} moved back to ${fileToRetrievePath}`);
+        await bash.execCommand(`mv ${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}/${fileToLoadName} ${fileToRetrievePath}`);
+        console.log(`File ${fileToLoadName} moved back to ${fileToRetrievePath}`);
     }
 
     // NOTE: CLEAN UP
     public async saveUntrackedFile(): Promise<void> {
-        const fileToMove = await this.getFileToMoveFromUser();
+        const fileToSavePath: string | string[] = await this.getFileToMoveFromUser();
 
-        if (Array.isArray(fileToMove)) {
+        if (Array.isArray(fileToSavePath)) {
             console.log("Can't do all right now.");
             return;
         }
 
-        const gitBranchName = await this.getCurrentBranch();
+        const gitBranchName: string = await this.getCurrentBranch();
 
-        const fileToMoveFilePath = `${await this.getTopLevelPath()}/${fileToMove}`;
+        const branchFolderToSaveFileIn = `${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}`;
 
-        const gitBranchFolderPath = `${this.gitFilesFolderPath}/${this.filesFolderName}/${gitBranchName}`;
-        const branchFolderAlreadyExists = fs.existsSync(gitBranchFolderPath);
-
+        const branchFolderAlreadyExists = fs.existsSync(branchFolderToSaveFileIn);
         if (!branchFolderAlreadyExists) {
-            fs.mkdirSync(gitBranchFolderPath);
+            fs.mkdirSync(branchFolderToSaveFileIn);
         }
 
-        await bash.execCommand(`mv ${fileToMoveFilePath} ${this.gitFilesFolderPath}/${this.filesFolderName}/${gitBranchName}`);
+        const pathInProjectToUntrackedFile = `${await this.getTopLevelPath()}/${fileToSavePath}`;
+        // move untracked file to git-files/<branch-name>
+        await bash.execCommand(`mv ${pathInProjectToUntrackedFile} ${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}`);
 
-        const fileToMoveArray = fileToMove.split('/');
-        const fileName = fileToMoveArray[fileToMoveArray.length - 1];
-
-        const infoFilePath = `${this.gitFilesFolderPath}/${this.filesFolderName}/${gitBranchName}/${this.pathInfoFileName}`;
+        const infoFilePath = `${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}/${this.pathInfoFileName}`;
 
         const branchFileExists = fs.existsSync(infoFilePath);
         let pathInfoObject: PathInfoObject = {};
@@ -75,11 +72,14 @@ export class GitUntracked extends BaseGit {
             pathInfoObject = JSON.parse(fs.readFileSync(infoFilePath).toString());
         }
 
-        pathInfoObject[fileName] = fileToMoveFilePath;
+        const fileName = this.getFileNameFromFilePath(fileToSavePath);
+
+        pathInfoObject[fileName] = pathInProjectToUntrackedFile;
 
         const pathInfoObjectString = JSON.stringify(pathInfoObject, null, 2);
 
         fs.writeFileSync(infoFilePath, pathInfoObjectString, 'utf-8');
+
         console.log(`File ${fileName} has been saved under branch name "${gitBranchName}"`);
     }
 

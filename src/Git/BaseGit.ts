@@ -17,4 +17,9 @@ export class BaseGit extends Base {
     public async getTopLevelPath(): Promise<string> {
         return await bash.execCommand('git rev-parse --show-toplevel').then(std => std.stdout.split('\n')[0]);
     }
+
+    public getFileNameFromFilePath(filePath: string): string {
+        const filePathArray = filePath.split('/');
+        return filePathArray[filePathArray.length - 1];
+    }
 }
