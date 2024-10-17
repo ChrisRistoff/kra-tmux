@@ -8,7 +8,7 @@ export class GitRestore extends BaseGit{
     }
 
     public async restoreFile(): Promise<void> {
-        const fileToRestore = await this.getFileToRestore();
+        const fileToRestore = await this.getFileToRestoreFromUser();
 
         if (!fileToRestore) {
             return;
@@ -22,13 +22,13 @@ export class GitRestore extends BaseGit{
         await bash.execCommand(`git restore ${fileToRestore}`);
     }
 
-    public async getFileToRestore(): Promise<string> {
+    public async getFileToRestoreFromUser(): Promise<string> {
         const itemsArray = await this.getModifiedFilesNamesArray();
 
         itemsArray.unshift('All')
 
         const options: generalUI.SearchOptions = {
-            prompt: "pick a file to restore",
+            prompt: "Pick a file to restore: ",
             itemsArray,
         }
 

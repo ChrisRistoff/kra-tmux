@@ -82,7 +82,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
     return finalChoice;
 }
 
-export async function searchSelectAndReturnFromArray(options: SearchOptions): Promise<string | undefined> {
+export async function searchSelectAndReturnFromArray(options: SearchOptions): Promise<string> {
     const { selectedOption } = await inquirer.prompt([
         {
         type: 'autocomplete',

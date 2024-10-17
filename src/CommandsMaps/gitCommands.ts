@@ -1,15 +1,29 @@
 import { GitRestore } from "../Git/GitRestore";
+import { GitUntracked } from "../Git/GitUntracked";
 
 const gitRestore = new GitRestore();
+const gitUntracked = new GitUntracked();
 
 type GitCommands = {
-    [key: string]: () => Promise<void>
+    [key: string]: (args?: any) => Promise<void>
 }
 
 export const gitCommands: GitCommands = {
-    'git': handleGitRestore
+    'git': handleGit
 }
 
-async function handleGitRestore(): Promise<void> {
-    await gitRestore.restoreFile();
+async function handleGit(args: string[]): Promise<void> {
+    switch(args[1]) {
+        case 'res':
+            await gitRestore.restoreFile();
+            break;
+        case 'store':
+            await gitUntracked.saveUntrackedFile();
+            break;
+        case 'restore':
+            await gitUntracked.loadUntrackedFile();
+            break;
+        default:
+            console.log('Git command not found');
+    }
 }

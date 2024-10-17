@@ -17,7 +17,7 @@ const main = async (): Promise<void> => {
     }
 
     if (gitCommands[args[0]]) {
-        await gitCommands[args[0]]()
+        await gitCommands[args[0]](args)
         return;
     }
 
