@@ -1,0 +1,26 @@
+{
+  "name": "kra-cli",
+  "version": "1.0.2",
+  "description": "A cli helper for tmux and git, for now",
+  "bin": {
+    "kra": "dest/src/main.js"
+  },
+  "scripts": {
+    "postinstall": "tsc && node ./dest/autocomplete.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "events": "^3.3.0",
+    "inquirer": "^8.2.5",
+    "inquirer-autocomplete-prompt": "^2.0.0",
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/events": "^3.0.3",
+    "@types/inquirer": "^9.0.7",
+    "@types/inquirer-autocomplete-prompt": "^3.0.3",
+    "@types/node": "^22.7.4",
+    "typescript": "^5.6.2"
+  }
+}

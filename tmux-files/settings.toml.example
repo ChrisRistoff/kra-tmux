@@ -1,0 +1,7 @@
+work = true
+
+workWindowNameForWatch=''
+workCommandForWatch=''
+
+personalWindowNameForWatch=''
+personalCommandForWatch=''
