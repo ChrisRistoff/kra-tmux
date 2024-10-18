@@ -1,14 +1,12 @@
 {
-  "name": "kra-workflow",
-  "version": "1.0.0",
-  "description": "",
+  "name": "kra-cli",
+  "version": "1.0.2",
+  "description": "A cli helper for tmux and git, for now",
   "bin": {
     "kra": "dest/src/main.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x dest/src/main.js",
-    "load": "node ./dest/src/LoadSessions.js",
-    "auto": "node ./dest/src/autosuggest.js"
+    "postinstall": "tsc && node ./dest/autocomplete.js"
   },
   "author": "",
   "license": "ISC",

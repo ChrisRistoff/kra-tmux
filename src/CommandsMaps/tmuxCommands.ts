@@ -14,11 +14,11 @@ type TmuxCommands = {
 }
 
 export const tmuxCommands: TmuxCommands = {
-    'set': handleChangeSettings,
-    'save': handleSaveSessions,
-    'load': handleLoadSession,
-    'ls': handlePrintSessions,
-    'del': handleDeleteSession,
+    'settings': handleChangeSettings,
+    'save-server': handleSaveSessions,
+    'load-server': handleLoadSession,
+    'list-sessions': handlePrintSessions,
+    'delete-session': handleDeleteSession,
     'kill': handleKillTmuxServer,
 }
 
