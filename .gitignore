@@ -1,7 +1,7 @@
 node_modules/
-tmux-files/sessions/*
-tmux-files/nvim-sessions/*
-git-files/untracked/*
+tmux-files/
+tmux-files/
+git-files/
 dest/
 
 settings.toml
