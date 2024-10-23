@@ -95,12 +95,12 @@ export class LoadSessions extends BaseSessions {
         if (serverIsRunning && shouldSaveCurrentSessions) {
             await this.saveSessionsObject.saveSessionsToFile();
             await this.killTmuxServer();
-            await this.debounce(200);
+            await this.setTimeout(200);
         }
 
         if (serverIsRunning && !shouldSaveCurrentSessions) {
             await this.killTmuxServer();
-            await this.debounce(200);
+            await this.setTimeout(200);
         }
     }
 

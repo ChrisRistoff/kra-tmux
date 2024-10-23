@@ -22,7 +22,7 @@ export class Base {
         }
     }
 
-    public async debounce(time: number): Promise<void> {
+    public async setTimeout(time: number): Promise<void> {
         await new Promise(resolve => setTimeout(resolve, time));
     }
 
