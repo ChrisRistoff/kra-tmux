@@ -19,9 +19,9 @@ async function handleRestore (): Promise<void> {
 }
 
 async function handleCacheUntracked(): Promise<void> {
-    await gitUntracked.saveUntrackedFile();
+    await gitUntracked.saveUntracked();
 }
 
 async function handleRetrieveUntracked() {
-    await gitUntracked.loadUntrackedFile();
+    await gitUntracked.loadUntracked();
 }
