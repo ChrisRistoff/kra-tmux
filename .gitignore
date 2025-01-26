@@ -2,6 +2,9 @@ node_modules/
 tmux-files/nvim-sessions/*
 tmux-files/sessions/*
 git-files/untracked/*
+!tmux-files/nvim-sessions/
+!tmux-files/sessions/
+!git-files/untracked/
 dest/
 
 settings.toml
