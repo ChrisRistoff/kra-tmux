@@ -1,24 +1,24 @@
-import * as bash from '../helpers/bashHelper'
+import * as bash from '../helpers/bashHelper';
 import { Base } from '../Base';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
+import { sessionFilesFolder } from '../filePaths';
 
 export class BaseSessions extends Base {
-    public sessionsFilePath;
     public currentSessions: TmuxSessions;
 
-    constructor () {
-        super()
+    constructor (
+        public readonly sessionsFilePath = sessionFilesFolder,
+    ) {
+        super();
         this.currentSessions = {};
-
-        this.sessionsFilePath = `${__dirname}/../../../tmux-files/sessions`;
     }
 
     public async setCurrentSessions(): Promise<void> {
         let output;
         try {
             output = await bash.execCommand(`tmux list-sessions -F '#S'`);
-        } catch (error) {
-            console.log('No active sessions found!')
+        } catch (_error) {
+            console.log('No active sessions found!');
             return;
         }
 
@@ -36,7 +36,7 @@ export class BaseSessions extends Base {
                 } else {
                     this.currentSessions[session] = {
                         windows: [formattedWindow]
-                    }
+                    };
                 }
             }
 
@@ -46,7 +46,7 @@ export class BaseSessions extends Base {
                 const panesArray = panes.stdout.toString().trim().split('\n');
 
                 for (let i = 0; i < panesArray.length; i++) {
-                    const pane = await this.formatPane(panesArray[i])
+                    const pane = await this.formatPane(panesArray[i]);
                     this.currentSessions[session].windows[windowIndex].panes.push(pane);
                 }
             }
@@ -69,7 +69,7 @@ export class BaseSessions extends Base {
     public printSessions(): void {
         for (const sess in this.currentSessions) {
             const currentSession = this.currentSessions[sess];
-            let panesCount = 0
+            let panesCount = 0;
             let path = '';
 
             for (const window of currentSession.windows) {
@@ -82,7 +82,7 @@ export class BaseSessions extends Base {
                 Path: path,
                 Widnows: currentSession.windows.length,
                 Panes: panesCount,
-            })
+            });
         }
     }
 
@@ -109,7 +109,7 @@ export class BaseSessions extends Base {
     public async killTmuxServer(): Promise<void> {
         try {
             await bash.execCommand('tmux kill-server');
-        } catch (error) {
+        } catch (_error) {
             console.log('No Server Running');
         }
     }
@@ -117,8 +117,8 @@ export class BaseSessions extends Base {
     public async detachSession(): Promise<void> {
         try {
             await bash.execCommand('tmux detach');
-        } catch (error) {
-            console.log('failed to detach')
+        } catch (_error) {
+            console.log('failed to detach');
         }
     }
 
@@ -139,7 +139,7 @@ export class BaseSessions extends Base {
     private async formatWindow(window: string): Promise<Window> {
         const [windowName, currentCommand, currentPath, layout] = window.split(':');
 
-        let gitRepoLink = await this.getGitRepoLink(currentPath);
+        const gitRepoLink = await this.getGitRepoLink(currentPath);
 
         return {
             windowName,
@@ -148,18 +148,20 @@ export class BaseSessions extends Base {
             currentCommand,
             currentPath,
             panes: []
-        }
+        };
     }
 
     private async getGitRepoLink(path: string): Promise<string> {
         let result = '';
+
         try {
             const stdout = await bash.execCommand(`git -C ${path} remote get-url origin`);
-            result = stdout.stdout
+            result = stdout.stdout;
         } catch (error) {
+	    console.log(error);
         }
 
-        const finalResult = result.split('\n')
+        const finalResult = result.split('\n');
 
         return finalResult[0];
     }

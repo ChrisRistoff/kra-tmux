@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import * as bash from '../helpers/bashHelper'
+import * as bash from '../helpers/bashHelper';
 import { spawn } from 'child_process';
 
 export async function saveNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number): Promise<void> {
@@ -7,11 +7,11 @@ export async function saveNvimSession(folderName: string, session: string, windo
     const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}.vim`;
 
     if (!fs.existsSync(nvimSessionsPath)) {
-        fs.mkdirSync(nvimSessionsPath, { recursive: true} )
+        fs.mkdirSync(nvimSessionsPath, { recursive: true} );
     }
 
     if (!fs.existsSync(`${nvimSessionsPath}/${folderName}`)) {
-        fs.mkdirSync(`${nvimSessionsPath}/${folderName}`, { recursive: true} )
+        fs.mkdirSync(`${nvimSessionsPath}/${folderName}`, { recursive: true} );
     }
 
     if (fs.existsSync(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`)) {
@@ -23,7 +23,7 @@ export async function saveNvimSession(folderName: string, session: string, windo
         windowIndex,
         paneIndex,
         command: `:mksession ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`,
-    })
+    });
 }
 
 export async function loadNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number) {
@@ -32,7 +32,7 @@ export async function loadNvimSession(folderName: string, session: string, windo
         windowIndex,
         paneIndex,
         command: `nvim -S ${__dirname}/../../../tmux-files/nvim-sessions/${folderName}/${session}_${windowIndex}_${paneIndex}.vim`,
-    })
+    });
 }
 
 export async function openVim(filePath: string): Promise<void> {

@@ -34,14 +34,16 @@ export async function askUserForInput(message: string): Promise<string> {
 }
 
 export async function searchAndSelect(options: SearchOptions): Promise<string> {
-    console.log(options.itemsArray)
+    console.log(options.itemsArray);
+
     let currentUserInput;
+
     const { userSelection } = await inquirer.prompt([
         {
             type: 'autocomplete',
             name: 'userSelection',
             message: options.prompt,
-            source: async (_answersSoFar: any, input: string) => {
+            source: async (_answersSoFar: string[], input: string) => {
                 if (!input) {
                     return options.itemsArray;
                 }
@@ -88,7 +90,7 @@ export async function searchSelectAndReturnFromArray(options: SearchOptions): Pr
         type: 'autocomplete',
         name: 'selectedOption',
         message: options.prompt,
-        source: (_answersSoFar: any, input: string) => {
+        source: (_answersSoFar: string[], input: string) => {
             if (!input) {
               return options.itemsArray;
             }

@@ -12,16 +12,16 @@ const main = async (): Promise<void> => {
     }
 
     if (args[0] === 'tmux' && tmuxCommands[args[1]]) {
-        await tmuxCommands[args[1]]()
+        await tmuxCommands[args[1]]();
         return;
     }
 
     if (args[0] === 'git' && gitCommands[args[1]]) {
-        await gitCommands[args[1]]()
+        await gitCommands[args[1]]();
         return;
     }
 
-    console.log('Command not a command.')
-}
+    console.log('Command not a command.');
+};
 
 main();

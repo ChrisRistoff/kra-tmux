@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
-import * as toml from 'toml'
-import * as fs from 'fs/promises'
+import * as toml from 'toml';
+import * as fs from 'fs/promises';
 
 export class Base {
     public events;
@@ -19,7 +19,7 @@ export class Base {
             addAsyncEventListener: (event: string, callback = async (): Promise<void> => {}) => {
                 this.emitter.addListener(event, callback);
             }
-        }
+        };
     }
 
     public async setTimeout(time: number): Promise<void> {
@@ -27,7 +27,7 @@ export class Base {
     }
 
     public async getSettings() {
-        const settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8')
-        return await toml.parse(settingsFileString)
+        const settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8');
+        return await toml.parse(settingsFileString);
     }
 }

@@ -1,11 +1,11 @@
 import * as bash from '../helpers/bashHelper';
 import * as generalUI from '../UI/generalUI';
 import * as fs from 'fs/promises';
-import * as nvim from '../helpers/neovimHelper'
+import * as nvim from '../helpers/neovimHelper';
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
-import { Settings } from '../types/SettingsTyeps';
+import { Settings } from '../types/SettingsTypes';
 
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;
@@ -13,7 +13,7 @@ export class LoadSessions extends BaseSessions {
     private saveFileToLoadName: string;
 
     constructor () {
-        super()
+        super();
         this.savedSessions = {};
         this.saveFileToLoadName = '';
     }
@@ -30,7 +30,7 @@ export class LoadSessions extends BaseSessions {
             return;
         }
 
-        const filePath = `${this.sessionsFilePath}/${fileName}`
+        const filePath = `${this.sessionsFilePath}/${fileName}`;
 
         const latestSessions = await fs.readFile(filePath);
 
@@ -54,7 +54,7 @@ export class LoadSessions extends BaseSessions {
                 Path: path,
                 Widnows: currentSession.windows.length,
                 Panes: panesCount,
-            })
+            });
         }
     }
 
@@ -151,7 +151,7 @@ export class LoadSessions extends BaseSessions {
                     windowIndex,
                     paneIndex: 0,
                     command: settings.workCommandForWatch,
-                })
+                });
 
             } else if (!settings.work && window.windowName === settings.personalWindowNameForWatch) {
                 await bash.sendKeysToTmuxTargetSession({
@@ -159,7 +159,7 @@ export class LoadSessions extends BaseSessions {
                     windowIndex,
                     paneIndex: 0,
                     command: settings.personalCommandForWatch,
-                })
+                });
             }
 
         }
@@ -177,7 +177,7 @@ export class LoadSessions extends BaseSessions {
         await bash.sendKeysToTmuxTargetSession({
             paneIndex: paneIndex,
             command: 'cd'
-        })
+        });
 
         for (let i = 3; i < pathArray.length; i++) {
             const folderPath = pathArray[i];
@@ -187,11 +187,11 @@ export class LoadSessions extends BaseSessions {
                 await bash.sendKeysToTmuxTargetSession({
                     paneIndex,
                     command: `[ -d '${folderPath}' ] && echo 'Directory exists' || (git clone ${pane.gitRepoLink} ${folderPath})`,
-                })
+                });
                 await bash.sendKeysToTmuxTargetSession({
                     paneIndex,
                     command: `cd ${folderPath} && echo 'Navigated to ${folderPath}'`,
-                })
+                });
                 console.log(`Directory ${folderPath} exists`);
             } catch (error) {
                 console.error(`Error while checking or navigating: ${error}`);

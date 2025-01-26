@@ -1,12 +1,12 @@
 import * as bash from '../helpers/bashHelper';
-import * as nvim from '../helpers/neovimHelper'
+import * as nvim from '../helpers/neovimHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
 export class Save extends BaseSessions {
 
     constructor () {
-        super()
+        super();
     }
 
     public async saveSessionsToFile(): Promise<void> {
@@ -48,7 +48,7 @@ export class Save extends BaseSessions {
 
         try {
             branchName = await bash.execCommand('git rev-parse --abbrev-ref HEAD').then(res => res.stdout);
-        } catch (error) {
+        } catch (_error) {
             branchName = '';
         }
 
@@ -61,19 +61,19 @@ export class Save extends BaseSessions {
         const message = `Would you like to use ${branchName} as part of your name for your save?`;
         const shouldSaveBranchNameAsFileName = await generalUI.promptUserYesOrNo(message);
 
-        const itemsArray = await fs.readdir(this.sessionsFilePath)
+        const itemsArray = await fs.readdir(this.sessionsFilePath);
 
         const options: generalUI.SearchOptions = {
             prompt: 'Please write a name for save: ',
             itemsArray,
-        }
+        };
 
         if (!shouldSaveBranchNameAsFileName) {
             const sessionName = await generalUI.searchAndSelect(options);
-            return sessionName!
+            return sessionName!;
         }
 
-        console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`)
+        console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
         const sessionName = await generalUI.searchAndSelect(options);
         return `${branchName}-${sessionName}-${this.getDate()}`;
     }
@@ -81,11 +81,11 @@ export class Save extends BaseSessions {
     public getDate(): string {
         const dateArray = new Date().toString().split(' ');
 
-        let timeArray = dateArray[4].split(':')
+        const timeArray = dateArray[4].split(':');
         timeArray.pop();
         const timeString = timeArray.join(':');
-        const yearMonthDayTime = [dateArray[3], dateArray[1], dateArray[2], timeString]
-        const fileName = yearMonthDayTime.join('-')
+        const yearMonthDayTime = [dateArray[3], dateArray[1], dateArray[2], timeString];
+        const fileName = yearMonthDayTime.join('-');
 
         return fileName;
     }
