@@ -9,11 +9,11 @@ export class ManageSavedSessions extends LoadSessions {
     }
 
     public async deleteSession(): Promise<void> {
-        const savedServers = await this.getSavedSessionsNames()
+        const savedServers = await this.getSavedSessionsNames();
 
         const fileName = await generalUI.searchSelectAndReturnFromArray({
             prompt: "Please select a server from the list to delte",
-            itemsArray: savedServers.filter((server) => server !== '.gitkeep'),
+            itemsArray: savedServers,
         });
 
         const filePath = `${this.sessionsFilePath}/${fileName}`

@@ -107,7 +107,7 @@ export class LoadSessions extends BaseSessions {
     public async getSavedSessionsNames(): Promise<string[]> {
         try {
             const files = await fs.readdir(this.sessionsFilePath);
-            return files
+            return files.filter((file) => file !== '.gitkeep');
         } catch (error) {
             console.error('Error reading directory:', error);
             return [];

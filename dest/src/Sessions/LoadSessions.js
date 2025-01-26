@@ -124,7 +124,7 @@ class LoadSessions extends BaseSession_1.BaseSessions {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const files = yield fs.readdir(this.sessionsFilePath);
-                return files;
+                return files.filter((file) => file !== '.gitkeep');
             }
             catch (error) {
                 console.error('Error reading directory:', error);

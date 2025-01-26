@@ -42,8 +42,7 @@ class ManageSavedSessions extends LoadSessions_1.LoadSessions {
     }
     deleteSession() {
         return __awaiter(this, void 0, void 0, function* () {
-            let savedServers = yield this.getSavedSessionsNames();
-            savedServers = savedServers.filter((server) => server !== '.gitkeep');
+            const savedServers = yield this.getSavedSessionsNames();
             const fileName = yield generalUI.searchSelectAndReturnFromArray({
                 prompt: "Please select a server from the list to delte",
                 itemsArray: savedServers,
