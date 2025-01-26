@@ -1,11 +1,10 @@
-node_modules/
-dest/
-
 # Ignore all files inside the subfolders
 tmux-files/nvim-sessions/*
 !tmux-files/nvim-sessions/.gitkeep
+
 tmux-files/sessions/*
 !tmux-files/sessions/.gitkeep
+
 git-files/untracked/*
 !git-files/untracked/.gitkeep
 
@@ -17,6 +16,5 @@ git-files/untracked/*
 !git-files/untracked/
 
 # Ignore sub-subfolders (and files) inside the subfolders
-tmux-files/nvim-sessions/*/*
-tmux-files/sessions/*/*
-git-files/untracked/*/*
+node_modules/
+dest/
