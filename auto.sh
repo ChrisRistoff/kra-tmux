@@ -16,7 +16,7 @@ _kra_completions() {
     if [[ "$prev" == "git" ]]; then
         COMPREPLY=( $(compgen -W "restore cache-untracked retrieve-untracked" -- "$cur") )
     elif [[ "$prev" == "tmux" ]]; then
-        COMPREPLY=( $(compgen -W "save-server load-server list-sessions delete-sessions kill" -- "$cur") )
+        COMPREPLY=( $(compgen -W "save-server load-server list-sessions delete-session kill" -- "$cur") )
     fi
 
     return 0

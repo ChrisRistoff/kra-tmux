@@ -13,7 +13,7 @@ export class ManageSavedSessions extends LoadSessions {
 
         const fileName = await generalUI.searchSelectAndReturnFromArray({
             prompt: "Please select a server from the list to delte",
-            itemsArray: savedServers,
+            itemsArray: savedServers.filter((server) => server !== '.gitkeep'),
         });
 
         const filePath = `${this.sessionsFilePath}/${fileName}`
