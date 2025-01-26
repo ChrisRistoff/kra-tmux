@@ -1,4 +1,5 @@
 node_modules/
+dest/
 
 # Ignore all files inside the subfolders
 tmux-files/nvim-sessions/*
