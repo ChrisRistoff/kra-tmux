@@ -3,8 +3,11 @@ dest/
 
 # Ignore all files inside the subfolders
 tmux-files/nvim-sessions/*
+!tmux-files/nvim-sessions/.gitkeep
 tmux-files/sessions/*
+!tmux-files/sessions/.gitkeep
 git-files/untracked/*
+!git-files/untracked/.gitkeep
 
 # Track the directories themselves
 !tmux-files/
