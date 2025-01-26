@@ -8,6 +8,10 @@ export default [
   {files: ["*.ts"]},
   {languageOptions: { globals: globals.node}},
   {rules: {
+    'space-before-blocks': ['error', 'always'],
+    'keyword-spacing': ['error', {
+      before: true, after: true
+    }],
     'semi': ['error', 'always'],
     "@typescript-eslint/no-unused-vars": [
       "error",
