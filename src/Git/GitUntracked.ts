@@ -2,6 +2,7 @@ import { BaseGit } from "./BaseGit";
 import fs from 'fs';
 import * as bash from '../helpers/bashHelper';
 import * as generalUI from "../UI/generalUI";
+import path from "path";
 
 type PathInfoObject = {
     [key: string]: string,
@@ -27,33 +28,35 @@ export class GitUntracked extends BaseGit {
         const options: generalUI.SearchOptions = {
             prompt: "Pick a file to retrieve from stored untracked files: ",
             itemsArray: savedUntrackedFiles,
-        }
+        };
 
-        let fileToLoadName = await generalUI.searchSelectAndReturnFromArray(options);
+        const fileToLoadName = await generalUI.searchSelectAndReturnFromArray(options);
 
         if (fileToLoadName === 'all') {
             savedUntrackedFiles.shift();
             return await this.loadMultipleUntrackedFiles(savedUntrackedFiles, gitBranchName);
         }
 
-        await this.loadUntrackedFile(fileToLoadName, gitBranchName)
+        await this.loadUntrackedFile(fileToLoadName, gitBranchName);
     }
 
     private async loadMultipleUntrackedFiles(filesToLoadArray: string[], gitBranchName: string): Promise<void> {
         filesToLoadArray.forEach(async(file) => {
             await this.loadUntrackedFile(file, gitBranchName);
-        })
+        });
     }
 
     public async loadUntrackedFile(fileToLoadName: string, gitBranchName: string): Promise<void> {
-        const pathInfoObject: PathInfoObject = JSON.parse(fs.readFileSync(`${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}/${this.pathInfoFileName}`).toString())
+        const pathInfoObject: PathInfoObject = JSON.parse(fs.readFileSync(`${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}/${this.pathInfoFileName}`).toString());
 
         const fileToRetrievePathArray = pathInfoObject[fileToLoadName].split('/');
-        fileToRetrievePathArray.pop()
+        fileToRetrievePathArray.pop();
 
         const fileToRetrievePath = fileToRetrievePathArray.join('/');
 
-        await bash.execCommand(`mv ${this.gitFilesFolderPath}/${this.untrackedFilesFolderName}/${gitBranchName}/${fileToLoadName} ${fileToRetrievePath}`);
+	const untrackedFolder = path.join(this.gitFilesFolderPath, this.untrackedFilesFolderName, gitBranchName, fileToLoadName);
+
+        await bash.execCommand(`mv ${untrackedFolder} ${fileToRetrievePath}`);
         console.log(`File ${fileToLoadName} moved back to ${fileToRetrievePath}`);
     }
 
@@ -72,7 +75,7 @@ export class GitUntracked extends BaseGit {
     private async saveMultipleUntrackedFiles(filesToSaveArray: string[], gitBranchName: string): Promise<void> {
         filesToSaveArray.forEach(async(file) => {
             await this.saveUntrackedFile(file, gitBranchName);
-        })
+        });
     }
 
     private async saveUntrackedFile(fileToSavePath: string, gitBranchName: string): Promise<void> {
@@ -97,7 +100,7 @@ export class GitUntracked extends BaseGit {
             pathInfoObject = JSON.parse(fs.readFileSync(infoFilePath).toString());
         }
 
-        const fileName = this.getFileNameFromFilePath(fileToSavePath);
+        const fileName = path.basename(fileToSavePath);
 
         pathInfoObject[fileName] = pathInProjectToUntrackedFile;
 
@@ -117,7 +120,7 @@ export class GitUntracked extends BaseGit {
         const options: generalUI.SearchOptions = {
             prompt: "Pick a file to save and remove from project: ",
             itemsArray,
-        }
+        };
 
         const fileToSave = await generalUI.searchSelectAndReturnFromArray(options);
 

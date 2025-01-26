@@ -11,7 +11,7 @@ type SendKeysArguments = {
 const allowedCommandsForNoCode: AllowedCommandsForNoCode = {
     'tmux': new Set(['attach-session', 'has-session', 'kill-server']),
     'git': new Set(['get-url'])
-}
+};
 
 export async function runCommand(command: string, args? : string[], options = {}): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -62,28 +62,28 @@ function isCommandValidWithNoCode(command: string, args: string[] | undefined): 
 }
 
 export async function sendKeysToTmuxTargetSession(options: SendKeysArguments): Promise<void> {
-    let commandString = 'tmux send-keys'
-    const windowIndexIsValid = typeof options.windowIndex === 'number';
-    const paneIndexIsValid = typeof options.paneIndex === 'number';
+    let commandString = 'tmux send-keys';
+    const windowIndexIsSaved = typeof options.windowIndex === 'number';
+    const panelIndexIsSaved = typeof options.paneIndex === 'number';
 
-    if (options.sessionName || windowIndexIsValid || paneIndexIsValid) {
-        commandString += ' -t '
+    if (options.sessionName || windowIndexIsSaved || panelIndexIsSaved) {
+        commandString += ' -t ';
     }
 
     if (options.sessionName) {
-        commandString += options.sessionName
+        commandString += options.sessionName;
     }
 
-    if (windowIndexIsValid) {
+    if (windowIndexIsSaved) {
         commandString += commandString[commandString.length - 1] === ' '
             ? options.windowIndex
-            : `:${options.windowIndex}`
+            : `:${options.windowIndex}`;
     }
 
-    if (paneIndexIsValid) {
+    if (panelIndexIsSaved) {
         commandString += commandString[commandString.length - 1] === ' '
             ? options.paneIndex
-            : `.${options.paneIndex}`
+            : `.${options.paneIndex}`;
     }
 
     commandString += ` "${options.command}" C-m`;

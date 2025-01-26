@@ -2,9 +2,9 @@ import { BaseGit } from "./BaseGit";
 import * as bash from "../helpers/bashHelper";
 import * as generalUI from "../UI/generalUI";
 
-export class GitRestore extends BaseGit{
+export class GitRestore extends BaseGit {
     constructor() {
-        super()
+        super();
     }
 
     public async restoreFile(): Promise<void> {
@@ -15,7 +15,7 @@ export class GitRestore extends BaseGit{
         }
 
         if (fileToRestore === "All") {
-            await bash.execCommand('git restore ./')
+            await bash.execCommand('git restore ./');
             return;
         }
 
@@ -25,12 +25,12 @@ export class GitRestore extends BaseGit{
     public async getFileToRestoreFromUser(): Promise<string> {
         const itemsArray = await this.getModifiedFilesNamesArray();
 
-        itemsArray.unshift('All')
+        itemsArray.unshift('All');
 
         const options: generalUI.SearchOptions = {
             prompt: "Pick a file to restore: ",
             itemsArray,
-        }
+        };
 
         const fileToRestore = await generalUI.searchSelectAndReturnFromArray(options);
 

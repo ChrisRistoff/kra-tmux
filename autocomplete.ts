@@ -21,13 +21,13 @@ const sourceLine = `source ${completionScript}`;
 appendToShellRc(bashrc, sourceLine);
 appendToShellRc(zshrc, sourceLine);
 
-const sourceScriptPath = `${__dirname}/../reload.sh`
+const sourceScriptPath = `${__dirname}/../reload.sh`;
 fs.writeFileSync(sourceScriptPath, `#!/bin/bash\nsource ~/.bashrc\nsource ~/.zshrc\necho "Shell configuration reloaded."`, { mode: 0o755 });
 
 const main = async () => {
     await bash.execCommand(`bash ${sourceScriptPath}`);
     fs.rmSync(sourceScriptPath);
     return 'Shell configuration reloaded.';
-}
+};
 
 main().then(res => console.log(res));

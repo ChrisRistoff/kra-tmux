@@ -16,12 +16,12 @@ export class ManageSavedSessions extends LoadSessions {
             itemsArray: savedServers,
         });
 
-        const filePath = `${this.sessionsFilePath}/${fileName}`
+        const filePath = `${this.sessionsFilePath}/${fileName}`;
 
         const sessions = await this.getSavedSessionsByFilePath(filePath);
         this.printTargetSessions(sessions);
 
-        const willDelete = await generalUI.promptUserYesOrNo(`Are you sure you want to delete save ${fileName}`)
+        const willDelete = await generalUI.promptUserYesOrNo(`Are you sure you want to delete save ${fileName}`);
 
         if (willDelete) {
             await fs.rm(filePath);
@@ -30,13 +30,13 @@ export class ManageSavedSessions extends LoadSessions {
 
     public async getSavedSessionsByFilePath(filePath: string): Promise<TmuxSessions> {
         const latestSessions = await fs.readFile(filePath);
-        return JSON.parse(latestSessions.toString())
+        return JSON.parse(latestSessions.toString());
     }
 
     public printTargetSessions(sessions: TmuxSessions): void {
         for (const sess of Object.keys(sessions)) {
             const currentSession = sessions[sess];
-            let panesCount = 0
+            let panesCount = 0;
             let path = '';
 
             for (const window of currentSession.windows) {
@@ -49,7 +49,7 @@ export class ManageSavedSessions extends LoadSessions {
                 Path: path,
                 Widnows: currentSession.windows.length,
                 Panes: panesCount,
-            })
+            });
         }
     }
 }

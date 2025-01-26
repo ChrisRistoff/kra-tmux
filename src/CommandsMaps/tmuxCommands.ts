@@ -1,9 +1,10 @@
 import { LoadSessions } from "../Sessions/LoadSessions";
 import { ManageSavedSessions } from "../Sessions/ManageSavedSessions";
 import { Save } from "../Sessions/SaveSessions";
-import * as nvim from '../helpers/neovimHelper'
-import * as toml from 'toml'
-import * as fs from 'fs/promises'
+import * as nvim from '../helpers/neovimHelper';
+import * as toml from 'toml';
+import * as fs from 'fs/promises';
+import { settingsFilePath } from "../filePaths";
 
 const saveSession = new Save();
 const loadSessions = new LoadSessions();
@@ -20,27 +21,26 @@ export const tmuxCommands: TmuxCommands = {
     'list-sessions': handlePrintSessions,
     'delete-session': handleDeleteSession,
     'kill': handleKillTmuxServer,
-}
+};
 
 async function handleChangeSettings(): Promise<void> {
-    const settingsFilePath = `~/programming/settings.toml`
-    let settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8')
-    const oldSettings = await toml.parse(settingsFileString)
-    await nvim.openVim(settingsFilePath)
-    settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8')
-    const newSettings = await toml.parse(settingsFileString)
+    let settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8');
+    const oldSettings = await toml.parse(settingsFileString);
+    await nvim.openVim(settingsFilePath);
+    settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8');
+    const newSettings = await toml.parse(settingsFileString);
 
-    console.log('Changed settings below:')
+    console.log('Changed settings below:');
 
     for (const setting of Object.keys(oldSettings)) {
         if (oldSettings[setting] !== newSettings[setting]) {
             console.table({
                 'Setting': setting
-            })
+            });
             console.table({
                 'Old value': `${oldSettings[setting]}`,
                 'New setting': `${newSettings[setting]}`
-            })
+            });
         }
     }
 }
