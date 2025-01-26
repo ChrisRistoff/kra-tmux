@@ -1,10 +1,18 @@
 node_modules/
+
+# Ignore all files inside the subfolders
 tmux-files/nvim-sessions/*
 tmux-files/sessions/*
 git-files/untracked/*
+
+# Track the directories themselves
+!tmux-files/
 !tmux-files/nvim-sessions/
 !tmux-files/sessions/
+!git-files/
 !git-files/untracked/
-dest/
 
-settings.toml
+# Ignore sub-subfolders (and files) inside the subfolders
+tmux-files/nvim-sessions/*/*
+tmux-files/sessions/*/*
+git-files/untracked/*/*
