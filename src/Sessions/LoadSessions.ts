@@ -120,7 +120,7 @@ export class LoadSessions extends BaseSessions {
 
         for (const [windowIndex, window] of this.savedSessions[sessionName].windows.entries()) {
             if (windowIndex > 0) {
-                const createWindow = `tmux new-window -t ${sessionName} -n ${window.windowName} -c ~/`;
+                const createWindow = `tmux new-window -n ${window.windowName} -c ~/`;
                 await bash.execCommand(createWindow);
             }
 
