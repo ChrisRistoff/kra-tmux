@@ -20,4 +20,11 @@ export class BaseGit extends Base {
 
         return response.stdout.split('\n')[0];
     }
+
+    public async hardResetCurrentBranch(): Promise<void> {
+        const currentBranch = await this.getCurrentBranch();
+        await bash.execCommand('git fetch --prune');
+
+        await bash.execCommand(`git reset --hard origin/${currentBranch}`);
+    }
 }
