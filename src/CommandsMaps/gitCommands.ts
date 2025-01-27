@@ -1,6 +1,8 @@
+import { BaseGit } from "../Git/BaseGit";
 import { GitRestore } from "../Git/GitRestore";
 import { GitUntracked } from "../Git/GitUntracked";
 
+const baseGit = new BaseGit();
 const gitRestore = new GitRestore();
 const gitUntracked = new GitUntracked();
 
@@ -12,6 +14,7 @@ export const gitCommands: GitCommands = {
     'restore': handleRestore,
     'cache-untracked': handleCacheUntracked,
     'retrieve-untracked': handleRetrieveUntracked,
+    'hard-reset': handleHardResetCurrentBranch,
 };
 
 async function handleRestore (): Promise<void> {
@@ -22,6 +25,10 @@ async function handleCacheUntracked(): Promise<void> {
     await gitUntracked.saveUntracked();
 }
 
-async function handleRetrieveUntracked() {
+async function handleRetrieveUntracked(): Promise<void> {
     await gitUntracked.loadUntracked();
+}
+
+async function handleHardResetCurrentBranch(): Promise<void> {
+    await baseGit.hardResetCurrentBranch();
 }
