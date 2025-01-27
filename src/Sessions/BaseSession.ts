@@ -42,7 +42,17 @@ export class BaseSessions extends Base {
 
             for (let i = 0; i < windowsArray.length; i++) {
                 const windowIndex = i;
-                const panes = await bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_current_command}:#{pane_current_path}:#{pane_left}x#{pane_top}"`);
+                let panes
+
+                try {
+                    panes = await bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_current_command}:#{pane_current_path}:#{pane_left}x#{pane_top}"`);
+                } catch(error) {
+                    console.log(error);
+                    console.log('Skipping window');
+
+                    continue;
+                }
+
                 const panesArray = panes.stdout.toString().trim().split('\n');
 
                 for (let i = 0; i < panesArray.length; i++) {
@@ -151,14 +161,14 @@ export class BaseSessions extends Base {
         };
     }
 
-    private async getGitRepoLink(path: string): Promise<string> {
+    private async getGitRepoLink(path: string): Promise<string | undefined> {
         let result = '';
 
         try {
             const stdout = await bash.execCommand(`git -C ${path} remote get-url origin`);
             result = stdout.stdout;
-        } catch (error) {
-	    console.log(error);
+        } catch (_error) {
+            return undefined;
         }
 
         const finalResult = result.split('\n');

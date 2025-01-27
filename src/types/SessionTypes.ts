@@ -9,14 +9,14 @@ export type Window = {
     currentCommand: string,
     layout: string,
     currentPath: string,
-    gitRepoLink: string,
+    gitRepoLink: string | undefined,
     panes: Pane[]
 }
 
 export type Pane = {
     currentCommand: string,
     currentPath: string,
-    gitRepoLink: string,
+    gitRepoLink: string | undefined,
     paneLeft: string,
     paneTop: string,
 }
