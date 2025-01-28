@@ -1,10 +1,12 @@
 import { BaseGit } from "../Git/BaseGit";
 import { GitRestore } from "../Git/GitRestore";
+import { GitStash } from "../Git/GitStash";
 import { GitUntracked } from "../Git/GitUntracked";
 
 const baseGit = new BaseGit();
 const gitRestore = new GitRestore();
 const gitUntracked = new GitUntracked();
+const gitStash = new GitStash();
 
 type GitCommands = {
     [key: string]: (args?: string[]) => Promise<void>
@@ -16,6 +18,8 @@ export const gitCommands: GitCommands = {
     'retrieve-untracked': handleRetrieveUntracked,
     'hard-reset': handleHardResetCurrentBranch,
     'log': handleGitLog,
+    'stash': handleStash,
+    'stash-drop-multiple': handleStashDropMultiple,
 };
 
 async function handleRestore (): Promise<void> {
@@ -36,4 +40,12 @@ async function handleHardResetCurrentBranch(): Promise<void> {
 
 async function handleGitLog(): Promise<void> {
     await baseGit.getGitLog();
+}
+
+async function handleStash(): Promise<void> {
+    gitStash.applyOrDropStash();
+}
+
+async function handleStashDropMultiple(): Promise<void> {
+    gitStash.dropMultipleStashes();
 }
