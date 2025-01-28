@@ -14,7 +14,7 @@ _kra_completions() {
 
     # Second-level commands after "git" or "tmux"
     if [[ "$prev" == "git" ]]; then
-        COMPREPLY=( $(compgen -W "restore cache-untracked retrieve-untracked hard-reset" -- "$cur") )
+        COMPREPLY=( $(compgen -W "restore cache-untracked retrieve-untracked hard-reset log" -- "$cur") )
     elif [[ "$prev" == "tmux" ]]; then
         COMPREPLY=( $(compgen -W "save-server load-server list-sessions delete-session kill" -- "$cur") )
     fi

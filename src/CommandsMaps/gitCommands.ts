@@ -15,6 +15,7 @@ export const gitCommands: GitCommands = {
     'cache-untracked': handleCacheUntracked,
     'retrieve-untracked': handleRetrieveUntracked,
     'hard-reset': handleHardResetCurrentBranch,
+    'log': handleGitLog,
 };
 
 async function handleRestore (): Promise<void> {
@@ -31,4 +32,8 @@ async function handleRetrieveUntracked(): Promise<void> {
 
 async function handleHardResetCurrentBranch(): Promise<void> {
     await baseGit.hardResetCurrentBranch();
+}
+
+async function handleGitLog(): Promise<void> {
+    await baseGit.getGitLog();
 }

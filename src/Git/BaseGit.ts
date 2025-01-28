@@ -27,4 +27,24 @@ export class BaseGit extends Base {
 
         await bash.execCommand(`git reset --hard origin/${currentBranch}`);
     }
+
+    public async getGitLog(): Promise<void> {
+        const tmpfile = '/tmp/git-log-XXXXXX.txt';
+
+        const command = `
+                git log --graph --abbrev-commit --oneline --decorate --color=always \
+                --pretty=format:'%C(yellow)%h%C(reset) %C(green)(%d)%C(reset) %C(blue)%s%C(reset) %C(red)%an%C(reset) %C(magenta)%ar%C(reset) %C(cyan)%d%C(reset) %C(white)%B%C(reset)' \
+                | sed -E 's/\x1B\[[0-9;]*m//g' | sed 's/\|/   /g;s/[[:space:]]+$//;s/^    $//' > ${tmpfile}
+            `
+
+        try {
+            await bash.execCommand(command);
+
+            await bash.sendKeysToTmuxTargetSession({
+                command: `nvim -c 'set filetype=git' ${tmpfile}`,
+            });
+        } catch (error) {
+            console.error('Failed to run git log or open nvim:', error);
+        }
+    }
 }
