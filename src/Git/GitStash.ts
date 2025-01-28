@@ -15,13 +15,13 @@ export class GitStash extends BaseGit {
         const applyOrDrop = await ui.searchSelectAndReturnFromArray({
             itemsArray: ['apply', 'drop'],
             prompt: 'Choose what you want to do with the stash'
-        })
+        });
 
         const command = `git stash ${applyOrDrop} stash@\{${stashList.indexOf(stash)}\}`;
 
         await bash.execCommand(command);
 
-        console.log(`Stash dropped: ${stash}`)
+        console.log(`Stash dropped: ${stash}`);
     }
 
     public async dropMultipleStashes(): Promise<void> {
@@ -43,7 +43,7 @@ export class GitStash extends BaseGit {
 
             await bash.execCommand(command);
 
-            console.log(`Stash dropped: ${stash}`)
+            console.log(`Stash dropped: ${stash}`);
         }
     }
 

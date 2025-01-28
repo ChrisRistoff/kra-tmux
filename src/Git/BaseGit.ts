@@ -32,7 +32,7 @@ export class BaseGit extends Base {
                 fetch: fetch.stdout,
                 '': '=======================',
                 HEAD: reset.stdout,
-            })
+            });
         } catch (error) {
             console.log(error);
         }
@@ -45,7 +45,7 @@ export class BaseGit extends Base {
                 git log --graph --abbrev-commit --oneline --decorate --color=always \
                 --pretty=format:'%C(yellow)%h%C(reset) %C(green)(%d)%C(reset) %C(blue)%s%C(reset) %C(red)%an%C(reset) %C(magenta)%ar%C(reset) %C(cyan)%d%C(reset) %C(white)%B%C(reset)' \
                 | sed -E 's/\x1B\[[0-9;]*m//g' | sed 's/\|/   /g;s/[[:space:]]+$//;s/^    $//' > ${tmpfile}
-            `
+            `;
 
         try {
             await bash.execCommand(command);

@@ -42,11 +42,11 @@ export class BaseSessions extends Base {
 
             for (let i = 0; i < windowsArray.length; i++) {
                 const windowIndex = i;
-                let panes
+                let panes;
 
                 try {
                     panes = await bash.execCommand(`tmux list-panes -t ${session}:${i} -F "#{pane_current_command}:#{pane_current_path}:#{pane_left}x#{pane_top}"`);
-                } catch(error) {
+                } catch (error) {
                     console.log(error);
                     console.log('Skipping window');
 
