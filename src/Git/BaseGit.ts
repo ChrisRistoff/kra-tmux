@@ -22,10 +22,20 @@ export class BaseGit extends Base {
     }
 
     public async hardResetCurrentBranch(): Promise<void> {
-        const currentBranch = await this.getCurrentBranch();
-        await bash.execCommand('git fetch --prune');
 
-        await bash.execCommand(`git reset --hard origin/${currentBranch}`);
+        try {
+            const currentBranch = await this.getCurrentBranch();
+            const fetch = await bash.execCommand('git fetch --prune');
+            const reset = await bash.execCommand(`git reset --hard origin/${currentBranch}`);
+
+            console.table({
+                fetch: fetch.stdout,
+                '': '=======================',
+                HEAD: reset.stdout,
+            })
+        } catch (error) {
+            console.log(error);
+        }
     }
 
     public async getGitLog(): Promise<void> {
