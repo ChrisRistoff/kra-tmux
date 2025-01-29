@@ -12,6 +12,11 @@ export class GitConflict extends BaseGit {
         const conflictsArray = await this.getConflictedFiles();
         const conflictedFilesSet = new Set(conflictsArray);
 
+        if (!conflictsArray.length) {
+            console.log('No Conflicts to Handle!');
+            return;
+        }
+
         while (conflictedFilesSet.size !== 0) {
             const fileName = await ui.searchSelectAndReturnFromArray({
                 itemsArray: Array.from(conflictedFilesSet),
