@@ -90,3 +90,20 @@ export async function sendKeysToTmuxTargetSession(options: SendKeysArguments): P
 
     await execCommand(commandString);
 }
+
+export async function grepFileForString(fileName: string, searchString: string): Promise<boolean> {
+    try {
+        const command = `grep -E "${searchString}" '${fileName}'`;
+
+        const { stdout, stderr } = await execCommand(command);
+
+        if (stderr) {
+            console.error(`grep error: ${stderr}`);
+            return false;
+        }
+
+        return stdout !== "";
+    } catch (error) {
+        return false;
+    }
+}
