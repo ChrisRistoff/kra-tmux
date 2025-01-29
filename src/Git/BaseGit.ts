@@ -22,19 +22,31 @@ export class BaseGit extends Base {
     }
 
     public async hardResetCurrentBranch(): Promise<void> {
-
         try {
             const currentBranch = await this.getCurrentBranch();
-            const fetch = await bash.execCommand('git fetch --prune');
+
+            const beforeFetch = await bash.execCommand('git branch -r');
+            await bash.execCommand('git fetch --prune');
+            const afterFetch = await bash.execCommand('git branch -r');
+
+            const beforeBranches = beforeFetch.stdout.split('\n');
+            const afterBranches = afterFetch.stdout.split('\n')
+            beforeBranches.pop();
+            afterBranches.pop();
+
+            const fetchedBranches = afterBranches.filter(branch => !beforeBranches.includes(branch));
+            const prunedBranches = beforeBranches.filter(branch => !afterBranches.includes(branch));
+
             const reset = await bash.execCommand(`git reset --hard origin/${currentBranch}`);
 
             console.table({
-                fetch: fetch.stdout,
-                '': '=======================',
                 HEAD: reset.stdout,
+                '': '=======================',
+                'Fetched Branches': fetchedBranches.join('\n'),
+                'Pruned Branches': prunedBranches.join('\n'),
             });
         } catch (error) {
-            console.log(error);
+            console.error("General error:", error);
         }
     }
 
