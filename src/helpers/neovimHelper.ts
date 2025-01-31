@@ -45,7 +45,7 @@ export function openVim(filePath: string, command?: string): Promise<void> {
         if (command) {
             bash.sendKeysToTmuxTargetSession({
                 command
-            }).then(() => {});
+            });
         }
 
         vimProcess.on('close', (code) => {

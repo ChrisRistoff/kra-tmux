@@ -1,23 +1,8 @@
-import { EventSystem } from '../events/EventSystem';
-import { SystemEvent } from '../events/SystemEvents';
 import * as bash from '../helpers/bashHelper';
 import * as ui from '../UI/generalUI';
 import { BaseSystem } from "./BaseSystem";
 
 export class SystemFileManager extends BaseSystem {
-    private searchString?: string;
-    private exactMatch?: boolean;
-    private eventsHandler = new EventSystem();
-
-    constructor() {
-        super();
-
-        this.eventsHandler.addAsyncEventListener(SystemEvent.OnGrepRequest, async () => {
-            this.searchString = await this.getSearchString();
-            this.exactMatch = await this.promptExactMatch();
-        });
-    }
-
     public async removeGreppedFile(): Promise<void> {
         const fileToRemove = await this.getGreppedFile();
 
@@ -31,9 +16,10 @@ export class SystemFileManager extends BaseSystem {
     }
 
     private async getGreppedFile(): Promise<string> {
-        await this.eventsHandler.emit(SystemEvent.OnGrepRequest);
+        const searchString = await this.getSearchString();
+        const exactMatch = await this.promptExactMatch();
 
-        const files = await this.getGreppedFilesArray(this.searchString!, this.exactMatch!);
+        const files = await this.getGreppedFilesArray(searchString, exactMatch);
 
         if (!files.length) {
             return '';
@@ -48,9 +34,10 @@ export class SystemFileManager extends BaseSystem {
     }
 
     private async getGreppedDir(): Promise<string> {
-        this.eventsHandler.emit(SystemEvent.OnGrepRequest);
+        const searchString = await this.getSearchString();
+        const exactMatch = await this.promptExactMatch();
 
-        const files = await this.getGreppedDirsArray(this.searchString!, this.exactMatch!);
+        const files = await this.getGreppedDirsArray(searchString, exactMatch);
 
         if (!files.length) {
             return '';
