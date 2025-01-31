@@ -1,4 +1,5 @@
 import * as bash from '../helpers/bashHelper';
+import * as utils from '../helpers/utils';
 import * as generalUI from '../UI/generalUI';
 import * as fs from 'fs/promises';
 import * as nvim from '../helpers/neovimHelper';
@@ -95,12 +96,12 @@ export class LoadSessions extends BaseSessions {
         if (serverIsRunning && shouldSaveCurrentSessions) {
             await this.saveSessionsObject.saveSessionsToFile();
             await this.killTmuxServer();
-            await this.setTimeout(200);
+            await utils.sleep(200);
         }
 
         if (serverIsRunning && !shouldSaveCurrentSessions) {
             await this.killTmuxServer();
-            await this.setTimeout(200);
+            await utils.sleep(200);
         }
     }
 
@@ -143,7 +144,7 @@ export class LoadSessions extends BaseSessions {
 
             await bash.execCommand(`tmux select-pane -t ${sessionName}:${windowIndex}.0`);
 
-            const settings: Settings = await this.getSettings();
+            const settings: Settings = await utils.loadSettings();
 
             if (settings.work && window.windowName === settings.workWindowNameForWatch) {
                 await bash.sendKeysToTmuxTargetSession({

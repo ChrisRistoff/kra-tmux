@@ -35,17 +35,17 @@ export async function loadNvimSession(folderName: string, session: string, windo
     });
 }
 
-export async function openVim(filePath: string, command?: string): Promise<void> {
-    return new Promise(async (resolve, reject) => {
+export function openVim(filePath: string, command?: string): Promise<void> {
+    return new Promise((resolve, reject) => {
         const vimProcess = spawn('nvim', [filePath], {
             stdio: 'inherit',
             shell: true,
         });
 
         if (command) {
-            await bash.sendKeysToTmuxTargetSession({
+            bash.sendKeysToTmuxTargetSession({
                 command
-            });
+            }).then(() => {});
         }
 
         vimProcess.on('close', (code) => {

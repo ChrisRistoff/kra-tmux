@@ -21,7 +21,7 @@ export class GitConflict extends BaseGit {
             const fileName = await ui.searchSelectAndReturnFromArray({
                 itemsArray: Array.from(conflictedFilesSet),
                 prompt: 'Pick a file to resolve: '
-            })
+            });
 
             await vim.openVim(fileName, ':Gdiffsplit');
 
@@ -32,13 +32,13 @@ export class GitConflict extends BaseGit {
             }
         }
 
-        const conflictsObject: Conflicts = {}
+        const conflictsObject: Conflicts = {};
         let fileCounter = 1;
 
         conflictsArray.forEach((conflict: string) => {
             conflictsObject[`${fileCounter}.File Name`] = conflict;
             fileCounter++;
-        })
+        });
 
         console.table(conflictsObject);
     }

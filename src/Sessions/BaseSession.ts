@@ -1,15 +1,13 @@
 import * as bash from '../helpers/bashHelper';
-import { Base } from '../Base';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
 import { sessionFilesFolder } from '../filePaths';
 
-export class BaseSessions extends Base {
+export class BaseSessions {
     public currentSessions: TmuxSessions;
 
     constructor (
         public readonly sessionsFilePath = sessionFilesFolder,
     ) {
-        super();
         this.currentSessions = {};
     }
 
