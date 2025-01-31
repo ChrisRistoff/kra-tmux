@@ -103,7 +103,7 @@ export async function grepFileForString(fileName: string, searchString: string):
         }
 
         return stdout !== "";
-    } catch (error) {
+    } catch (_error) {
         return false;
     }
 }

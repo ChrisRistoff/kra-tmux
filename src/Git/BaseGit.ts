@@ -1,13 +1,10 @@
-import { Base } from "../Base";
 import * as bash from "../helpers/bashHelper";
 import { gitFilesFolder } from "../filePaths";
 
-export class BaseGit extends Base {
+export class BaseGit {
     constructor(
         public readonly gitFilesFolderPath = gitFilesFolder,
-    ) {
-        super();
-    }
+    ) {}
 
     public async getCurrentBranch(): Promise<string> {
         const response = await bash.execCommand('git rev-parse --abbrev-ref HEAD');
@@ -30,7 +27,7 @@ export class BaseGit extends Base {
             const afterFetch = await bash.execCommand('git branch -r');
 
             const beforeBranches = beforeFetch.stdout.split('\n');
-            const afterBranches = afterFetch.stdout.split('\n')
+            const afterBranches = afterFetch.stdout.split('\n');
             beforeBranches.pop();
             afterBranches.pop();
 

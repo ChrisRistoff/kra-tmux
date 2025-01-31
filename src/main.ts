@@ -2,6 +2,7 @@
 
 import { gitCommands } from './CommandsMaps/gitCommands';
 import { tmuxCommands } from './CommandsMaps/tmuxCommands';
+import { systemCommands } from './CommandsMaps/systemCommands';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);
@@ -9,6 +10,11 @@ const main = async (): Promise<void> => {
     if (args.length === 0) {
         console.log('No argument.');
         process.exit(1);
+    }
+
+    if (args[0] === 'sys' && systemCommands[args[1]]) {
+        await systemCommands[args[1]]();
+        return;
     }
 
     if (args[0] === 'tmux' && tmuxCommands[args[1]]) {
