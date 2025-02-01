@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { gitCommands } from './CommandsMaps/gitCommands';
-import { tmuxCommands } from './CommandsMaps/tmuxCommands';
-import { systemCommands } from './CommandsMaps/systemCommands';
+import { gitCommands } from './commandsMaps/gitCommands';
+import { tmuxCommands } from './commandsMaps/tmuxCommands';
+import { systemCommands } from './commandsMaps/systemCommands';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);

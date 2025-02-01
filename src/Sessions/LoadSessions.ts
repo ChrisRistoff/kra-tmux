@@ -7,7 +7,7 @@ import { sessionFilesFolder } from '../filePaths';
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
-import { Settings } from '../types/SettingsTypes';
+import { Settings } from '../types/settingsTypes';
 
 export class LoadSessions extends BaseSessions {
     public savedSessions: TmuxSessions;

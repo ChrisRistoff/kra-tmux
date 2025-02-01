@@ -1,4 +1,4 @@
-import * as systemFileManager from "../System/SystemFileManager";
+import * as systemFileManager from "../system/systemFileManager";
 
 type SystemCommands = {
     [key: string]: (args?: string[]) => Promise<void>
