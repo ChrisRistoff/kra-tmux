@@ -1,11 +1,6 @@
 import * as bash from "../helpers/bashHelper";
-import { gitFilesFolder } from "../filePaths";
 
 export class BaseGit {
-    constructor(
-        public readonly gitFilesFolderPath = gitFilesFolder,
-    ) {}
-
     public async getCurrentBranch(): Promise<string> {
         const response = await bash.execCommand('git rev-parse --abbrev-ref HEAD');
 
