@@ -18,6 +18,7 @@ git-files/untracked/*
 # Ignore sub-subfolders (and files) inside the subfolders
 node_modules/
 dest/
+coverage/
 
 
 settings.toml
