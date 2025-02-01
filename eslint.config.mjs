@@ -74,6 +74,9 @@ export default [
     '@typescript-eslint/prefer-nullish-coalescing': 'error',
     '@typescript-eslint/unified-signatures': 'error',
 
+    // File formatting
+    'eol-last': ['error', 'always'],  // Requires newline at end of file
+
     // Best practices
     '@typescript-eslint/consistent-type-assertions': [
       'error',
