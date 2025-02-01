@@ -8,7 +8,7 @@
   "scripts": {
     "postinstall": "tsc && node ./dest/autocomplete.js",
     "lint": "eslint --fix",
-    "test": "tsc && jest --runInBand"
+    "test": "jest"
   },
   "author": "",
   "license": "ISC",
