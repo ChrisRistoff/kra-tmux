@@ -6,98 +6,145 @@ enum SearchTargetType {
     Directory = 'd',
 }
 
-type SearchCriteria = {
-    searchString: string,
+interface SearchCriteria {
+    searchString: string;
+    exactMatch: boolean;
+}
+
+const SYSTEM_CONSTANTS = {
+    MESSAGES: {
+        FILE_PROMPT: 'Pick the file you want to remove:',
+        DIR_PROMPT: 'Pick the directory you want to remove:',
+        SEARCH_INPUT: 'Enter a search term (minimum 2 characters):',
+        EXACT_MATCH: 'Do you want to search for exact match?',
+        NO_RESULTS: 'No matches found for the given search criteria.',
+        CONFIRM_FILE_DELETE: 'Are you sure you want to delete this file?',
+        CONFIRM_DIR_DELETE: 'Are you sure you want to delete this directory and all its contents?',
+    },
+    VALIDATION: {
+        MIN_SEARCH_LENGTH: 2,
+    }
+} as const;
+
+const isValidSearchTerm = (term: string, type: SearchTargetType): boolean => {
+    if (type === SearchTargetType.Directory) {
+        return term !== undefined && term !== null;
+    }
+
+    return Boolean(term && term.length >= SYSTEM_CONSTANTS.VALIDATION.MIN_SEARCH_LENGTH);
+};
+
+const sanitizeSearchTerm = (term: string): string => {
+    return term.replace(/['"\\]/g, '');
+};
+
+const searchByName = async (
+    name: string,
     exactMatch: boolean,
-}
-
-export async function removeFile(): Promise<void> {
-    const fileToRemove = await selectFromMatchingFiles();
-
-    if (!fileToRemove) {
-        return;
+    type: SearchTargetType
+): Promise<string[]> => {
+    if (!isValidSearchTerm(name, type)) {
+        throw new Error(`Search term must be at least ${SYSTEM_CONSTANTS.VALIDATION.MIN_SEARCH_LENGTH} characters long`);
     }
 
-    await bash.execCommand(`rm ${fileToRemove}`);
-}
+    try {
+        const match = exactMatch ? '' : '*';
+        const sanitizedName = sanitizeSearchTerm(name);
 
-export async function removeDirectory(): Promise<void> {
-    const dirToRemove = await selectFromMatchingDirectories();
+        const grepResult = await bash.execCommand(
+            `find . -type ${type} -iname "${match}${sanitizedName}${match}"`
+        );
 
-    if (!dirToRemove) {
-        return;
+        return grepResult.stdout.split('\n').filter(Boolean);
+    } catch (error) {
+        throw new Error(`Search failed: ${(error as Error).message}`);
     }
+};
 
-    await bash.execCommand(`rm -rf ${dirToRemove}`);
-}
+const getSearchCriteria = async (): Promise<SearchCriteria> => {
+    const searchString = (await ui.askUserForInput(SYSTEM_CONSTANTS.MESSAGES.SEARCH_INPUT)).trim();
+    const exactMatch = await ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.EXACT_MATCH);
 
-async function selectFromMatchingFiles(): Promise<string> {
-    const stringAndMatch = await getSearchCriteria();
-
-    const files = await searchFilesByName(stringAndMatch.searchString, stringAndMatch.exactMatch);
-
-    if (!files.length) {
-        return '';
-    }
-
-    const fileName = await ui.searchSelectAndReturnFromArray({
-        itemsArray: files,
-        prompt: 'Pick the file you want to remove:'
-    });
-
-    return fileName;
-}
-
-async function selectFromMatchingDirectories(): Promise<string> {
-    const stringAndMatch = await getSearchCriteria();
-
-    const files = await searchDirectoriesByName(stringAndMatch.searchString, stringAndMatch.exactMatch);
-
-    if (!files.length) {
-        return '';
-    }
-
-    const dirPath = await ui.searchSelectAndReturnFromArray({
-        itemsArray: files,
-        prompt: 'Pick the directory you want to remove:'
-    });
-
-    return dirPath;
-}
-
-async function getSearchCriteria(): Promise<SearchCriteria> {
     return {
-        searchString: await promptForSearchString(),
-        exactMatch: await promptExactMatchPreference(),
+        searchString,
+        exactMatch,
+    };
+};
+
+const selectFromMatchingFiles = async (): Promise<string | null> => {
+    const criteria = await getSearchCriteria();
+    const matchingFiles = await searchByName(
+        criteria.searchString,
+        criteria.exactMatch,
+        SearchTargetType.File
+    );
+
+    if (!matchingFiles.length) {
+        return null;
     }
-}
 
-async function searchFilesByName(name: string, exactMatch: boolean): Promise<string[]> {
-    const match = exactMatch ? '' : '*';
+    return await ui.searchSelectAndReturnFromArray({
+        itemsArray: matchingFiles,
+        prompt: SYSTEM_CONSTANTS.MESSAGES.DIR_PROMPT
+    });
+};
 
-    const grepResult = await bash.execCommand(`find . -type ${SearchTargetType.File} -iname "${match}${name}${match}"`);
+const selectFromMatchingDirectories = async (): Promise<string | null> => {
+    const criteria = await getSearchCriteria();
+    const matchingDirs = await searchByName(
+        criteria.searchString,
+        criteria.exactMatch,
+        SearchTargetType.Directory
+    );
 
-    const resultsArray = grepResult.stdout.split('\n');
-    resultsArray.pop();
+    if (!matchingDirs.length) {
+        return null;
+    }
 
-    return resultsArray;
-}
+    return await ui.searchSelectAndReturnFromArray({
+        itemsArray: matchingDirs,
+        prompt: SYSTEM_CONSTANTS.MESSAGES.DIR_PROMPT
+    });
+};
 
-async function searchDirectoriesByName(name: string, exactMatch: boolean): Promise<string[]> {
-    const match = exactMatch ? '' : '*';
+export const removeFile = async (): Promise<void> => {
+    try {
+        const fileToRemove = await selectFromMatchingFiles();
 
-    const grepResult = await bash.execCommand(`find . -type ${SearchTargetType.Directory} -iname "${match}${name}${match}"`);
+        if (!fileToRemove) {
+            console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+            return;
+        }
 
-    const resultsArray = grepResult.stdout.split('\n');
-    resultsArray.pop();
+        const confirmed = await ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.CONFIRM_FILE_DELETE);
 
-    return resultsArray;
-}
+        if (!confirmed) {
+            return;
+        }
 
-async function promptForSearchString(): Promise<string> {
-    return await ui.askUserForInput('Enter a word to search for:');
-}
+        await bash.execCommand(`rm "${fileToRemove}"`);
+    } catch (error) {
+        throw new Error(`Failed to remove file: ${(error as Error).message}`);
+    }
+};
 
-async function promptExactMatchPreference(): Promise<boolean> {
-    return await ui.promptUserYesOrNo('Do you want to grep for exact match?');
-}
+export const removeDirectory = async (): Promise<void> => {
+    try {
+        const dirToRemove = await selectFromMatchingDirectories();
+
+        if (!dirToRemove) {
+            console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+            return;
+        }
+
+        const confirmed = await ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.CONFIRM_DIR_DELETE);
+
+        if (!confirmed) {
+            return;
+        }
+
+        await bash.execCommand(`rm -rf "${dirToRemove}"`);
+    } catch (error) {
+        throw new Error(`Failed to remove directory: ${(error as Error).message}`);
+    }
+};
