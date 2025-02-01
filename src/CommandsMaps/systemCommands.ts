@@ -1,20 +1,11 @@
-import { SystemFileManager } from "../System/SystemFileManager";
-
-const systemFileManager = new SystemFileManager();
+import * as systemFileManager from "../System/SystemFileManager";
 
 type SystemCommands = {
     [key: string]: (args?: string[]) => Promise<void>
 }
 
 export const systemCommands: SystemCommands = {
-    'grep-file-remove': grepAndRemoveFile,
-    'grep-dir-remove': grepAndRemoveDir,
+    'grep-file-remove': systemFileManager.removeFile,
+    'grep-dir-remove': systemFileManager.removeDirectory,
 };
 
-async function grepAndRemoveFile() {
-    systemFileManager.removeGreppedFile();
-}
-
-async function grepAndRemoveDir() {
-    systemFileManager.removeGreppedDir();
-}

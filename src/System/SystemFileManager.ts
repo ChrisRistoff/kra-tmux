@@ -1,61 +1,103 @@
 import * as bash from '../helpers/bashHelper';
 import * as ui from '../UI/generalUI';
-import { BaseSystem } from "./BaseSystem";
 
-export class SystemFileManager extends BaseSystem {
-    public async removeGreppedFile(): Promise<void> {
-        const fileToRemove = await this.getGreppedFile();
+enum SearchTargetType {
+    File = 'f',
+    Directory = 'd',
+}
 
-        await bash.execCommand(`rm ${fileToRemove}`);
+type SearchCriteria = {
+    searchString: string,
+    exactMatch: boolean,
+}
+
+export async function removeFile(): Promise<void> {
+    const fileToRemove = await selectFromMatchingFiles();
+
+    if (!fileToRemove) {
+        return;
     }
 
-    public async removeGreppedDir(): Promise<void> {
-        const dirToRemove = await this.getGreppedDir();
+    await bash.execCommand(`rm ${fileToRemove}`);
+}
 
-        await bash.execCommand(`rm -rf ${dirToRemove}`);
+export async function removeDirectory(): Promise<void> {
+    const dirToRemove = await selectFromMatchingDirectories();
+
+    if (!dirToRemove) {
+        return;
     }
 
-    private async getGreppedFile(): Promise<string> {
-        const searchString = await this.getSearchString();
-        const exactMatch = await this.promptExactMatch();
+    await bash.execCommand(`rm -rf ${dirToRemove}`);
+}
 
-        const files = await this.getGreppedFilesArray(searchString, exactMatch);
+async function selectFromMatchingFiles(): Promise<string> {
+    const stringAndMatch = await getSearchCriteria();
 
-        if (!files.length) {
-            return '';
-        }
+    const files = await searchFilesByName(stringAndMatch.searchString, stringAndMatch.exactMatch);
 
-        const fileName = await ui.searchSelectAndReturnFromArray({
-            itemsArray: files,
-            prompt: 'Pick the file you want to remove:'
-        });
-
-        return fileName;
+    if (!files.length) {
+        return '';
     }
 
-    private async getGreppedDir(): Promise<string> {
-        const searchString = await this.getSearchString();
-        const exactMatch = await this.promptExactMatch();
+    const fileName = await ui.searchSelectAndReturnFromArray({
+        itemsArray: files,
+        prompt: 'Pick the file you want to remove:'
+    });
 
-        const files = await this.getGreppedDirsArray(searchString, exactMatch);
+    return fileName;
+}
 
-        if (!files.length) {
-            return '';
-        }
+async function selectFromMatchingDirectories(): Promise<string> {
+    const stringAndMatch = await getSearchCriteria();
 
-        const dirPath = await ui.searchSelectAndReturnFromArray({
-            itemsArray: files,
-            prompt: 'Pick the file you want to remove:'
-        });
+    const files = await searchDirectoriesByName(stringAndMatch.searchString, stringAndMatch.exactMatch);
 
-        return dirPath;
+    if (!files.length) {
+        return '';
     }
 
-    private async getSearchString(): Promise<string> {
-        return await ui.askUserForInput('Enter a word to search for:');
-    }
+    const dirPath = await ui.searchSelectAndReturnFromArray({
+        itemsArray: files,
+        prompt: 'Pick the directory you want to remove:'
+    });
 
-    private async promptExactMatch(): Promise<boolean> {
-        return await ui.promptUserYesOrNo('Do you want to grep for exact match?');
+    return dirPath;
+}
+
+async function getSearchCriteria(): Promise<SearchCriteria> {
+    return {
+        searchString: await promptForSearchString(),
+        exactMatch: await promptExactMatchPreference(),
     }
+}
+
+async function searchFilesByName(name: string, exactMatch: boolean): Promise<string[]> {
+    const match = exactMatch ? '' : '*';
+
+    const grepResult = await bash.execCommand(`find . -type ${SearchTargetType.File} -iname "${match}${name}${match}"`);
+
+    const resultsArray = grepResult.stdout.split('\n');
+    resultsArray.pop();
+
+    return resultsArray;
+}
+
+async function searchDirectoriesByName(name: string, exactMatch: boolean): Promise<string[]> {
+    const match = exactMatch ? '' : '*';
+
+    const grepResult = await bash.execCommand(`find . -type ${SearchTargetType.Directory} -iname "${match}${name}${match}"`);
+
+    const resultsArray = grepResult.stdout.split('\n');
+    resultsArray.pop();
+
+    return resultsArray;
+}
+
+async function promptForSearchString(): Promise<string> {
+    return await ui.askUserForInput('Enter a word to search for:');
+}
+
+async function promptExactMatchPreference(): Promise<boolean> {
+    return await ui.promptUserYesOrNo('Do you want to grep for exact match?');
 }
