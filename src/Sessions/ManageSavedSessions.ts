@@ -2,6 +2,7 @@ import { LoadSessions } from "./LoadSessions";
 import * as generalUI from '../UI/generalUI';
 import * as fs from 'fs/promises';
 import { TmuxSessions } from "../types/SessionTypes";
+import { sessionFilesFolder } from '../filePaths';
 
 export class ManageSavedSessions extends LoadSessions {
     constructor () {
@@ -16,7 +17,7 @@ export class ManageSavedSessions extends LoadSessions {
             itemsArray: savedServers,
         });
 
-        const filePath = `${this.sessionsFilePath}/${fileName}`;
+        const filePath = `${sessionFilesFolder}/${fileName}`;
 
         const sessions = await this.getSavedSessionsByFilePath(filePath);
         this.printTargetSessions(sessions);

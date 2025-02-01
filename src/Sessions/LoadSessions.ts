@@ -3,6 +3,7 @@ import * as utils from '../helpers/utils';
 import * as generalUI from '../UI/generalUI';
 import * as fs from 'fs/promises';
 import * as nvim from '../helpers/neovimHelper';
+import { sessionFilesFolder } from '../filePaths';
 import { BaseSessions } from './BaseSession';
 import { Pane, TmuxSessions } from '../types/SessionTypes';
 import { Save } from '../Sessions/SaveSessions';
@@ -31,7 +32,7 @@ export class LoadSessions extends BaseSessions {
             return;
         }
 
-        const filePath = `${this.sessionsFilePath}/${fileName}`;
+        const filePath = `${sessionFilesFolder}/${fileName}`;
 
         const latestSessions = await fs.readFile(filePath);
 
@@ -107,7 +108,7 @@ export class LoadSessions extends BaseSessions {
 
     public async getSavedSessionsNames(): Promise<string[]> {
         try {
-            const files = await fs.readdir(this.sessionsFilePath);
+            const files = await fs.readdir(sessionFilesFolder);
             return files.filter((file) => file !== '.gitkeep');
         } catch (error) {
             console.error('Error reading directory:', error);

@@ -1,18 +1,16 @@
 import * as bash from '../helpers/bashHelper';
 import { TmuxSessions, Window, Pane } from '../types/SessionTypes';
-import { sessionFilesFolder } from '../filePaths';
 
 export class BaseSessions {
     public currentSessions: TmuxSessions;
 
-    constructor (
-        public readonly sessionsFilePath = sessionFilesFolder,
-    ) {
+    constructor () {
         this.currentSessions = {};
     }
 
     public async setCurrentSessions(): Promise<void> {
         let output;
+
         try {
             output = await bash.execCommand(`tmux list-sessions -F '#S'`);
         } catch (_error) {

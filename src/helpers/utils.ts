@@ -6,7 +6,7 @@ export async function sleep(ms: number): Promise<void> {
 }
 
 export async function loadSettings() {
-    const settingsFileString = await fs.readFile(`${__dirname}/../../settings.toml`, 'utf8');
+    const settingsFileString = await fs.readFile(`${__dirname}/../../../settings.toml`, 'utf8');
 
     return toml.parse(settingsFileString);
 }

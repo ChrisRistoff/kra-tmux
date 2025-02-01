@@ -39,8 +39,8 @@ export class BaseGit {
             console.table({
                 HEAD: reset.stdout,
                 '': '=======================',
-                'Fetched Branches': fetchedBranches.join('\n'),
-                'Pruned Branches': prunedBranches.join('\n'),
+                'Fetched Branches': fetchedBranches,
+                'Pruned Branches': prunedBranches
             });
         } catch (error) {
             console.error("General error:", error);

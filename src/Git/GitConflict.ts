@@ -9,7 +9,7 @@ type Conflicts = {
 
 export class GitConflict extends BaseGit {
     public async handleConflicts(): Promise<void> {
-        const conflictsArray = await this.getConflictedFiles();
+        const conflictsArray: string[] = await this.getConflictedFiles();
         const conflictedFilesSet = new Set(conflictsArray);
 
         if (!conflictsArray.length) {

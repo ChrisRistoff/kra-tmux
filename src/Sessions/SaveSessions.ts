@@ -3,6 +3,8 @@ import * as nvim from '../helpers/neovimHelper';
 import * as fs from 'fs/promises';
 import { BaseSessions } from './BaseSession';
 import * as generalUI from '../UI/generalUI';
+import { sessionFilesFolder } from '../filePaths';
+
 export class Save extends BaseSessions {
 
     constructor () {
@@ -61,7 +63,7 @@ export class Save extends BaseSessions {
         const message = `Would you like to use ${branchName} as part of your name for your save?`;
         const shouldSaveBranchNameAsFileName = await generalUI.promptUserYesOrNo(message);
 
-        const itemsArray = await fs.readdir(this.sessionsFilePath);
+        const itemsArray = await fs.readdir(sessionFilesFolder);
 
         const options: generalUI.SearchOptions = {
             prompt: 'Please write a name for save: ',
@@ -70,6 +72,7 @@ export class Save extends BaseSessions {
 
         if (!shouldSaveBranchNameAsFileName) {
             const sessionName = await generalUI.searchAndSelect(options);
+
             return sessionName!;
         }
 
@@ -83,6 +86,7 @@ export class Save extends BaseSessions {
 
         const timeArray = dateArray[4].split(':');
         timeArray.pop();
+
         const timeString = timeArray.join(':');
         const yearMonthDayTime = [dateArray[3], dateArray[1], dateArray[2], timeString];
         const fileName = yearMonthDayTime.join('-');
