@@ -1,5 +1,5 @@
-import * as bash from "../../helpers/bashHelper";
-import * as vim from "../../helpers/neovimHelper";
+import * as bash from "../../utils/bashHelper";
+import * as vim from "../../utils/neovimHelper";
 import * as ui from "../../UI/generalUI";
 import { getConflictedFiles } from "../utils/gitFileUtils";
 import { Conflicts } from "../types/gitTypes";

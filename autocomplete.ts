@@ -1,5 +1,5 @@
 import fs from 'fs';
-import * as bash from './src/helpers/bashHelper';
+import * as bash from './src/utils/bashHelper';
 import { homedir } from 'os';
 
 const completionScript = `${__dirname}/../auto.sh`;

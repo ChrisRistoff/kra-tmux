@@ -1,4 +1,4 @@
-import * as bash from "../../helpers/bashHelper";
+import * as bash from "../../utils/bashHelper";
 import * as ui from "../../UI/generalUI";
 import { SearchOptions } from "../types/gitTypes";
 import { getModifiedFiles } from "../utils/gitFileUtils";

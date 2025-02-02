@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from "path";
-import * as bash from '../../helpers/bashHelper';
+import * as bash from '../../utils/bashHelper';
 import * as ui from "../../UI/generalUI";
 import { gitFilesFolder } from "../../filePaths";
 import { getCurrentBranch, getTopLevelPath } from "../core/gitBranch";

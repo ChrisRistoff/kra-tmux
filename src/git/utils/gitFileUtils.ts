@@ -1,4 +1,4 @@
-import * as bash from "../../helpers/bashHelper";
+import * as bash from "../../utils/bashHelper";
 import { GIT_COMMANDS } from "../config/gitConstants";
 
 export async function getFileList(command: string): Promise<string[]> {

@@ -9,13 +9,13 @@ jest.mock('../src/UI/generalUI', () => ({
     searchSelectAndReturnFromArray: jest.fn()
 }));
 
-jest.mock('../src/helpers/bashHelper', () => ({
+jest.mock('../src/utils/bashHelper', () => ({
     execCommand: jest.fn()
 }));
 
 // Import after mocking
 import * as ui from '../src/UI/generalUI';
-import * as bash from '../src/helpers/bashHelper';
+import * as bash from '../src/utils/bashHelper';
 
 describe('SystemFileManager Integration Tests', () => {
     const TEST_DIR = path.join(process.cwd(), '__tests__/test-files');

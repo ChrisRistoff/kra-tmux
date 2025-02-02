@@ -1,9 +1,9 @@
-import * as bash from '../src/helpers/bashHelper';
+import * as bash from '../src/utils/bashHelper';
 import * as ui from '../src/UI/generalUI';
 import { removeFile, removeDirectory } from '../src/system/systemFileManager';
 
 
-jest.mock('../src/helpers/bashHelper');
+jest.mock('../src/utils/bashHelper');
 jest.mock('../src/UI/generalUI');
 
 describe('SystemFileManager', () => {
