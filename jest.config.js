@@ -11,4 +11,15 @@ module.exports = {
   collectCoverage: true,
   coverageDirectory: 'coverage',
   coveragePathIgnorePatterns: ['/node_modules/'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+    '^@utils/(.*)$': '<rootDir>/src/utils/$1',
+    '^@types/(.*)$': '<rootDir>/src/types/$1',
+    '^@sessions/(.*)$': '<rootDir>/src/sessions/$1',
+    '^@git/(.*)$': '<rootDir>/src/git/$1',
+    '^@UI/(.*)$': '<rootDir>/src/UI/$1',
+    '^@commandsMaps/(.*)$': '<rootDir>/src/commandsMaps/$1',
+    '^@helpers/(.*)$': '<rootDir>/src/helpers/$1',
+    '^@filePaths$': '<rootDir>/src/filePaths.ts',
+  },
 };

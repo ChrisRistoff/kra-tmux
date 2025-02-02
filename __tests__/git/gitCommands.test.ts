@@ -1,15 +1,15 @@
-import * as bash from '../src/utils/bashHelper';
-import * as ui from '../src/UI/generalUI';
-import * as vim from '../src/utils/neovimHelper';
-import { handleConflicts } from '../src/git/commands/gitConflicts';
-import { restoreFile } from '../src/git/commands/gitRestore';
-import { applyOrDropStash, dropMultipleStashes } from '../src/git/commands/gitStash';
-import { GIT_COMMANDS } from '../src/git/config/gitConstants';
+import * as bash from '@utils/bashHelper';
+import * as ui from '@UI/generalUI';
+import * as vim from '@utils/neovimHelper';
+import { handleConflicts } from '@git/commands/gitConflicts';
+import { restoreFile } from '@git/commands/gitRestore';
+import { applyOrDropStash, dropMultipleStashes } from '@git/commands/gitStash';
+import { GIT_COMMANDS } from '@git/config/gitConstants';
 
 // Mock dependencies
-jest.mock('../src/utils/bashHelper');
-jest.mock('../src/UI/generalUI');
-jest.mock('../src/utils/neovimHelper');
+jest.mock('../../src/utils/bashHelper');
+jest.mock('../../src/UI/generalUI');
+jest.mock('../../src/utils/neovimHelper');
 
 describe('Git Commands', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);
@@ -23,17 +23,20 @@ describe('Git Commands', () => {
     describe('handleConflicts', () => {
         it('should handle no conflicts scenario', async () => {
             mockExecCommand.mockResolvedValueOnce({ stdout: '', stderr: '' }); // No conflicted files
+
             const consoleSpy = jest.spyOn(console, 'log');
 
             await handleConflicts();
 
             expect(consoleSpy).toHaveBeenCalledWith('No Conflicts to Handle!');
             expect(mockOpenVim).not.toHaveBeenCalled();
+
             consoleSpy.mockRestore();
         });
 
         it('should handle conflicts resolution', async () => {
             const conflictedFile = 'src/test.ts';
+
             mockExecCommand
                 .mockResolvedValueOnce({ stdout: conflictedFile + '\n', stderr: '' }) // Initial conflicts check
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }); // No conflicts after resolution
@@ -81,6 +84,7 @@ describe('Git Commands', () => {
         describe('applyOrDropStash', () => {
             it('should apply selected stash', async () => {
                 const stashList = ['stash@{0}: WIP on main', 'stash@{1}: feature work'];
+
                 mockExecCommand.mockResolvedValueOnce({ stdout: stashList.join('\n'), stderr: '' });
                 mockSearchSelect
                     .mockResolvedValueOnce(stashList[0]) // Select first stash
@@ -93,6 +97,7 @@ describe('Git Commands', () => {
 
             it('should drop selected stash', async () => {
                 const stashList = ['stash@{0}: WIP on main'];
+
                 mockExecCommand.mockResolvedValueOnce({ stdout: stashList.join('\n'), stderr: '' });
                 mockSearchSelect
                     .mockResolvedValueOnce(stashList[0])
@@ -107,6 +112,7 @@ describe('Git Commands', () => {
         describe('dropMultipleStashes', () => {
             it('should drop multiple stashes until stop is selected', async () => {
                 const stashList = ['stash@{0}: WIP', 'stash@{1}: feature'];
+
                 mockExecCommand
                     .mockResolvedValueOnce({ stdout: stashList.join('\n'), stderr: '' })
                     .mockResolvedValueOnce({ stdout: stashList[1], stderr: '' });
