@@ -1,4 +1,4 @@
-import * as bash from '../../utils/bashHelper';
+import * as bash from '@utils/bashHelper';
 
 export async function checkSessionExists(sessionName: string): Promise<boolean> {
     try {

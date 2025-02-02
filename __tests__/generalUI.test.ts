@@ -1,5 +1,5 @@
 import inquirer from 'inquirer';
-import { promptUserYesOrNo, askUserForInput, searchSelectAndReturnFromArray, searchAndSelect } from '../src/UI/generalUI';
+import { promptUserYesOrNo, askUserForInput, searchSelectAndReturnFromArray, searchAndSelect } from '@UI/generalUI';
 
 // Mock inquirer
 jest.mock('inquirer');

@@ -1,15 +1,15 @@
-import * as bash from '../../utils/bashHelper';
-import * as utils from '../../utils/common';
-import * as generalUI from '../../UI/generalUI';
+import * as bash from '@utils/bashHelper';
+import * as utils from '@utils/common';
+import * as generalUI from '@UI/generalUI';
 import * as fs from 'fs/promises';
-import * as nvim from '../../utils/neovimHelper';
-import { sessionFilesFolder } from '../../filePaths';
-import { TmuxSessions, Pane } from '../types/sessionTypes';
-import { Settings } from '../../types/settingsTypes';
-import { getCurrentSessions, getSavedSessionsNames } from '../utils/sessionUtils';
-import { printSessions } from './printSessions';
-import * as tmux from '../core/tmux';
-import { saveSessionsToFile } from './saveSessions';
+import * as nvim from '@utils/neovimHelper';
+import { sessionFilesFolder } from '@filePaths';
+import { TmuxSessions, Pane } from '@customTypes/sessionTypes';
+import { Settings } from '@customTypes/settingsTypes';
+import { getCurrentSessions, getSavedSessionsNames } from '@sessions/utils/sessionUtils';
+import { printSessions } from '@sessions/commands/printSessions';
+import * as tmux from '@sessions/core/tmux';
+import { saveSessionsToFile } from '@sessions/commands/saveSessions';
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
     const itemsArray = await getSavedSessionsNames();

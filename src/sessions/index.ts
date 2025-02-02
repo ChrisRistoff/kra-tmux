@@ -1,11 +1,11 @@
 // Core exports
-export * from './core/tmux';
+export * from '@sessions/core/tmux';
 
 // Command exports
-export * from './commands/saveSessions';
-export * from './commands/loadSession';
-export * from './commands/manageSessions';
-export * from './commands/printSessions';
+export * from '@sessions/commands/saveSessions';
+export * from '@sessions/commands/loadSession';
+export * from '@sessions/commands/manageSessions';
+export * from '@sessions/commands/printSessions';
 
 // Utility exports
-export * from './utils/sessionUtils';
+export * from '@sessions/utils/sessionUtils';

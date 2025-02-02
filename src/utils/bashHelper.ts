@@ -1,5 +1,5 @@
 import { spawn, exec } from 'child_process';
-import { AllowedCommandsForNoCode } from '../types/bashTypes';
+import { AllowedCommandsForNoCode } from '@customTypes/bashTypes';
 
 type SendKeysArguments = {
     sessionName?: string

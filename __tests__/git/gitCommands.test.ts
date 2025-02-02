@@ -7,9 +7,9 @@ import { applyOrDropStash, dropMultipleStashes } from '@git/commands/gitStash';
 import { GIT_COMMANDS } from '@git/config/gitConstants';
 
 // Mock dependencies
-jest.mock('../../src/utils/bashHelper');
-jest.mock('../../src/UI/generalUI');
-jest.mock('../../src/utils/neovimHelper');
+jest.mock('@utils/bashHelper');
+jest.mock('@UI/generalUI');
+jest.mock('@utils/neovimHelper');
 
 describe('Git Commands', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);

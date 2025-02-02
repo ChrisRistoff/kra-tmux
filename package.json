@@ -1,5 +1,17 @@
 {
   "name": "kra-cli",
+  "_moduleAliases": {
+    "@": "dest/src",
+    "@utils": "dest/src/utils",
+    "@customTypes": "dest/src/types",
+    "@sessions": "dest/src/sessions",
+    "@system": "dest/src/system",
+    "@git": "dest/src/git",
+    "@UI": "dest/src/UI",
+    "@commandsMaps": "dest/src/commandsMaps",
+    "@helpers": "dest/src/helpers",
+    "@filePaths": "dest/src/filePaths.js"
+  },
   "version": "1.0.2",
   "description": "A cli helper for tmux and git, for now",
   "bin": {
@@ -16,6 +28,7 @@
     "events": "^3.3.0",
     "inquirer": "^8.2.5",
     "inquirer-autocomplete-prompt": "^2.0.0",
+    "module-alias": "^2.2.3",
     "toml": "^3.0.0"
   },
   "devDependencies": {

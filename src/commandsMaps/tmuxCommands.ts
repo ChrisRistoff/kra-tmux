@@ -1,4 +1,4 @@
-import * as sessions from '../sessions/index'
+import * as sessions from '@sessions/index'
 
 type TmuxCommands = {
     [key: string]: () => Promise<void>,

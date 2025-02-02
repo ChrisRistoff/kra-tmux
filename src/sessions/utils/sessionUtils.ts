@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
-import * as bash from '../../utils/bashHelper';
-import { sessionFilesFolder } from '../../filePaths';
-import { TmuxSessions, Window, Pane } from '../types/sessionTypes';
-import { formatWindow, formatPane } from './formatters';
+import * as bash from '@utils/bashHelper';
+import { sessionFilesFolder } from '@filePaths';
+import { TmuxSessions, Window, Pane } from '@customTypes/sessionTypes';
+import { formatWindow, formatPane } from '@sessions/utils/formatters';
 
 export async function getCurrentSessions(): Promise<TmuxSessions> {
     let output;

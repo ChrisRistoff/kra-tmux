@@ -9,9 +9,9 @@ import { UNTRACKED_CONFIG } from '@/git/config/gitConstants';
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../src/utils/bashHelper');
-jest.mock('../../src/UI/generalUI');
-jest.mock('../../src/git/core/gitBranch');
+jest.mock('@utils/bashHelper');
+jest.mock('@UI/generalUI');
+jest.mock('@git/core/gitBranch');
 
 describe('Git Untracked Operations', () => {
     const mockFs = jest.mocked(fs);
