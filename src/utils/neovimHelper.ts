@@ -1,9 +1,9 @@
 import * as fs from 'fs';
-import * as bash from '../helpers/bashHelper';
+import * as bash from '../utils/bashHelper';
 import { spawn } from 'child_process';
+import { nvimSessionsPath, nvimTreeSwapFilePath } from '../filePaths';
 
 export async function saveNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number): Promise<void> {
-    const nvimSessionsPath = `${__dirname}/../../../tmux-files/nvim-sessions`;
     const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}.vim`;
 
     if (!fs.existsSync(nvimSessionsPath)) {
@@ -31,7 +31,7 @@ export async function loadNvimSession(folderName: string, session: string, windo
         sessionName: session,
         windowIndex,
         paneIndex,
-        command: `nvim -S ${__dirname}/../../../tmux-files/nvim-sessions/${folderName}/${session}_${windowIndex}_${paneIndex}.vim`,
+        command: `nvim -S ${nvimSessionsPath}/${folderName}/${session}_${windowIndex}_${paneIndex}.vim`,
     });
 }
 
@@ -63,4 +63,8 @@ export function openVim(filePath: string, command?: string): Promise<void> {
             reject(err);
         });
     });
+}
+
+export function cleanNvimTree(): void {
+    bash.execCommand(`rm ${nvimTreeSwapFilePath}`);
 }

@@ -3,6 +3,7 @@
 import { gitCommands } from './commandsMaps/gitCommands';
 import { tmuxCommands } from './commandsMaps/tmuxCommands';
 import { systemCommands } from './commandsMaps/systemCommands';
+import { handleChangeSettings } from './manageSettings';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);
@@ -25,6 +26,10 @@ const main = async (): Promise<void> => {
     if (args[0] === 'git' && gitCommands[args[1]]) {
         await gitCommands[args[1]]();
         return;
+    }
+
+    if (args[0] === 'settings') {
+        await handleChangeSettings();
     }
 
     console.log('Command not a command.');
