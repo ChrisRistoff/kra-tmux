@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'module-alias/register';
 import { gitCommands } from './commandsMaps/gitCommands';
 import { tmuxCommands } from './commandsMaps/tmuxCommands';
 import { systemCommands } from './commandsMaps/systemCommands';

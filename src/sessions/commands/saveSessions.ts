@@ -1,10 +1,10 @@
-import * as bash from '../../utils/bashHelper';
-import * as nvim from '../../utils/neovimHelper';
+import * as bash from '@utils/bashHelper';
+import * as nvim from '@utils/neovimHelper';
 import * as fs from 'fs/promises';
-import * as generalUI from '../../UI/generalUI';
-import { sessionFilesFolder } from '../../filePaths';
-import { getCurrentSessions, getDateString } from '../utils/sessionUtils';
-import { TmuxSessions } from '../types/sessionTypes';
+import * as generalUI from '@UI/generalUI';
+import { sessionFilesFolder } from '@filePaths';
+import { getCurrentSessions, getDateString } from '@sessions/utils/sessionUtils';
+import { TmuxSessions } from '@customTypes/sessionTypes';
 
 async function getFileNameFromUser(): Promise<string> {
     let branchName: string;

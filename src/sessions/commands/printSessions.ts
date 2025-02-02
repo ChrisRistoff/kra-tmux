@@ -1,5 +1,5 @@
-import { getCurrentSessions } from '../utils/sessionUtils';
-import { TmuxSessions } from '../types/sessionTypes';
+import { getCurrentSessions } from '@sessions/utils/sessionUtils';
+import { TmuxSessions } from '@customTypes/sessionTypes';
 
 export async function printCurrentSessions(): Promise<void> {
     const sessions = await getCurrentSessions();

@@ -8,7 +8,7 @@ import {
 } from '@git/utils/gitFileUtils';
 import { GIT_COMMANDS } from '@git/config/gitConstants';
 
-jest.mock('../../src/utils/bashHelper');
+jest.mock('@utils/bashHelper');
 
 describe('Git File Utils', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);

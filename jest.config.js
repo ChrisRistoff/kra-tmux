@@ -20,6 +20,7 @@ module.exports = {
     '^@UI/(.*)$': '<rootDir>/src/UI/$1',
     '^@commandsMaps/(.*)$': '<rootDir>/src/commandsMaps/$1',
     '^@helpers/(.*)$': '<rootDir>/src/helpers/$1',
+    '^@system/(.*)$': '<rootDir>/src/system/$1',
     '^@filePaths$': '<rootDir>/src/filePaths.ts',
   },
 };

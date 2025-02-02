@@ -1,5 +1,5 @@
-import * as bash from "../../utils/bashHelper";
-import { GIT_COMMANDS } from "../config/gitConstants";
+import * as bash from "@utils/bashHelper";
+import { GIT_COMMANDS } from "@git/config/gitConstants";
 
 export async function getFileList(command: string): Promise<string[]> {
     const response = await bash.execCommand(command);

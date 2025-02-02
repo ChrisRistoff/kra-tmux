@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import * as bash from '../utils/bashHelper';
+import * as bash from '@utils/bashHelper';
 import { spawn } from 'child_process';
-import { nvimSessionsPath, nvimTreeSwapFilePath } from '../filePaths';
+import { nvimSessionsPath, nvimTreeSwapFilePath } from '@filePaths';
 
 export async function saveNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number): Promise<void> {
     const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}.vim`;

@@ -1,5 +1,5 @@
-import * as bash from '../utils/bashHelper';
-import * as ui from '../UI/generalUI';
+import * as bash from '@utils/bashHelper';
+import * as ui from '@UI/generalUI';
 
 enum SearchTargetType {
     File = 'f',

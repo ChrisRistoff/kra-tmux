@@ -1,5 +1,5 @@
-import * as git from "../git";
-import { GitCommands } from "../git/types/gitTypes";
+import * as git from "@git/index";
+import { GitCommands } from "@customTypes/gitTypes";
 
 export const gitCommands: GitCommands = {
     'restore': git.restoreFile,
