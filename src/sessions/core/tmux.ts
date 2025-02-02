@@ -53,7 +53,7 @@ export async function createSession(sessionName: string): Promise<void> {
     await bash.execCommand(createSession);
 }
 
-export async function createWindow(sessionName: string, windowName: string): Promise<void> {
+export async function createWindow(windowName: string): Promise<void> {
     await bash.execCommand(`tmux new-window -n ${windowName} -c ~/`);
 }
 
