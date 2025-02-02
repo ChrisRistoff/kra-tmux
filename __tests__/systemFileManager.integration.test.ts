@@ -9,7 +9,7 @@ jest.mock('../src/UI/generalUI', () => ({
     searchSelectAndReturnFromArray: jest.fn()
 }));
 
-jest.mock('../src/helpers/bashHelper', () => ({
+jest.mock('../src/utils/bashHelper', () => ({
     execCommand: jest.fn()
 }));
 
