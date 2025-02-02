@@ -74,8 +74,15 @@ async function loadUntrackedFile(fileToLoadName: string, gitBranchName: string):
         ).toString()
     );
 
-    const fileToRetrievePathArray = pathInfoObject[fileToLoadName].split('/');
+    const originalPath = pathInfoObject[fileToLoadName];
+
+    if (!originalPath) {
+        throw new Error(`No path information found for file: ${fileToLoadName}`);
+    }
+
+    const fileToRetrievePathArray = originalPath.split('/');
     fileToRetrievePathArray.pop();
+
     const fileToRetrievePath = fileToRetrievePathArray.join('/');
 
     const untrackedFolder = path.join(
@@ -108,8 +115,11 @@ export async function loadUntracked(): Promise<void> {
         gitBranchName
     );
 
-    const savedUntrackedFiles = fs.readdirSync(branchPath)
-        .filter(file => file !== UNTRACKED_CONFIG.pathInfoFileName);
+    const dirEntries = fs.readdirSync(branchPath, { withFileTypes: true });
+
+    const savedUntrackedFiles = dirEntries
+        .filter(entry => entry.isFile() && entry.name !== UNTRACKED_CONFIG.pathInfoFileName)
+        .map(entry => entry.name);
 
     savedUntrackedFiles.unshift('all');
 
@@ -120,7 +130,7 @@ export async function loadUntracked(): Promise<void> {
 
     if (fileToLoadName === 'all') {
         savedUntrackedFiles.shift();
-        await Promise.all(savedUntrackedFiles.map(file => loadUntrackedFile(file, gitBranchName)));
+        await Promise.all(savedUntrackedFiles.map(fileName => loadUntrackedFile(fileName, gitBranchName)));
         return;
     }
 

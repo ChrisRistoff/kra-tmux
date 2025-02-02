@@ -87,7 +87,7 @@ async function createTmuxSession(sessionName: string, sessions: TmuxSessions, fi
 
     for (const [windowIndex, window] of sessions[sessionName].windows.entries()) {
         if (windowIndex > 0) {
-            await tmux.createWindow(sessionName, window.windowName);
+            await tmux.createWindow(window.windowName);
         }
 
         for (const [paneIndex, pane] of window.panes.entries()) {

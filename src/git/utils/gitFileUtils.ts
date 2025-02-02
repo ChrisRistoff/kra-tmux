@@ -3,6 +3,11 @@ import { GIT_COMMANDS } from "../config/gitConstants";
 
 export async function getFileList(command: string): Promise<string[]> {
     const response = await bash.execCommand(command);
+
+    if (!response || typeof response.stdout !== 'string') {
+        return [];
+    }
+
     const files = response.stdout.split('\n');
     return files.filter(Boolean); // Removes empty strings
 }
