@@ -6,8 +6,8 @@ import * as generalUI from '@UI/generalUI';
 import { TmuxSessions } from '@/types/sessionTypes';
 import { sessionFilesFolder } from '@filePaths';
 
-jest.mock('../../src/sessions/utils/sessionUtils');
-jest.mock('../../src/sessions/commands/printSessions');
+jest.mock('@sessions/utils/sessionUtils');
+jest.mock('@sessions/commands/printSessions');
 jest.mock('fs/promises');
 jest.mock('@UI/generalUI');
 
