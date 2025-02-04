@@ -2,6 +2,7 @@
   "name": "kra-cli",
   "_moduleAliases": {
     "@": "dest/src",
+    "@AI": "dest/src/AI",
     "@utils": "dest/src/utils",
     "@customTypes": "dest/src/types",
     "@sessions": "dest/src/sessions",
@@ -17,6 +18,11 @@
   "bin": {
     "kra": "dest/src/main.js"
   },
+  "preferGlobal": true,
+  "files": [
+    "dest",
+    "src"
+  ],
   "scripts": {
     "postinstall": "tsc && node ./dest/autocomplete.js",
     "lint": "eslint --fix",
@@ -25,6 +31,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/deepinfra": "^0.1.9",
+    "ai": "^4.1.17",
+    "dotenv": "^16.4.7",
     "events": "^3.3.0",
     "inquirer": "^8.2.5",
     "inquirer-autocomplete-prompt": "^2.0.0",

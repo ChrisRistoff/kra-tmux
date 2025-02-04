@@ -1,18 +1,15 @@
 import * as sessions from '@sessions/index'
+import { Commands } from './types/commandTypes';
 
-type TmuxCommands = {
-    [key: string]: () => Promise<void>,
-}
-
-export const tmuxCommands: TmuxCommands = {
+export const tmuxCommands: Commands= {
     'save-server': sessions.saveSessionsToFile,
-    'load-server': handleLoadSession,
+    'load-server': loadSession,
     'list-sessions': sessions.printCurrentSessions,
     'delete-session': sessions.deleteSession,
     'kill': sessions.killServer,
 };
 
-async function handleLoadSession(): Promise<void> {
+async function loadSession(): Promise<void> {
     await sessions.handleSessionsIfServerIsRunning();
     await sessions.loadLatestSession();
 }

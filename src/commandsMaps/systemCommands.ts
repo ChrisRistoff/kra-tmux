@@ -1,10 +1,7 @@
 import * as systemFileManager from "@system/systemFileManager";
+import { Commands } from "./types/commandTypes";
 
-type SystemCommands = {
-    [key: string]: (args?: string[]) => Promise<void>
-}
-
-export const systemCommands: SystemCommands = {
+export const systemCommands: Commands = {
     'grep-file-remove': systemFileManager.removeFile,
     'grep-dir-remove': systemFileManager.removeDirectory,
 };

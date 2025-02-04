@@ -8,7 +8,7 @@ _kra_completions() {
 
     # Top-level commands after "kra"
     if [[ ${COMP_CWORD} -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "git tmux sys settings" -- "$cur") )
+        COMPREPLY=( $(compgen -W "git tmux sys settings ai" -- "$cur") )
         return 0
     fi
 
@@ -19,6 +19,8 @@ _kra_completions() {
         COMPREPLY=( $(compgen -W "save-server load-server list-sessions delete-session kill" -- "$cur") )
     elif [[ "$prev" == "sys" ]]; then
         COMPREPLY=( $(compgen -W "grep-file-remove grep-dir-remove" -- "$cur") )
+    elif [[ "$prev" == "ai" ]]; then
+        COMPREPLY=( $(compgen -W "general" -- "$cur") )
     fi
 
     return 0

@@ -65,6 +65,21 @@ export function openVim(filePath: string, command?: string): Promise<void> {
     });
 }
 
+export async function openNvimInTmuxAndWait(filePath: string): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+        try {
+            await bash.execCommand(`tmux new-window "nvim '${filePath}'; tmux wait-for -S vim-done"`);
+
+            // wait for the marker to be set
+            await bash.execCommand('tmux wait-for vim-done');
+
+            resolve();
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
 export function cleanNvimTree(): void {
     bash.execCommand(`rm ${nvimTreeSwapFilePath}`);
 }

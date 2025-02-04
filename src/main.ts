@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import 'module-alias/register';
+import { aiCommands } from './commandsMaps/aiCommands';
 import { gitCommands } from './commandsMaps/gitCommands';
 import { tmuxCommands } from './commandsMaps/tmuxCommands';
 import { systemCommands } from './commandsMaps/systemCommands';
@@ -26,6 +27,11 @@ const main = async (): Promise<void> => {
 
     if (args[0] === 'git' && gitCommands[args[1]]) {
         await gitCommands[args[1]]();
+        return;
+    }
+
+    if (args[0] === 'ai' && aiCommands[args[1]]) {
+        await aiCommands[args[1]]();
         return;
     }
 

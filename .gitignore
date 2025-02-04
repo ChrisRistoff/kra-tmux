@@ -21,4 +21,5 @@ dest/
 coverage/
 
 
+.env
 settings.toml

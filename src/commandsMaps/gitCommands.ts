@@ -1,7 +1,7 @@
 import * as git from "@git/index";
-import { GitCommands } from "@customTypes/gitTypes";
+import { Commands } from "./types/commandTypes";
 
-export const gitCommands: GitCommands = {
+export const gitCommands: Commands = {
     'restore': git.restoreFile,
     'cache-untracked': git.saveUntracked,
     'retrieve-untracked': git.loadUntracked,
