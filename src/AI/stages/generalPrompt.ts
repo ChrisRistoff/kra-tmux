@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import { createDeepInfra } from "@ai-sdk/deepinfra";
 import { generateText } from "ai";
+import * as bash from '@utils/bashHelper';
 import * as keys from '@AI/data/keys';
 import * as utils from '@AI/utils/aiUtils';
 import * as nvim from '@/utils/neovimHelper';
@@ -8,6 +9,7 @@ import * as ui from '@UI/generalUI'
 import { aiRoles } from '../data/roles';
 import { models } from '../data/models';
 import path from 'path';
+import { aiHistoryPath } from '@/filePaths';
 
 export async function generalPrompt(): Promise<void> {
     try {
@@ -61,6 +63,18 @@ async function converse(
 
         if (!prompt.trim()) {
             console.log('Prompt was empty, aborting.');
+
+            console.log(responseFile);
+
+            const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
+
+            if (!saveFile) {
+                return;
+            }
+
+            const fileName = await ui.askUserForInput('Type file name: ');
+
+            await bash.execCommand(`cp ${responseFile} ${aiHistoryPath}/${fileName}.md`);
 
             return;
         }

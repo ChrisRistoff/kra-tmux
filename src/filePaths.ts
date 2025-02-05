@@ -16,3 +16,6 @@ export const sessionFilesFolder = path.join(homeDir, projectPath, 'tmux-files/se
 // nvim
 export const nvimSessionsPath = path.join(homeDir, projectPath, 'tmux-files/nvim-sessions');
 export const nvimTreeSwapFilePath = path.join(homeDir, '/.local/state/nvim/swap//%home%krasen%programming%kra-tmux%NvimTree_1.swp')
+
+// ai
+export const aiHistoryPath = path.join(homeDir, projectPath, 'ai-files/chat-history')
