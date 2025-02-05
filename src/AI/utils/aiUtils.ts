@@ -8,8 +8,8 @@ export async function createTempFiles(): Promise<TempFiles> {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-prompt-'))
 
     return {
-        promptFile: path.join(tmpDir, 'prompt.txt'),
-        responseFile: path.join(tmpDir, 'response.txt'),
+        promptFile: path.join(tmpDir, 'ai-prompt.txt'),
+        responseFile: path.join(tmpDir, 'ai-response.md'),
     }
 }
 
