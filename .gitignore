@@ -8,12 +8,17 @@ tmux-files/sessions/*
 git-files/untracked/*
 !git-files/untracked/.gitkeep
 
+ai-files/chat-history/*
+!ai-files/chat-history/.gitkeep
+
 # Track the directories themselves
 !tmux-files/
 !tmux-files/nvim-sessions/
 !tmux-files/sessions/
 !git-files/
 !git-files/untracked/
+!ai-files/
+!ai-files/chat-history/
 
 # Ignore sub-subfolders (and files) inside the subfolders
 node_modules/
