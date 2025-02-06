@@ -32,8 +32,13 @@ export async function generalPrompt(): Promise<void> {
             prompt: 'Select a role from the list: '
         });
 
+        const model = await ui.searchSelectAndReturnFromArray({
+            itemsArray: Object.keys(models),
+            prompt: 'Select a model',
+        })
+
         console.log('Opening vim for prompt...');
-        await converse(tempFiles.promptFile, tempFiles.responseFile, temperature, role);
+        await converse(tempFiles.promptFile, tempFiles.responseFile, temperature, role, model);
 
         await fs.rm(tempDir, { recursive: true, force: true });
     } catch (error) {
@@ -46,7 +51,8 @@ async function converse(
     promptFile: string,
     responseFile: string,
     temperature: number,
-    role: string
+    role: string,
+    model: string
 ): Promise<void> {
     try {
         await Promise.all([
@@ -60,6 +66,8 @@ async function converse(
         console.log('Vim session completed');
 
         const prompt = await fs.readFile(promptFile, 'utf-8');
+        const conversationHistory = await fs.readFile(responseFile, 'utf-8');
+        const fullPrompt = conversationHistory + '\n\n' + prompt;
 
         if (!prompt.trim()) {
             console.log('Prompt was empty, aborting.');
@@ -80,8 +88,8 @@ async function converse(
         }
 
         const res = await generateText({
-            model: createDeepInfra({apiKey: keys.getDeepSeekKey()})(models.deepSeekR1),
-            prompt,
+            model: createDeepInfra({apiKey: keys.getDeepSeekKey()})(models[model]),
+            prompt: fullPrompt,
             maxTokens: 4096,
             temperature: temperature / 10,
             system: aiRoles[role],
@@ -97,7 +105,7 @@ async function converse(
 
         await nvim.openNvimInTmuxAndWait(responseFile);
 
-        return await converse(promptFile, responseFile, temperature, role);
+        return await converse(promptFile, responseFile, temperature, role, model);
     } catch (error) {
         console.error('Error in AI prompt workflow:', (error as Error).message);
         throw error;
