@@ -1,15 +1,17 @@
 import inquirer from 'inquirer';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { createDeepInfra } from "@ai-sdk/deepinfra";
-import { generateText } from "ai";
 import * as bash from '@utils/bashHelper';
 import * as keys from '@AI/data/keys';
 import * as nvim from '@/utils/neovimHelper';
 import { aiHistoryPath } from '@/filePaths';
-import { models } from '../data/models';
+import { geminiModels, deepInfraModels, openAiModels, deepSeekModels } from '../data/models';
 import * as ui from '@UI/generalUI'
 import { aiRoles } from '../data/roles';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createDeepInfra } from "@ai-sdk/deepinfra";
+import { generateText } from "ai";
+import OpenAI from "openai";
 
 export async function promptUserForTemperature() {
     const optionsArray = Array.from({length: 10}, (_, i) => (i + 1).toString());
@@ -58,8 +60,6 @@ export async function converse(
         if (!prompt.trim()) {
             console.log('Prompt was empty, aborting.');
 
-            console.log(responseFile);
-
             const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
 
             if (!saveFile) {
@@ -77,18 +77,10 @@ export async function converse(
             return;
         }
 
-        const deepInfra = createDeepInfra({apiKey: keys.getDeepSeekKey()});
-
-        const res = await generateText({
-            model: deepInfra(models[model]),
-            prompt: fullPrompt,
-            maxTokens: 4096,
-            temperature: temperature / 10,
-            system: aiRoles[role],
-        });
+        const response = await promptModel(model, fullPrompt, temperature, aiRoles[role]);
 
         const userEntry = formatChatEntry('User', prompt);
-        const aiEntry = formatChatEntry('AI', res.text);
+        const aiEntry = formatChatEntry('AI', response);
 
         await appendToChat(responseFile, userEntry);
         await appendToChat(responseFile, aiEntry);
@@ -121,6 +113,60 @@ async function ensureFileExists(filePath: string): Promise<void> {
         await fs.mkdir(dir, { recursive: true });
         await initializeChatFile(filePath);
     }
+}
+
+async function promptModel(model: string, prompt: string, temperature: number, system: string): Promise<string> {
+    if (geminiModels[model]) {
+        const genAI = new GoogleGenerativeAI(keys.getGeminiKey());
+        const geminiModel = genAI.getGenerativeModel({ model: geminiModels[model] });
+
+        const result = await geminiModel.generateContent(prompt);
+        return result.response.text();
+    }
+
+    if (deepInfraModels[model]) {
+        const deepInfra = createDeepInfra({apiKey: keys.getDeepInfraKey()});
+
+        const res = await generateText({
+            model: deepInfra(deepInfraModels[model]),
+            prompt,
+            maxTokens: 4096,
+            temperature: temperature / 10,
+            system,
+        });
+
+        return res.text;
+    }
+
+    if (deepSeekModels[model]) {
+        const openai = new OpenAI({
+            baseURL: 'https://api.deepseek.com',
+            apiKey: keys.getDeepSeekKey(),
+        });
+
+        const completion = await openai.chat.completions.create({
+            messages: [{ role: "system", content: prompt }],
+            model: deepSeekModels[model],
+        });
+
+        return completion.choices[0].message.content!;
+    }
+
+    const openai = new OpenAI();
+    const completion = await openai.chat.completions.create({
+        model: openAiModels[model],
+        messages: [
+            { role: "system", content: system },
+            {
+                role: "user",
+                content: prompt,
+            },
+        ],
+
+        store: true,
+    });
+
+    return completion.choices[0].message.content!
 }
 
 async function appendToChat(file: string, content: string): Promise<void> {

@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as utils from '@AI/utils/aiUtils';
 import * as ui from '@UI/generalUI'
 import { aiRoles } from '../data/roles';
-import { models } from '../data/models';
+import { deepInfraModels, deepSeekModels, geminiModels, openAiModels } from '../data/models';
 import path from 'path';
 
 export async function startNewChat(): Promise<void> {
@@ -27,7 +27,7 @@ export async function startNewChat(): Promise<void> {
         });
 
         const model = await ui.searchSelectAndReturnFromArray({
-            itemsArray: Object.keys(models),
+            itemsArray: [...Object.keys(deepInfraModels), ...Object.keys(geminiModels), ...Object.keys(openAiModels), ...Object.keys(deepSeekModels)],
             prompt: 'Select a model',
         })
 

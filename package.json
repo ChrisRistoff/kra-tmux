@@ -32,12 +32,14 @@
   "license": "ISC",
   "dependencies": {
     "@ai-sdk/deepinfra": "^0.1.9",
+    "@google/generative-ai": "^0.21.0",
     "ai": "^4.1.17",
     "dotenv": "^16.4.7",
     "events": "^3.3.0",
     "inquirer": "^8.2.5",
     "inquirer-autocomplete-prompt": "^2.0.0",
     "module-alias": "^2.2.3",
+    "openai": "^4.83.0",
     "toml": "^3.0.0"
   },
   "devDependencies": {

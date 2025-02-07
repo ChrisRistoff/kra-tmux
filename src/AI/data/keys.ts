@@ -12,6 +12,26 @@ export function getClaudeKey(): string {
     return apiKey;
 }
 
+export function getDeepInfraKey(): string {
+    const apiKey = process.env.DEEP_SEEK;
+
+    if (!apiKey) {
+        throw new Error('DEEP_SEEK environment variable is not set');
+    }
+
+    return apiKey;
+}
+
+export function getGeminiKey(): string {
+    const apiKey = process.env.GEMINI;
+
+    if (!apiKey) {
+        throw new Error('DEEP_SEEK environment variable is not set');
+    }
+
+    return apiKey;
+}
+
 export function getDeepSeekKey(): string {
     const apiKey = process.env.DEEP_SEEK;
 
