@@ -15,7 +15,6 @@ export async function loadChat(): Promise<void> {
             return;
         }
 
-
         const selectedChat = await ui.searchSelectAndReturnFromArray({
             itemsArray: filterGitKeep(savedChats),
             prompt: 'Select a chat to load: '
@@ -43,13 +42,11 @@ export async function loadChat(): Promise<void> {
 
         await fs.copyFile(chatHistoryPath, chatFile);
 
-        const isChatLoaded = true;
         await utils.converse(
             chatFile,
             chatData.temperature,
             chatData.role,
             chatData.model,
-            isChatLoaded,
         );
     } catch (error) {
         console.error('Error loading chat:', (error as Error).message);

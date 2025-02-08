@@ -67,7 +67,7 @@ export async function converse(
 
         await nvim.command(`nnoremap <CR> :SubmitPrompt<CR>`);
 
-        // Open the file in Neovim
+        // open the file in Neovim
         await nvim.command(`edit ${chatFile}`);
         await nvim.command('normal! G');
         await nvim.command('normal! o');
@@ -122,11 +122,20 @@ export async function converse(
     }
 }
 
+export function formatChatEntry(role: string, content: string, topLevel = false): string {
+    const timestamp = new Date().toISOString();
+    if (topLevel) {
+        return `### ${role} (${timestamp})\n\n${content}\n---\n`;
+    }
+
+    return `---\n### ${role} (${timestamp})\n\n${content}\n---\n`;
+}
+
 async function waitForSocket(socketPath: string, timeout = 5000) {
     const start = Date.now();
     while (Date.now() - start < timeout) {
         try {
-            await fs.access(socketPath); // Check if socket file exists
+            await fs.access(socketPath); // check if socket file exists
             return true;
         } catch (err) {
             await new Promise(resolve => setTimeout(resolve, 100)); // retry every 100ms
@@ -142,19 +151,6 @@ function formatUserPromptArea(): string {
 async function initializeUserPrompt(filePath: string): Promise<void> {
     const initialContent = `# AI Chat History\n\nThis file contains the conversation history between the user and AI.\n\n---\n\n### USER (${new Date().toISOString()})\n\n`;
     await fs.writeFile(filePath, initialContent, 'utf-8');
-}
-
-export async function clearPromptFile(promptFile: string): Promise<void> {
-    await fs.writeFile(promptFile, '', 'utf-8');
-}
-
-export function formatChatEntry(role: string, content: string, topLevel = false): string {
-    const timestamp = new Date().toISOString();
-    if (topLevel) {
-        return `### ${role} (${timestamp})\n\n${content}\n---\n`;
-    }
-
-    return `---\n### ${role} (${timestamp})\n\n${content}\n---\n`;
 }
 
 async function appendToChat(file: string, content: string): Promise<void> {
