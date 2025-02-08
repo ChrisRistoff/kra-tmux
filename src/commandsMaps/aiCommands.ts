@@ -1,7 +1,8 @@
-import * as ai from "../AI";
+import * as ai from "../AIchat";
 import { Commands } from "./types/commandTypes";
 
 export const aiCommands : Commands = {
-    'general': ai.startNewChat,
+    'chat': ai.startNewChat,
     'load': ai.loadChat,
+    'delete': ai.deleteChats,
 };

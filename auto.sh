@@ -20,7 +20,7 @@ _kra_completions() {
     elif [[ "$prev" == "sys" ]]; then
         COMPREPLY=( $(compgen -W "grep-file-remove grep-dir-remove" -- "$cur") )
     elif [[ "$prev" == "ai" ]]; then
-        COMPREPLY=( $(compgen -W "general" -- "$cur") )
+        COMPREPLY=( $(compgen -W "chat load delete" -- "$cur") )
     fi
 
     return 0

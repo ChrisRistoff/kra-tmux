@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as utils from '@AI/utils/aiUtils';
+import * as utils from '@AIchat/utils/aiUtils';
 import * as ui from '@UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 import * as nvim from '@/utils/neovimHelper';
@@ -15,7 +15,7 @@ export async function loadChat(): Promise<void> {
         }
 
         const selectedChat = await ui.searchSelectAndReturnFromArray({
-            itemsArray: savedChats,
+            itemsArray: savedChats.filter((chat) => chat !== '.gitkeep'),
             prompt: 'Select a chat to load: '
         });
 
