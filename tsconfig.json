@@ -31,7 +31,7 @@
     "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"],
-      "@AI/*": ["AI/*"],
+      "@AIchat/*": ["AIchat/*"],
       "@utils/*": ["utils/*"],
       "@customTypes/*": ["types/*"],
       "@sessions/*": ["sessions/*"],

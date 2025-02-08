@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import * as utils from '@AI/utils/aiUtils';
+import * as utils from '@AIchat/utils/aiUtils';
 import * as ui from '@UI/generalUI'
 import { aiRoles } from '../data/roles';
 import { deepInfraModels, deepSeekModels, geminiModels, openAiModels } from '../data/models';

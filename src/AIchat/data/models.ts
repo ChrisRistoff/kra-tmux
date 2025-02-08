@@ -18,6 +18,6 @@ export const openAiModels: Models = {
 }
 
 export const deepSeekModels: Models = {
-    'deepSeekV3': 'deepseek-chat',
-    'deepSeekR1': 'deepseek-reasoner',
+    // 'deepSeekV3': 'deepseek-chat',
+    // 'deepSeekR1': 'deepseek-reasoner',
 }

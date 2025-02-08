@@ -2,7 +2,7 @@
   "name": "kra-cli",
   "_moduleAliases": {
     "@": "dest/src",
-    "@AI": "dest/src/AI",
+    "@AIchat": "dest/src/AIchat",
     "@utils": "dest/src/utils",
     "@customTypes": "dest/src/types",
     "@sessions": "dest/src/sessions",
