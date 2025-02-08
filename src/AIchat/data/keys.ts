@@ -13,7 +13,7 @@ export function getClaudeKey(): string {
 }
 
 export function getDeepInfraKey(): string {
-    const apiKey = process.env.DEEP_SEEK;
+    const apiKey = process.env.DEEP_INFRA;
 
     if (!apiKey) {
         throw new Error('DEEP_SEEK environment variable is not set');

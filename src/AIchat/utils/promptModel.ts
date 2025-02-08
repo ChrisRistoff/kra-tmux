@@ -17,7 +17,6 @@ export async function promptModel(model: string, prompt: string, temperature: nu
             tools: [
                 {
                     codeExecution: {},
-                    googleSearchRetrieval: {}
                 }
             ]
         });

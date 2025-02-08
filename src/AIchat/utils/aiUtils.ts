@@ -1,12 +1,10 @@
 import inquirer from 'inquirer';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as bash from '@utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
-import * as ui from '@UI/generalUI'
-import { aiHistoryPath } from '@/filePaths';
 import { aiRoles } from '@AIchat/data/roles';
 import { promptModel } from './promptModel';
+import { saveChat } from './saveChat';
 
 export async function promptUserForTemperature() {
     const optionsArray = Array.from({length: 10}, (_, i) => (i + 1).toString());
@@ -53,29 +51,13 @@ export async function converse(
         const fullPrompt = conversationHistory + '\n\n' + prompt;
 
         if (!prompt.trim()) {
-            console.log('Prompt was empty, aborting.');
-
-            const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
-
-            if (!saveFile) {
-                return;
-            }
-
-            const fileName = await ui.askUserForInput('Type file name: ');
-            const chatData = createChatData(promptFile, responseFile, fullPrompt, temperature, role, model);
-            const historyFile = `${aiHistoryPath}/${fileName}/${fileName}`;
-
-            await fs.mkdir(`${aiHistoryPath}/${fileName}`);
-            await bash.execCommand(`cp ${responseFile} ${historyFile}.md`);
-            await fs.writeFile(`${historyFile}.json`, chatData);
-
-            return;
+            return await saveChat(promptFile, responseFile, fullPrompt, temperature, role, model);
         }
 
         const response = await promptModel(model, fullPrompt, temperature, aiRoles[role]);
 
         const userEntry = formatChatEntry('User', prompt);
-        const aiEntry = formatChatEntry('AI', response);
+        const aiEntry = formatChatEntry(model, response);
 
         await appendToChat(responseFile, userEntry);
         await appendToChat(responseFile, aiEntry);
@@ -100,6 +82,11 @@ export async function clearPromptFile(promptFile: string): Promise<void> {
     await fs.writeFile(promptFile, '', 'utf-8');
 }
 
+export function formatChatEntry(role: string, content: string): string {
+    const timestamp = new Date().toISOString();
+    return `### ${role} (${timestamp})\n\n${content}\n\n---\n\n`;
+}
+
 async function ensureFileExists(filePath: string): Promise<void> {
     try {
         await fs.access(filePath);
@@ -112,20 +99,4 @@ async function ensureFileExists(filePath: string): Promise<void> {
 
 async function appendToChat(file: string, content: string): Promise<void> {
     await fs.appendFile(file, content, 'utf-8');
-}
-
-function formatChatEntry(role: string, content: string): string {
-    const timestamp = new Date().toISOString();
-    return `### ${role} (${timestamp})\n\n${content}\n\n---\n\n`;
-}
-
-function createChatData(promptFile: string, responseFile: string, fullPrompt: string, temperature: number, role: string, model: string): string {
-    return JSON.stringify({
-        promptFile,
-        responseFile,
-        fullPrompt,
-        temperature,
-        role,
-        model,
-    }, null, 2)
 }
