@@ -112,6 +112,8 @@ export async function converse(
                 const fullPrompt = conversationHistory + '\n';
 
                 await saveChat(chatFile, fullPrompt, temperature, role, model);
+
+                await bash.execCommand('rm -rf /tmp/ai-chat-*');
             }
         }, 500);
     } catch (error) {

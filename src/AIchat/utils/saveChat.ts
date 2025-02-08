@@ -16,7 +16,7 @@ export async function saveChat(
     role: string,
     model: string,
 ): Promise<void> {
-    console.log('Prompt was empty, aborting.');
+    console.log('Chat ended.');
 
     const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
 
