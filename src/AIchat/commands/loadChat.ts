@@ -25,11 +25,20 @@ export async function loadChat(): Promise<void> {
 
         const tempFiles = {
             promptFile: path.join(tempDir, 'prompt.md'),
-            responseFile: path.join(tempDir, 'conversation.md')
+            responseFile: path.join(tempDir, 'conversation.md'),
         };
 
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
         const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
+        const chatSummaryPath= path.join(aiHistoryPath, selectedChat, 'summary.md');
+
+        await nvim.openNvimInTmuxAndWait(chatSummaryPath);
+
+        const loadTheChat = await ui.promptUserYesOrNo('Do you want to open this chat?');
+
+        if (!loadTheChat) {
+            return await loadChat();
+        }
 
         const chatData = JSON.parse(await fs.readFile(chatDataPath, 'utf-8'));
 
