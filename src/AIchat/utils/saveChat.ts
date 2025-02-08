@@ -6,10 +6,11 @@ import { aiHistoryPath } from '@/filePaths';
 import { aiRoles } from '@AIchat/data/roles';
 import { promptModel } from './promptModel';
 import { formatChatEntry } from './aiUtils';
+import { summaryPrompt } from '../data/prompts';
+import { filterGitKeep } from '@/utils/common';
 
 export async function saveChat(
-    promptFile: string,
-    responseFile: string,
+    chatFile: string,
     fullPrompt: string,
     temperature: number,
     role: string,
@@ -23,38 +24,46 @@ export async function saveChat(
         return;
     }
 
-    const fileName = await ui.askUserForInput('Type file name: ');
-    const chatData = createChatData(promptFile, responseFile, fullPrompt, temperature, role, model);
-    const historyFile = `${aiHistoryPath}/${fileName}/${fileName}`;
+    const saves = filterGitKeep(await fs.readdir(aiHistoryPath));
 
-    await fs.mkdir(`${aiHistoryPath}/${fileName}`);
-    await bash.execCommand(`cp ${responseFile} ${historyFile}.md`);
+    const saveName = await ui.searchAndSelect({
+        itemsArray: saves,
+        prompt: 'Type file name: '
+    });
+
+    if (saves.includes(saveName)) {
+        await bash.execCommand(`rm -rf ${aiHistoryPath}/${saveName}`);
+    }
+
+    const chatData = createChatData(chatFile, fullPrompt, temperature, role, model);
+    const historyFile = `${aiHistoryPath}/${saveName}/${saveName}`;
+
+    await fs.mkdir(`${aiHistoryPath}/${saveName}`);
+    await bash.execCommand(`cp ${chatFile} ${historyFile}.md`);
     await fs.writeFile(`${historyFile}.json`, chatData);
 
-    const chatContent = await fs.readFile(responseFile, 'utf-8');
-    const summaryPrompt = `Please provide a concise summary of the following chat conversation.
-                            Use bullet points to summaeise, keep each line max 80 chars long.
-                            Focus on the main topics discussed and key conclusions:\n\n${chatContent}`;
+    const chatContent = await fs.readFile(chatFile, 'utf-8');
 
-    const summary = await promptModel(model, summaryPrompt, temperature, aiRoles[role]);
-    const formattedSummary = formatChatEntry('Chat Summary', summary);
+    const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
-    const summaryFile = `${aiHistoryPath}/${fileName}/summary.md`;
+    const summary = await promptModel(model, finalSummaryPrompt, temperature, aiRoles[role]);
+    const formattedSummary = formatChatEntry('Chat Summary', summary, true);
+
+    const summaryFile = `${aiHistoryPath}/${saveName}/summary.md`;
 
     await fs.writeFile(summaryFile, formattedSummary);
     await nvim.openNvimInTmuxAndWait(summaryFile);
 
     const editedSummary = await fs.readFile(summaryFile, 'utf-8');
-    await fs.writeFile(`${aiHistoryPath}/${fileName}/summary.md`, editedSummary);
+    await fs.writeFile(`${aiHistoryPath}/${saveName}/summary.md`, editedSummary);
 
-    console.log('Chat and summary saved as ', fileName);
+    console.log('Chat and summary saved as ', saveName);
     return;
 }
 
-function createChatData(promptFile: string, responseFile: string, fullPrompt: string, temperature: number, role: string, model: string): string {
+function createChatData(chatFile: string, fullPrompt: string, temperature: number, role: string, model: string): string {
     return JSON.stringify({
-        promptFile,
-        responseFile,
+        chatFile,
         fullPrompt,
         temperature,
         role,

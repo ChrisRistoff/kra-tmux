@@ -10,3 +10,7 @@ export async function loadSettings() {
 
     return toml.parse(settingsFileString);
 }
+
+export function filterGitKeep(array: string[]): string[] {
+    return array.filter((item) => item !== '.gitkeep');
+}
