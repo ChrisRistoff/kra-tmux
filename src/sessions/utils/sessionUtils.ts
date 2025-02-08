@@ -3,6 +3,7 @@ import * as bash from '@utils/bashHelper';
 import { sessionFilesFolder } from '@filePaths';
 import { TmuxSessions, Window, Pane } from '@customTypes/sessionTypes';
 import { formatWindow, formatPane } from '@sessions/utils/formatters';
+import { filterGitKeep } from '@/utils/common';
 
 export async function getCurrentSessions(): Promise<TmuxSessions> {
     let output;
@@ -57,8 +58,7 @@ export async function getPanesForWindow(session: string, windowIndex: number): P
 
 export async function getSavedSessionsNames(): Promise<string[]> {
     try {
-        const files = await fs.readdir(sessionFilesFolder);
-        return files.filter((file) => file !== '.gitkeep');
+        return filterGitKeep(await fs.readdir(sessionFilesFolder));
     } catch (error) {
         console.error('Error reading directory:', error);
         return [];

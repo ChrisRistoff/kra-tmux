@@ -16,9 +16,6 @@ export async function startNewChat(): Promise<void> {
             responseFile: path.join(tempDir, 'conversation.md')
         };
 
-        await utils.initializeChatFile(tempFiles.responseFile);
-        await utils.clearPromptFile(tempFiles.promptFile);
-
         const temperature = await utils.promptUserForTemperature();
 
         const role = await ui.searchSelectAndReturnFromArray({
@@ -32,9 +29,7 @@ export async function startNewChat(): Promise<void> {
         })
 
         console.log('Opening vim for prompt...');
-        await utils.converse(tempFiles.promptFile, tempFiles.responseFile, temperature, role, model);
-
-        await fs.rm(tempDir, { recursive: true, force: true });
+        await utils.converse(tempFiles.responseFile, temperature, role, model);
     } catch (error) {
         console.error('Error in AI prompt workflow:', (error as Error).message);
         throw error;

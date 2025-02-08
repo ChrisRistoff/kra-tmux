@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as ui from '@UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
+import { filterGitKeep } from '@/utils/common';
 
 export async function deleteChats(): Promise<void> {
     try {
@@ -12,7 +13,7 @@ export async function deleteChats(): Promise<void> {
         }
 
         const chatToDelete = await ui.searchSelectAndReturnFromArray({
-            itemsArray: savedChats.filter((chat) => chat !== '.gitkeep'),
+            itemsArray: filterGitKeep(savedChats),
             prompt: 'Select a chat to delete: '
         });
 

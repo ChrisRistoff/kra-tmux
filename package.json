@@ -39,6 +39,7 @@
     "inquirer": "^8.2.5",
     "inquirer-autocomplete-prompt": "^2.0.0",
     "module-alias": "^2.2.3",
+    "neovim": "^4.0.0",
     "openai": "^4.83.0",
     "toml": "^3.0.0"
   },

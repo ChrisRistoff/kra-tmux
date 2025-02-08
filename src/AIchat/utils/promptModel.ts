@@ -32,7 +32,7 @@ export async function promptModel(model: string, prompt: string, temperature: nu
             model: deepInfra(deepInfraModels[model]),
             prompt,
             maxTokens: 4096,
-            temperature: temperature / 10,
+            temperature,
             system,
         });
 

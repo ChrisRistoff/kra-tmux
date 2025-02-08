@@ -4,6 +4,7 @@ import * as utils from '@AIchat/utils/aiUtils';
 import * as ui from '@UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 import * as nvim from '@/utils/neovimHelper';
+import { filterGitKeep } from '@/utils/common';
 
 export async function loadChat(): Promise<void> {
     try {
@@ -14,8 +15,9 @@ export async function loadChat(): Promise<void> {
             return;
         }
 
+
         const selectedChat = await ui.searchSelectAndReturnFromArray({
-            itemsArray: savedChats.filter((chat) => chat !== '.gitkeep'),
+            itemsArray: filterGitKeep(savedChats),
             prompt: 'Select a chat to load: '
         });
 
@@ -23,10 +25,7 @@ export async function loadChat(): Promise<void> {
         const tempDir = path.join('/tmp', `ai-chat-${timestamp}`);
         await fs.mkdir(tempDir, { recursive: true });
 
-        const tempFiles = {
-            promptFile: path.join(tempDir, 'prompt.md'),
-            responseFile: path.join(tempDir, 'conversation.md'),
-        };
+        const chatFile = path.join(tempDir, 'conversation.md');
 
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
         const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
@@ -42,20 +41,16 @@ export async function loadChat(): Promise<void> {
 
         const chatData = JSON.parse(await fs.readFile(chatDataPath, 'utf-8'));
 
-        await fs.copyFile(chatHistoryPath, tempFiles.responseFile);
-        await utils.clearPromptFile(tempFiles.promptFile);
+        await fs.copyFile(chatHistoryPath, chatFile);
 
-        await nvim.openNvimInTmuxAndWait(tempFiles.responseFile);
-
+        const isChatLoaded = true;
         await utils.converse(
-            tempFiles.promptFile,
-            tempFiles.responseFile,
+            chatFile,
             chatData.temperature,
             chatData.role,
-            chatData.model
+            chatData.model,
+            isChatLoaded,
         );
-
-        await fs.rm(tempDir, { recursive: true, force: true });
     } catch (error) {
         console.error('Error loading chat:', (error as Error).message);
         throw error;
