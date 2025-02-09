@@ -129,8 +129,6 @@ export async function loadLatestSession(): Promise<void> {
         await tmux.sourceTmuxConfig();
         const firstSession = Object.keys(savedData.sessions)[0];
         await tmux.attachToSession(firstSession);
-
-        nvim.cleanNvimTree();
     } catch (error) {
         console.error('Error in loadLatestSession:', error);
     }

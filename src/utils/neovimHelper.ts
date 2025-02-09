@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as bash from '@utils/bashHelper';
 import { spawn } from 'child_process';
-import { nvimSessionsPath, nvimTreeSwapFilePath } from '@filePaths';
+import { nvimSessionsPath } from '@filePaths';
 
 export async function saveNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number): Promise<void> {
     const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}.vim`;
@@ -71,15 +71,11 @@ export async function openNvimInTmuxAndWait(filePath: string): Promise<void> {
             await bash.execCommand(`tmux new-window "nvim ${filePath} --listen /tmp/nvim.sock"`);
 
             // wait for the marker to be set
-            // await bash.execCommand('tmux wait-for vim-done');
+            await bash.execCommand('tmux wait-for vim-done');
 
             resolve();
         } catch (error) {
             reject(error);
         }
     });
-}
-
-export function cleanNvimTree(): void {
-    bash.execCommand(`rm ${nvimTreeSwapFilePath}`);
 }
