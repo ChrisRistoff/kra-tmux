@@ -79,7 +79,3 @@ export async function openNvimInTmuxAndWait(filePath: string): Promise<void> {
         }
     });
 }
-
-export function cleanNvimTree(): void {
-    bash.execCommand(`rm ${nvimTreeSwapFilePath}`);
-}
