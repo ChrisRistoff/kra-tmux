@@ -5,7 +5,7 @@ import { saveChat } from './saveChat';
 import * as neovim from 'neovim';
 import * as bash from '@utils/bashHelper';
 import os from 'os';
-import { geminiModels } from '../data/models';
+import { modelsThatAddAnEmptyLineAtTheEnd } from '../data/models';
 import { formatChatEntry } from './aiUtils';
 
 export async function converse(
@@ -135,7 +135,7 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, m
                     }
 
                     // gemini adds an empty line at the end so exclude
-                    if (!geminiModels[model]) {
+                    if (!modelsThatAddAnEmptyLineAtTheEnd.has(model)) {
                         await appendToChat(chatFile, '\n');
                         await updateNvimAndGoToLastLine(nvim);
                     }

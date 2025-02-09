@@ -1,5 +1,7 @@
 import { Models } from "../types/aiTypes";
 
+export const modelsThatAddAnEmptyLineAtTheEnd = new Set('gemini-flash');
+
 export const deepInfraModels: Models = {
     'deepSeek70B': 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
     'deepSeekR1': 'deepseek-ai/DeepSeek-R1',
