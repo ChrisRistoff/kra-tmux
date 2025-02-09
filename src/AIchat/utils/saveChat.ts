@@ -45,7 +45,7 @@ export async function saveChat(
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
     const summary = await promptModel('gemini-flash', finalSummaryPrompt, temperature, aiRoles[role]);
-    const formattedSummary = formatChatEntry('Chat Summary', summary, true);
+    const formattedSummary = formatChatEntry('Chat Summary', summary as string, true);
 
     const summaryFile = `${aiHistoryPath}/${saveName}/summary.md`;
 

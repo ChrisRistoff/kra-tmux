@@ -1,3 +1,4 @@
+import * as conversation from '@AIchat/utils/conversation';
 import * as utils from '@AIchat/utils/aiUtils';
 import * as ui from '@UI/generalUI';
 import { aiRoles } from '../data/roles';
@@ -9,8 +10,6 @@ export async function startNewChat(): Promise<void> {
 
         const chatFile = `/tmp/ai-chat-${timestamp}.md`
 
-        const temperature = await utils.promptUserForTemperature();
-
         const role = await ui.searchSelectAndReturnFromArray({
             itemsArray: Object.keys(aiRoles),
             prompt: 'Select a role from the list: '
@@ -21,8 +20,10 @@ export async function startNewChat(): Promise<void> {
             prompt: 'Select a model',
         })
 
+        const temperature = await utils.promptUserForTemperature(model);
+
         console.log('Opening vim for prompt...');
-        await utils.converse(chatFile, temperature, role, model);
+        await conversation.converse(chatFile, temperature, role, model);
     } catch (error) {
         console.error('Error in AI prompt workflow:', (error as Error).message);
         throw error;

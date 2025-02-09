@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as utils from '@AIchat/utils/aiUtils';
+import * as conversation from '@AIchat/utils/conversation';
 import * as ui from '@UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 import * as nvim from '@/utils/neovimHelper';
@@ -40,7 +40,7 @@ export async function loadChat(): Promise<void> {
         await fs.copyFile(chatHistoryPath, chatFile);
 
         const chatFileLoaded = true;
-        await utils.converse(
+        await conversation.converse(
             chatFile,
             chatData.temperature,
             chatData.role,

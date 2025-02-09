@@ -1,11 +1,9 @@
 import { geminiModels, deepInfraModels, openAiModels, deepSeekModels } from '../data/models';
 import * as keys from '@AIchat/data/keys';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createDeepInfra } from "@ai-sdk/deepinfra";
-import { generateText } from "ai";
 import OpenAI from "openai";
 
-export async function promptModel(model: string, prompt: string, temperature: number, system: string): Promise<string> {
+export async function promptModel(model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<any> | string> {
     if (geminiModels[model]) {
         const genAI = new GoogleGenerativeAI(keys.getGeminiKey());
         const geminiModel = genAI.getGenerativeModel({
@@ -21,52 +19,65 @@ export async function promptModel(model: string, prompt: string, temperature: nu
             ]
         });
 
-        const result = await geminiModel.generateContent(prompt);
-        return result.response.text();
+        const result = await geminiModel.generateContentStream(prompt);
+        return result.stream;
     }
 
-    if (deepInfraModels[model]) {
-        const deepInfra = createDeepInfra({apiKey: keys.getDeepInfraKey()});
+    let openai;
+    let llmModel;
 
-        const res = await generateText({
-            model: deepInfra(deepInfraModels[model]),
-            prompt,
-            maxTokens: 4096,
-            temperature,
-            system,
+    if (deepInfraModels[model]) {
+        openai = new OpenAI({
+            apiKey: keys.getDeepInfraKey(),
+            baseURL: "https://api.deepinfra.com/v1/openai",
         });
 
-        return res.text;
+        llmModel = deepInfraModels[model];
     }
 
     if (deepSeekModels[model]) {
-        const openai = new OpenAI({
+        openai = new OpenAI({
             baseURL: 'https://api.deepseek.com',
             apiKey: keys.getDeepSeekKey(),
         });
 
-        const completion = await openai.chat.completions.create({
-            messages: [{ role: "system", content: prompt }],
-            model: deepSeekModels[model],
-        });
-
-        console.log(completion.choices[0].message.content!)
-        return completion.choices[0].message.content!;
+        llmModel = deepSeekModels[model];
     }
 
-    const openai = new OpenAI();
+    // no match, default to openAI
+    if (!openai) {
+        openai = new OpenAI();
+        llmModel = openAiModels[model];
+    }
+
+    return createOpenAIStream(openai, llmModel!, system, prompt, temperature);
+}
+
+async function createOpenAIStream(
+    openai: OpenAI,
+    llmModel: string,
+    system: string,
+    prompt: string,
+    temperature: number
+): Promise<AsyncIterable<any>> {
     const completion = await openai.chat.completions.create({
-        model: openAiModels[model],
         messages: [
             { role: "system", content: system },
-            {
-                role: "user",
-                content: prompt,
-            },
+            { role: "user", content: prompt },
         ],
-
-        store: true,
+        model: llmModel,
+        temperature: temperature,
+        stream: true,
     });
 
-    return completion.choices[0].message.content!
+    async function* streamResponse() {
+        for await (const chunk of completion) {
+            const text = chunk.choices[0]?.delta?.content || '';
+            yield {
+                text: () => text  // mimic chunk.text()
+            };
+        }
+    }
+
+    return streamResponse();
 }
