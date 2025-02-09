@@ -4,6 +4,7 @@ import { promptModel } from './promptModel';
 import { saveChat } from './saveChat';
 import * as neovim from 'neovim';
 import * as bash from '@utils/bashHelper';
+import os from 'os';
 import { geminiModels } from '../data/models';
 import { formatChatEntry } from './aiUtils';
 
@@ -22,7 +23,8 @@ export async function converse(
         const socketPath = await generateSocketPath();
 
         const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
-        tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim --listen \\"${socketPath}\\" \\"${chatFile}\\"; tmux send-keys exit C-m"' C-m`
+            tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim --listen \\"${socketPath}\\" \\"${chatFile}\\"d;
+            tmux send-keys exit C-m"' C-m`
 
         bash.execCommand(tmuxCommand);
 
@@ -49,22 +51,17 @@ export async function converse(
 
         await onHitEnterInNeovim(nvim, chatFile, model, temperature, role);
 
-        let intervalId: NodeJS.Timeout | undefined;
-        intervalId = setInterval(async () => {
-            try {
-                await fs.access(socketPath); // socket exists
-            } catch (error) { // socket does not exist
-                console.log('Chat Ended.');
-                clearInterval(intervalId);
+        nvim.on('disconnect', async () => {
+            console.log('Chat Ended.');
 
-                const conversationHistory = await fs.readFile(chatFile, 'utf8');
-                const fullPrompt = conversationHistory + '\n';
+            const conversationHistory = await fs.readFile(chatFile, 'utf8');
+            const fullPrompt = conversationHistory + '\n';
 
-                await saveChat(chatFile, fullPrompt, temperature, role, model);
+            await saveChat(chatFile, fullPrompt, temperature, role, model);
 
-                await fs.rm(chatFile);
-            }
-        }, 500);
+            await fs.rm(chatFile);
+
+        })
     } catch (error) {
         console.error('Error in AI prompt workflow:', (error as Error).message);
 
@@ -87,7 +84,7 @@ async function waitForSocket(socketPath: string, timeout = 5000) {
 
 async function generateSocketPath(): Promise<string> {
     const randomString = Math.random().toString(36).substring(2, 15);
-    return `/tmp/nvim-${randomString}.sock`;
+    return `${os.tmpdir()}/nvim-${randomString}.sock`;
 }
 
 async function initializeUserPrompt(filePath: string): Promise<void> {
@@ -106,8 +103,7 @@ async function updateNvimAndGoToLastLine(nvim: neovim.NeovimClient) {
 }
 
 async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, model: string, temperature: number, role: string) {
-    return nvim.on('notification', async (method, args) =>
-    {
+    nvim.on('notification', async (method, args) => {
         if (method === 'prompt_action' && args[0] === 'submit_pressed') {
             const buffer = await nvim.buffer;
             const lines = await buffer.lines;
