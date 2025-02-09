@@ -68,7 +68,7 @@ export function openVim(filePath: string, command?: string): Promise<void> {
 export async function openNvimInTmuxAndWait(filePath: string): Promise<void> {
     return new Promise(async (resolve, reject) => {
         try {
-            await bash.execCommand(`tmux new-window "nvim ${filePath} --listen /tmp/nvim.sock"`);
+            await bash.execCommand(`tmux new-window "nvim +'normal GA' '${filePath}'; tmux wait-for -S vim-done"`);
 
             // wait for the marker to be set
             await bash.execCommand('tmux wait-for vim-done');
