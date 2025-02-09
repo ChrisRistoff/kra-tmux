@@ -21,10 +21,7 @@ export async function loadChat(): Promise<void> {
         });
 
         const timestamp = Date.now();
-        const tempDir = path.join('/tmp', `ai-chat-${timestamp}`);
-        await fs.mkdir(tempDir, { recursive: true });
-
-        const chatFile = path.join(tempDir, 'conversation.md');
+        const chatFile = `/tmp/ai-chat-${timestamp}.md`;
 
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
         const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);

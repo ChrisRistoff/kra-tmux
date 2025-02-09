@@ -45,7 +45,7 @@ export async function converse(
             await initializeUserPrompt(chatFile);
         }
 
-        const socketPath = '/tmp/nvim.sock';
+        const socketPath = await generateSocketPath();
 
         const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
         tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim --listen \\"${socketPath}\\" \\"${chatFile}\\"; tmux send-keys exit C-m"' C-m`
@@ -115,7 +115,7 @@ export async function converse(
 
                 await saveChat(chatFile, fullPrompt, temperature, role, model);
 
-                await bash.execCommand('rm -rf /tmp/ai-chat-*');
+                await fs.rm(chatFile);
             }
         }, 500);
     } catch (error) {
@@ -144,6 +144,11 @@ async function waitForSocket(socketPath: string, timeout = 5000) {
         }
     }
     return false;
+}
+
+async function generateSocketPath(): Promise<string> {
+    const randomString = Math.random().toString(36).substring(2, 15);
+    return `/tmp/nvim-${randomString}.sock`;
 }
 
 function formatUserPromptArea(): string {
