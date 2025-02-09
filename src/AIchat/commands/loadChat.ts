@@ -42,11 +42,13 @@ export async function loadChat(): Promise<void> {
 
         await fs.copyFile(chatHistoryPath, chatFile);
 
+        const chatFileLoaded = true;
         await utils.converse(
             chatFile,
             chatData.temperature,
             chatData.role,
             chatData.model,
+            chatFileLoaded
         );
     } catch (error) {
         console.error('Error loading chat:', (error as Error).message);

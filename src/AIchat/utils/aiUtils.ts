@@ -47,12 +47,14 @@ export async function converse(
 
         const socketPath = '/tmp/nvim.sock';
 
-        const tmuxCommand = `tmux new-window "nvim --listen /tmp/nvim.sock ${chatFile}"`;
-        await bash.execCommand(tmuxCommand);
+        const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
+        tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim --listen \\"${socketPath}\\" \\"${chatFile}\\"; tmux send-keys exit C-m"' C-m`
+
+        bash.execCommand(tmuxCommand);
 
         await waitForSocket(socketPath);
 
-        const nvim = neovim.attach({ socket: '/tmp/nvim.sock' });
+        const nvim = neovim.attach({ socket: socketPath });
         const channelId = await nvim.channelId;
 
         // create commands for saving and submitting
@@ -138,7 +140,7 @@ async function waitForSocket(socketPath: string, timeout = 5000) {
             await fs.access(socketPath); // check if socket file exists
             return true;
         } catch (err) {
-            await new Promise(resolve => setTimeout(resolve, 100)); // retry every 100ms
+            await new Promise(resolve => setTimeout(resolve, 200)); // retry every 200ms
         }
     }
     return false;

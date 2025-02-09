@@ -16,8 +16,6 @@ export async function saveChat(
     role: string,
     model: string,
 ): Promise<void> {
-    console.log('Chat ended.');
-
     const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
 
     if (!saveFile) {
@@ -46,7 +44,7 @@ export async function saveChat(
 
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
-    const summary = await promptModel(model, finalSummaryPrompt, temperature, aiRoles[role]);
+    const summary = await promptModel('gemini-flash', finalSummaryPrompt, temperature, aiRoles[role]);
     const formattedSummary = formatChatEntry('Chat Summary', summary, true);
 
     const summaryFile = `${aiHistoryPath}/${saveName}/summary.md`;

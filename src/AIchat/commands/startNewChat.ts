@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as utils from '@AIchat/utils/aiUtils';
-import * as ui from '@UI/generalUI'
+import * as ui from '@UI/generalUI';
 import { aiRoles } from '../data/roles';
 import { deepInfraModels, deepSeekModels, geminiModels, openAiModels } from '../data/models';
 import path from 'path';
@@ -11,10 +11,7 @@ export async function startNewChat(): Promise<void> {
         const tempDir = path.join('/tmp', `ai-chat-${timestamp}`);
         await fs.mkdir(tempDir, { recursive: true });
 
-        const tempFiles = {
-            promptFile: path.join(tempDir, 'prompt.md'),
-            responseFile: path.join(tempDir, 'conversation.md')
-        };
+        const chatFile = path.join(tempDir, 'conversation.md')
 
         const temperature = await utils.promptUserForTemperature();
 
@@ -29,7 +26,7 @@ export async function startNewChat(): Promise<void> {
         })
 
         console.log('Opening vim for prompt...');
-        await utils.converse(tempFiles.responseFile, temperature, role, model);
+        await utils.converse(chatFile, temperature, role, model);
     } catch (error) {
         console.error('Error in AI prompt workflow:', (error as Error).message);
         throw error;
