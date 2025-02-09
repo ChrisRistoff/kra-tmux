@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { removeFile, removeDirectory } from '@system/systemFileManager';
+import { removeFile, removeDirectory } from '@system/commands/systemFileManager';
 
 // Mock the UI and bash helper modules
 jest.mock('@UI/generalUI', () => ({
