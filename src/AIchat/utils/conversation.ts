@@ -111,7 +111,7 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, m
             const conversationHistory = lines.join('\n');
             const fullPrompt = conversationHistory + '\n';
 
-            const aiEntryHeader = formatChatEntry(model, '', false);
+            const aiEntryHeader = formatChatEntry('AI - ' + model, '', false);
             await appendToChat(chatFile, aiEntryHeader);
             await updateNvimAndGoToLastLine(nvim);
 
@@ -135,7 +135,7 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, m
                     }
 
                     // gemini adds an empty line at the end so exclude
-                    if (!modelsThatAddAnEmptyLineAtTheEnd.has(model)) {
+                    if (!modelsThatAddAnEmptyLineAtTheEnd.includes(model)) {
                         await appendToChat(chatFile, '\n');
                         await updateNvimAndGoToLastLine(nvim);
                     }
