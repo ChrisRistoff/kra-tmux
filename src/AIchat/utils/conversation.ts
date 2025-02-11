@@ -7,6 +7,7 @@ import * as bash from '@utils/bashHelper';
 import os from 'os';
 import { modelsThatAddAnEmptyLineAtTheEnd } from '../data/models';
 import { formatChatEntry } from './aiUtils';
+import { openVim } from '@/utils/neovimHelper';
 
 export async function converse(
     chatFile: string,
@@ -22,11 +23,15 @@ export async function converse(
 
         const socketPath = await generateSocketPath();
 
-        const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
-            tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim --listen \\"${socketPath}\\" \\"${chatFile}\\"d;
-            tmux send-keys exit C-m"' C-m`
+        if (process.env.TMUX) {
+            const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
+                tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim --listen \\"${socketPath}\\" \\"${chatFile}\\"d;
+                tmux send-keys exit C-m"' C-m`
 
-        bash.execCommand(tmuxCommand);
+            bash.execCommand(tmuxCommand);
+        } else {
+            openVim(chatFile, '--listen', socketPath);
+        }
 
         await waitForSocket(socketPath);
 
@@ -60,7 +65,6 @@ export async function converse(
             await saveChat(chatFile, fullPrompt, temperature, role, model);
 
             await fs.rm(chatFile);
-
         })
     } catch (error) {
         console.error('Error in AI prompt workflow:', (error as Error).message);

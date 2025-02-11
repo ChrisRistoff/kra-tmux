@@ -16,7 +16,7 @@ export function getDeepInfraKey(): string {
     const apiKey = process.env.DEEP_INFRA;
 
     if (!apiKey) {
-        throw new Error('DEEP_SEEK environment variable is not set');
+        throw new Error('DEEP_INFRA environment variable is not set');
     }
 
     return apiKey;
@@ -26,7 +26,7 @@ export function getGeminiKey(): string {
     const apiKey = process.env.GEMINI;
 
     if (!apiKey) {
-        throw new Error('DEEP_SEEK environment variable is not set');
+        throw new Error('GEMINI environment variable is not set');
     }
 
     return apiKey;
@@ -37,6 +37,16 @@ export function getDeepSeekKey(): string {
 
     if (!apiKey) {
         throw new Error('DEEP_SEEK environment variable is not set');
+    }
+
+    return apiKey;
+}
+
+export function getOpenRouterKey(): string {
+    const apiKey = process.env.OPEN_ROUTER;
+
+    if (!apiKey) {
+        throw new Error('OPEN_ROUTER environment variable is not set');
     }
 
     return apiKey;

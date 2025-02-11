@@ -35,32 +35,25 @@ export async function loadNvimSession(folderName: string, session: string, windo
     });
 }
 
-export function openVim(filePath: string, command?: string): Promise<void> {
+export async function openVim(filePath: string, ...args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-        const vimProcess = spawn('nvim', [filePath], {
+        const vimProcess = spawn('nvim', [filePath, ...args], {
             stdio: 'inherit',
-            shell: true,
+            shell: false,
         });
 
-        if (command) {
-            bash.sendKeysToTmuxTargetSession({
-                command
-            });
-        }
-
-        vimProcess.on('close', (code) => {
+        vimProcess.on('disconnect', (code: any) => {
             if (code === 0) {
-                console.log('Vim exited successfully');
-                resolve();
+                return resolve();
             } else {
                 console.log(`Vim exited with code ${code}`);
-                reject(new Error(`Vim exited with code ${code}`));
+                return reject(new Error(`Vim exited with code ${code}`));
             }
         });
 
         vimProcess.on('error', (err) => {
             console.error('Failed to start Vim:', err);
-            reject(err);
+            return reject(err);
         });
     });
 }

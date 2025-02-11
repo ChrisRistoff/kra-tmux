@@ -1,4 +1,4 @@
-import { geminiModels, deepInfraModels, openAiModels, deepSeekModels } from '../data/models';
+import { geminiModels, deepInfraModels, openAiModels, deepSeekModels, openRouter } from '../data/models';
 import * as keys from '@AIchat/data/keys';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
@@ -44,6 +44,15 @@ export async function promptModel(model: string, prompt: string, temperature: nu
         llmModel = deepSeekModels[model];
     }
 
+    if (openRouter[model]) {
+        openai = new OpenAI({
+            baseURL: 'https://openrouter.ai/api/v1',
+            apiKey: keys.getOpenRouterKey(),
+        })
+
+        llmModel = openRouter[model];
+    }
+
     // no match, default to openAI
     if (!openai) {
         openai = new OpenAI();
@@ -74,7 +83,7 @@ async function createOpenAIStream(
         for await (const chunk of completion) {
             const text = chunk.choices[0]?.delta?.content || '';
             yield {
-                text: () => text  // mimic chunk.text()
+                text: () => text // mimic chunk.text()
             };
         }
     }

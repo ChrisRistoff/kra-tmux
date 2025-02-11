@@ -16,10 +16,15 @@ export const geminiModels: Models = {
 }
 
 export const openAiModels: Models = {
-    'o3-mini': 'o3-mini',
+    // 'o1-mini-openAI': 'o1-mini'
 }
 
 export const deepSeekModels: Models = {
     // 'deepSeekV3': 'deepseek-chat',
     // 'deepSeekR1': 'deepseek-reasoner',
+}
+
+export const openRouter: Models = {
+    'mistral-codestral': 'mistralai/codestral-2501',
+    'o1-mini-openRouter': 'openai/o1-mini'
 }
