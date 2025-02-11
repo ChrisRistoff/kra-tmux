@@ -59,7 +59,11 @@ export async function saveChat(
     await fs.writeFile(summaryFile, formattedSummary);
 
     if (process.env.TMUX) {
-        await nvim.openNvimInTmuxAndWait(summaryFile);
+        const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
+            tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim  \\"${summaryFile}\\";
+            tmux send-keys exit C-m"' C-m`
+
+        bash.execCommand(tmuxCommand);
     } else {
         nvim.openVim(summaryFile);
     }

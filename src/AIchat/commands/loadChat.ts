@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import * as bash from '@utils/bashHelper';
 import * as path from 'path';
 import * as conversation from '@AIchat/utils/conversation';
 import * as ui from '@UI/generalUI';
@@ -28,7 +29,11 @@ export async function loadChat(): Promise<void> {
         const chatSummaryPath= path.join(aiHistoryPath, selectedChat, 'summary.md');
 
         if (process.env.TMUX) {
-            await nvim.openNvimInTmuxAndWait(chatSummaryPath);
+            const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
+                tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim  \\"${chatSummaryPath}\\";
+                tmux send-keys exit C-m"' C-m`
+
+            bash.execCommand(tmuxCommand);
         } else {
             nvim.openVim(chatSummaryPath);
         }
