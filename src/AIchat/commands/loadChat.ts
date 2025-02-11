@@ -27,7 +27,11 @@ export async function loadChat(): Promise<void> {
         const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
         const chatSummaryPath= path.join(aiHistoryPath, selectedChat, 'summary.md');
 
-        await nvim.openNvimInTmuxAndWait(chatSummaryPath);
+        if (process.env.TMUX) {
+            await nvim.openNvimInTmuxAndWait(chatSummaryPath);
+        } else {
+            nvim.openVim(chatSummaryPath);
+        }
 
         const loadTheChat = await ui.promptUserYesOrNo('Do you want to open this chat?');
 

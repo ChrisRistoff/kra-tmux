@@ -57,7 +57,12 @@ export async function saveChat(
     const summaryFile = `${aiHistoryPath}/${saveName}/summary.md`;
 
     await fs.writeFile(summaryFile, formattedSummary);
-    await nvim.openNvimInTmuxAndWait(summaryFile);
+
+    if (process.env.TMUX) {
+        await nvim.openNvimInTmuxAndWait(summaryFile);
+    } else {
+        nvim.openVim(summaryFile);
+    }
 
     const editedSummary = await fs.readFile(summaryFile, 'utf-8');
     await fs.writeFile(`${aiHistoryPath}/${saveName}/summary.md`, editedSummary);
