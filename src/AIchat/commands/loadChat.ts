@@ -6,6 +6,8 @@ import * as ui from '@UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 import * as nvim from '@/utils/neovimHelper';
 import { filterGitKeep } from '@/utils/common';
+import { providers } from '../data/models';
+import { pickProviderAndModel } from '../utils/aiUtils';
 
 export async function loadChat(): Promise<void> {
     try {
@@ -48,11 +50,22 @@ export async function loadChat(): Promise<void> {
 
         await fs.copyFile(chatHistoryPath, chatFile);
 
+        if (!chatData.provider || !checkProviderAndModelValid(chatData.provider, chatData.model)) {
+            console.log('Pick a new provider');
+            console.log('Old model on save: ', chatData.model);
+
+            const { provider, model } = await pickProviderAndModel();
+
+            chatData.provider = provider;
+            chatData.model = model;
+        }
+
         const chatFileLoaded = true;
         await conversation.converse(
             chatFile,
             chatData.temperature,
             chatData.role,
+            chatData.provider,
             chatData.model,
             chatFileLoaded
         );
@@ -60,4 +73,8 @@ export async function loadChat(): Promise<void> {
         console.error('Error loading chat:', (error as Error).message);
         throw error;
     }
+}
+
+function checkProviderAndModelValid(provider: string, model: string): boolean {
+    return Object.keys(providers[provider]).some((value) => providers[provider][value] === model);
 }

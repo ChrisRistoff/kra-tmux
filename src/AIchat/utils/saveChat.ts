@@ -8,12 +8,14 @@ import { promptModel } from './promptModel';
 import { formatChatEntry } from './aiUtils';
 import { summaryPrompt } from '../data/prompts';
 import { filterGitKeep } from '@/utils/common';
+import { providers } from '../data/models';
 
 export async function saveChat(
     chatFile: string,
     fullPrompt: string,
     temperature: number,
     role: string,
+    provider: string,
     model: string,
 ): Promise<void> {
     const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
@@ -33,7 +35,7 @@ export async function saveChat(
         await bash.execCommand(`rm -rf ${aiHistoryPath}/${saveName}`);
     }
 
-    const chatData = createChatData(chatFile, fullPrompt, temperature, role, model);
+    const chatData = createChatData(chatFile, fullPrompt, temperature, role, provider, model);
     const historyFile = `${aiHistoryPath}/${saveName}/${saveName}`;
 
     await fs.mkdir(`${aiHistoryPath}/${saveName}`);
@@ -45,7 +47,7 @@ export async function saveChat(
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
     console.log('Preparing summary...')
-    const summary = await promptModel('gemini-flash', finalSummaryPrompt, temperature, aiRoles[role]);
+    const summary = await promptModel('gemini', providers['gemini']['gemini-thinking'], finalSummaryPrompt, temperature, aiRoles[role]);
 
     let fullResponse = '';
     for await (const chunk of summary) {
@@ -75,12 +77,13 @@ export async function saveChat(
     return;
 }
 
-function createChatData(chatFile: string, fullPrompt: string, temperature: number, role: string, model: string): string {
+function createChatData(chatFile: string, fullPrompt: string, temperature: number, role: string, provider: string, model: string): string {
     return JSON.stringify({
         chatFile,
         fullPrompt,
         temperature,
         role,
+        provider,
         model,
     }, null, 2)
 }

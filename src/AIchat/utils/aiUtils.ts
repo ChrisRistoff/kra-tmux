@@ -1,8 +1,10 @@
 import inquirer from 'inquirer';
-import { geminiModels } from '../data/models';
+import { ChatModelDetails } from '../types/aiTypes';
+import { providers } from '../data/models';
+import * as ui from '@UI/generalUI';
 
 export async function promptUserForTemperature(model: string) {
-    const maxTemp = geminiModels[model] ? 20 : 10;
+    const maxTemp = model.startsWith('gemini') ? 20 : 10;
     const optionsArray: string[] = [];
 
     for (let i = 0; i <= maxTemp; i++) {
@@ -37,4 +39,21 @@ export function formatChatEntry(role: string, content: string, topLevel = false)
     }
 
     return content ? `${header}${content}\n---\n` : header;
+}
+
+export async function pickProviderAndModel(): Promise<ChatModelDetails> {
+    const provider = await ui.searchSelectAndReturnFromArray({
+        itemsArray: Object.keys(providers),
+        prompt: 'Select a provider',
+    });
+
+    const model = await ui.searchSelectAndReturnFromArray({
+        itemsArray: Object.keys(providers[provider]),
+        prompt: 'Select a model',
+    });
+
+    return {
+        provider,
+        model: providers[provider][model]
+    }
 }

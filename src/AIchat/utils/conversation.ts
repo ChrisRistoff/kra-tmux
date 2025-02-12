@@ -5,7 +5,6 @@ import { saveChat } from './saveChat';
 import * as neovim from 'neovim';
 import * as bash from '@utils/bashHelper';
 import os from 'os';
-import { modelsThatAddAnEmptyLineAtTheEnd } from '../data/models';
 import { formatChatEntry } from './aiUtils';
 import { openVim } from '@/utils/neovimHelper';
 
@@ -13,6 +12,7 @@ export async function converse(
     chatFile: string,
     temperature: number,
     role: string,
+    provider: string,
     model: string,
     isChatLoaded = false,
 ): Promise<void> {
@@ -54,7 +54,7 @@ export async function converse(
         await nvim.command(`edit ${chatFile}`);
         await updateNvimAndGoToLastLine(nvim);
 
-        await onHitEnterInNeovim(nvim, chatFile, model, temperature, role);
+        await onHitEnterInNeovim(nvim, chatFile, provider,  model, temperature, role);
 
         nvim.on('disconnect', async () => {
             console.log('Chat Ended.');
@@ -62,7 +62,7 @@ export async function converse(
             const conversationHistory = await fs.readFile(chatFile, 'utf8');
             const fullPrompt = conversationHistory + '\n';
 
-            await saveChat(chatFile, fullPrompt, temperature, role, model);
+            await saveChat(chatFile, fullPrompt, temperature, role, provider, model);
 
             await fs.rm(chatFile);
         })
@@ -77,10 +77,10 @@ async function waitForSocket(socketPath: string, timeout = 5000) {
     const start = Date.now();
     while (Date.now() - start < timeout) {
         try {
-            await fs.access(socketPath); // check if socket file exists
+            await fs.access(socketPath);
             return true;
         } catch (err) {
-            await new Promise(resolve => setTimeout(resolve, 200)); // retry every 200ms
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
     }
     return false;
@@ -106,7 +106,7 @@ async function updateNvimAndGoToLastLine(nvim: neovim.NeovimClient) {
     await nvim.command('normal! o');
 }
 
-async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, model: string, temperature: number, role: string) {
+async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,provider: string, model: string, temperature: number, role: string) {
     nvim.on('notification', async (method, args) => {
         if (method === 'prompt_action' && args[0] === 'submit_pressed') {
             const buffer = await nvim.buffer;
@@ -119,7 +119,7 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, m
             await appendToChat(chatFile, aiEntryHeader);
             await updateNvimAndGoToLastLine(nvim);
 
-            const response = await promptModel(model, fullPrompt, temperature, aiRoles[role]);
+            const response = await promptModel(provider, model, fullPrompt, temperature, aiRoles[role]);
 
             if (typeof response === 'string') {
                 await appendToChat(chatFile, response);
@@ -138,11 +138,8 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string, m
                         await nvim.command('edit!');
                     }
 
-                    // gemini adds an empty line at the end so exclude
-                    if (!modelsThatAddAnEmptyLineAtTheEnd.includes(model)) {
-                        await appendToChat(chatFile, '\n');
-                        await updateNvimAndGoToLastLine(nvim);
-                    }
+                    await appendToChat(chatFile, '\n');
+                    await updateNvimAndGoToLastLine(nvim);
                 } catch (error) {
                     console.log(error);
                 }
