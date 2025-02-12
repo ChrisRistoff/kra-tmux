@@ -1,65 +1,67 @@
-import { geminiModels, deepInfraModels, openAiModels, deepSeekModels, openRouter } from '../data/models';
 import * as keys from '@AIchat/data/keys';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 
-export async function promptModel(model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<any> | string> {
-    if (geminiModels[model]) {
-        const genAI = new GoogleGenerativeAI(keys.getGeminiKey());
-        const geminiModel = genAI.getGenerativeModel({
-            model: geminiModels[model],
-            generationConfig: {
-                temperature,
-            },
-            systemInstruction: system,
-            tools: [
-                {
-                    codeExecution: {},
-                }
-            ]
-        });
+export async function promptModel(provider: string, model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<any> | string> {
+    let apiKey;
+    let baseURL;
 
-        const result = await geminiModel.generateContentStream(prompt);
-        return result.stream;
+    switch (provider) {
+        case 'deep-infra':
+            apiKey = keys.getDeepInfraKey();
+            baseURL = "https://api.deepinfra.com/v1/openai";
+            break;
+        case 'deep-seek':
+            apiKey = keys.getDeepSeekKey();
+            baseURL = 'https://api.deepseek.com';
+            break;
+        case 'open-router':
+            apiKey = keys.getOpenRouterKey();
+            baseURL = 'https://openrouter.ai/api/v1';
+            break;
+        case 'gemini':
+            apiKey = keys.getGeminiKey();
+            baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
+            break;
+        case 'open-ai':
+        default:
+            break;
     }
 
     let openai;
-    let llmModel;
 
-    if (deepInfraModels[model]) {
+    if (provider === 'gemini') {
         openai = new OpenAI({
-            apiKey: keys.getDeepInfraKey(),
-            baseURL: "https://api.deepinfra.com/v1/openai",
-        });
-
-        llmModel = deepInfraModels[model];
-    }
-
-    if (deepSeekModels[model]) {
-        openai = new OpenAI({
-            baseURL: 'https://api.deepseek.com',
-            apiKey: keys.getDeepSeekKey(),
-        });
-
-        llmModel = deepSeekModels[model];
-    }
-
-    if (openRouter[model]) {
-        openai = new OpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: keys.getOpenRouterKey(),
+            apiKey,
+            baseURL,
         })
-
-        llmModel = openRouter[model];
     }
 
-    // no match, default to openAI
+    if (provider === 'deep-infra') {
+        openai = new OpenAI({
+            apiKey,
+            baseURL,
+        });
+    }
+
+    if (provider === 'deep-seek') {
+        openai = new OpenAI({
+            baseURL,
+            apiKey,
+        });
+    }
+
+    if (provider === 'open-router') {
+        openai = new OpenAI({
+            baseURL,
+            apiKey,
+        })
+    }
+
     if (!openai) {
         openai = new OpenAI();
-        llmModel = openAiModels[model];
     }
 
-    return createOpenAIStream(openai, llmModel!, system, prompt, temperature);
+    return createOpenAIStream(openai, model, system, prompt, temperature);
 }
 
 async function createOpenAIStream(
@@ -83,7 +85,7 @@ async function createOpenAIStream(
         for await (const chunk of completion) {
             const text = chunk.choices[0]?.delta?.content || '';
             yield {
-                text: () => text // mimic chunk.text()
+                text: () => text
             };
         }
     }

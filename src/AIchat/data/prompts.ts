@@ -8,4 +8,6 @@ export const summaryPrompt = `Please provide an executive summary of this conver
                               3. Any action items or next steps identified
 
                               4. Length: Keep the entire summary under 800 words.
+
+                              Do not respond with anything that is outside the instructions above.
                               `;
