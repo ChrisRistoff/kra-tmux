@@ -74,7 +74,7 @@ async function createOpenAIStream(
     const completion = await openai.chat.completions.create({
         messages: [
             { role: "system", content: system },
-            { role: "user", content: prompt },
+            { role: "user", content: prompt + '\n' + 'chat entries are added by us, do not add your own chat entry above your response.'},
         ],
         model: llmModel,
         temperature: temperature,
