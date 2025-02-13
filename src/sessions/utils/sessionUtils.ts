@@ -11,9 +11,7 @@ export async function getCurrentSessions(): Promise<TmuxSessions> {
 
     try {
         output = await bash.execCommand(`tmux list-sessions -F '#S'`);
-    } catch (error) {
-        console.log(error);
-
+    } catch (_error) {
         return currentSessions;
     }
 
