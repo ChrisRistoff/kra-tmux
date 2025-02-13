@@ -1,14 +1,10 @@
 import * as bash from '@utils/bashHelper';
 import * as ui from '@UI/generalUI';
+import { SearchCriteria } from '@system/types/systemFileTypes';
 
 enum SearchTargetType {
     File = 'f',
     Directory = 'd',
-}
-
-interface SearchCriteria {
-    searchString: string;
-    exactMatch: boolean;
 }
 
 const SYSTEM_CONSTANTS = {
@@ -113,6 +109,7 @@ export const removeFile = async (): Promise<void> => {
 
         if (!fileToRemove) {
             console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+
             return;
         }
 
@@ -134,6 +131,7 @@ export const removeDirectory = async (): Promise<void> => {
 
         if (!dirToRemove) {
             console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+
             return;
         }
 

@@ -3,6 +3,7 @@ import * as bash from '@utils/bashHelper';
 export async function checkSessionExists(sessionName: string): Promise<boolean> {
     try {
         await bash.execCommand(`tmux has-session -t ${sessionName}`);
+
         return true;
     } catch (error) {
         if (error instanceof Error && error.message.includes(`can't find session`)) {
@@ -15,6 +16,7 @@ export async function checkSessionExists(sessionName: string): Promise<boolean> 
 export async function attachToSession(sessionName: string): Promise<void> {
     if (!await checkSessionExists(sessionName)) {
         console.log(`Session does not exist: ${sessionName}`);
+
         return;
     }
 
@@ -49,8 +51,8 @@ export async function detachSession(): Promise<void> {
 }
 
 export async function createSession(sessionName: string): Promise<void> {
-    const createSession = `tmux new-session -d -s ${sessionName}`;
-    await bash.execCommand(createSession);
+    const createSessionCommand = `tmux new-session -d -s ${sessionName}`;
+    await bash.execCommand(createSessionCommand);
 }
 
 export async function createWindow(windowName: string): Promise<void> {

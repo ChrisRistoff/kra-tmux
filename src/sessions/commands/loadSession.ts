@@ -119,6 +119,7 @@ export async function loadLatestSession(): Promise<void> {
 
         if (!savedData || Object.keys(savedData.sessions).length === 0) {
             console.error('No saved sessions found.');
+
             return;
         }
 

@@ -26,7 +26,7 @@ export async function saveNvimSession(folderName: string, session: string, windo
     });
 }
 
-export async function loadNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number) {
+export async function loadNvimSession(folderName: string, session: string, windowIndex: number, paneIndex: number): Promise<void> {
     await bash.sendKeysToTmuxTargetSession({
         sessionName: session,
         windowIndex,
@@ -42,33 +42,31 @@ export async function openVim(filePath: string, ...args: string[]): Promise<void
             shell: false,
         });
 
-        vimProcess.on('disconnect', (code: any) => {
+        vimProcess.on('close', (code: number) => {
             if (code === 0) {
                 return resolve();
             } else {
                 console.log(`Vim exited with code ${code}`);
+
                 return reject(new Error(`Vim exited with code ${code}`));
             }
         });
 
         vimProcess.on('error', (err) => {
             console.error('Failed to start Vim:', err);
+
             return reject(err);
         });
     });
 }
 
 export async function openNvimInTmuxAndWait(filePath: string): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            await bash.execCommand(`tmux new-window "nvim +'normal GA' '${filePath}'; tmux wait-for -S vim-done"`);
+    try {
+        await bash.execCommand(`tmux new-window "nvim +'normal GA' '${filePath}'; tmux wait-for -S vim-done"`);
 
-            // wait for the marker to be set
-            await bash.execCommand('tmux wait-for vim-done');
-
-            resolve();
-        } catch (error) {
-            reject(error);
-        }
-    });
+        // wait for the marker to be set
+        await bash.execCommand('tmux wait-for vim-done');
+    } catch (error) {
+        throw error;
+    }
 }

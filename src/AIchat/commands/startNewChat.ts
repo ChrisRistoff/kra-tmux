@@ -14,7 +14,7 @@ export async function startNewChat(): Promise<void> {
             prompt: 'Select a role from the list: '
         });
 
-        const { provider, model }= await utils.pickProviderAndModel();
+        const { provider, model } = await utils.pickProviderAndModel();
 
         const temperature = await utils.promptUserForTemperature(model);
 

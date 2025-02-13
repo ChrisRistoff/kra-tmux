@@ -1,17 +1,17 @@
 
-export type AiRoles = {
+export interface AiRoles {
     [key: string]: string,
 }
 
-export type Models = {
+export interface Models {
     [key: string]: string,
 }
 
-export type Providers = {
+export interface Providers {
     [key: string]: Models,
 }
 
-export type ChatModelDetails = {
+export interface ChatModelDetails {
     provider: string,
     model: string
 }

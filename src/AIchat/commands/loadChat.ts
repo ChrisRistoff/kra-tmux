@@ -15,6 +15,7 @@ export async function loadChat(): Promise<void> {
 
         if (savedChats.length === 0) {
             console.log('No saved chats found.');
+
             return;
         }
 
@@ -28,7 +29,7 @@ export async function loadChat(): Promise<void> {
 
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
         const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
-        const chatSummaryPath= path.join(aiHistoryPath, selectedChat, 'summary.md');
+        const chatSummaryPath = path.join(aiHistoryPath, selectedChat, 'summary.md');
 
         if (process.env.TMUX) {
             const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \

@@ -10,6 +10,7 @@ export async function handleConflicts(): Promise<void> {
 
     if (!conflictsArray.length) {
         console.log('No Conflicts to Handle!');
+
         return;
     }
 

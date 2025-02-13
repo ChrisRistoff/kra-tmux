@@ -3,11 +3,13 @@ import { GIT_COMMANDS } from "@git/config/gitConstants";
 
 export async function getCurrentBranch(): Promise<string> {
     const response = await bash.execCommand(GIT_COMMANDS.GET_BRANCH);
+
     return response.stdout.split('\n')[0];
 }
 
 export async function getTopLevelPath(): Promise<string> {
     const response = await bash.execCommand(GIT_COMMANDS.GET_TOP_LEVEL);
+
     return response.stdout.split('\n')[0];
 }
 

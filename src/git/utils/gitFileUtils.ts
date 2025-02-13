@@ -9,6 +9,7 @@ export async function getFileList(command: string): Promise<string[]> {
     }
 
     const files = response.stdout.split('\n');
+
     return files.filter(Boolean); // Removes empty strings
 }
 

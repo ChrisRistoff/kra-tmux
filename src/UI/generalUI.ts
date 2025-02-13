@@ -1,12 +1,8 @@
+import { SearchOptions } from '@/types/uiTypes';
 import inquirer from 'inquirer';
 import autocompletePrompt from 'inquirer-autocomplete-prompt';
 
 inquirer.registerPrompt('autocomplete', autocompletePrompt);
-
-export type SearchOptions = {
-  prompt: string;
-  itemsArray: string[];
-}
 
 export async function promptUserYesOrNo(message: string): Promise<boolean> {
     const { proceed }: { proceed: boolean } = await inquirer.prompt([
@@ -94,6 +90,7 @@ export async function searchSelectAndReturnFromArray(options: SearchOptions): Pr
             }
 
             const searchTerm = input.toLowerCase();
+
             return options.itemsArray.filter(option =>
                 option.toLowerCase().includes(searchTerm)
             );

@@ -21,13 +21,6 @@ export type Pane = {
     paneTop: string,
 }
 
-export type SendKeysArguments = {
-    sessionName?: string;
-    windowIndex?: number;
-    paneIndex: number;
-    command: string;
-}
-
 export type DateForFileName = {
     year: string,
     month: string,
@@ -39,4 +32,4 @@ export type SessionCommand = (args?: string[]) => Promise<void>;
 
 export type SessionCommands = {
     [key: string]: SessionCommand;
-}; 
+}

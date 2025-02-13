@@ -19,6 +19,7 @@ async function getFileToMoveFromUser(): Promise<string | string[]> {
 
     if (fileToSave === 'all') {
         itemsArray.shift();
+
         return itemsArray;
     }
 
@@ -101,7 +102,7 @@ export async function saveUntracked(): Promise<void> {
     const gitBranchName = await getCurrentBranch();
 
     if (Array.isArray(fileToSavePath)) {
-        await Promise.all(fileToSavePath.map(file => saveUntrackedFile(file, gitBranchName)));
+        await Promise.all(fileToSavePath.map(async file => saveUntrackedFile(file, gitBranchName)));
     } else {
         await saveUntrackedFile(fileToSavePath, gitBranchName);
     }
@@ -130,7 +131,8 @@ export async function loadUntracked(): Promise<void> {
 
     if (fileToLoadName === 'all') {
         savedUntrackedFiles.shift();
-        await Promise.all(savedUntrackedFiles.map(fileName => loadUntrackedFile(fileName, gitBranchName)));
+        await Promise.all(savedUntrackedFiles.map(async fileName => loadUntrackedFile(fileName, gitBranchName)));
+
         return;
     }
 

@@ -9,8 +9,8 @@ const deepInfraModels: Models = {
 }
 
 const geminiModels: Models = {
-    'gemini-thinking': 'gemini-2.0-flash-thinking-exp-01-21',
-    'gemini-pro': 'gemini-2.0-pro-exp-02-05',
+    'gemini-thinking': 'gemini-2.0-flash-thinking-exp',
+    'gemini-pro': 'gemini-2.0-pro-exp',
     'gemini-flash': 'models/gemini-2.0-flash-001',
 }
 

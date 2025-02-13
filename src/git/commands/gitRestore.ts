@@ -1,13 +1,13 @@
 import * as bash from "@utils/bashHelper";
 import * as ui from "@UI/generalUI";
-import { SearchOptions } from "@customTypes/gitTypes";
+import { GitSearchOptions } from "@customTypes/gitTypes";
 import { getModifiedFiles } from "@git/utils/gitFileUtils";
 
 async function getFileToRestoreFromUser(): Promise<string> {
     const itemsArray = await getModifiedFiles();
     itemsArray.unshift('All');
 
-    const options: SearchOptions = {
+    const options: GitSearchOptions = {
         prompt: "Pick a file to restore: ",
         itemsArray,
     };
@@ -24,6 +24,7 @@ export async function restoreFile(): Promise<void> {
 
     if (fileToRestore === "All") {
         await bash.execCommand('git restore ./');
+
         return;
     }
 

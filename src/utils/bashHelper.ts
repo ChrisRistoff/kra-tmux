@@ -1,12 +1,5 @@
 import { spawn, exec } from 'child_process';
-import { AllowedCommandsForNoCode } from '@customTypes/bashTypes';
-
-type SendKeysArguments = {
-    sessionName?: string
-    windowIndex?: number
-    paneIndex?: number
-    command: string,
-}
+import { AllowedCommandsForNoCode, SendKeysArguments } from '@customTypes/bashTypes';
 
 const allowedCommandsForNoCode: AllowedCommandsForNoCode = {
     'tmux': new Set(['attach-session', 'has-session', 'kill-server']),
@@ -44,10 +37,6 @@ export async function execCommand(command: string): Promise<{ stdout: string, st
 };
 
 function isCommandValidWithNoCode(command: string, args: string[] | undefined): boolean {
-    if (!allowedCommandsForNoCode[command]) {
-        return false;
-    }
-
     if (!args) {
         return false;
     }
@@ -99,11 +88,14 @@ export async function grepFileForString(fileName: string, searchString: string):
 
         if (stderr) {
             console.error(`grep error: ${stderr}`);
+
             return false;
         }
 
         return stdout !== "";
-    } catch (_error) {
+    } catch (error) {
+        console.log(error)
+
         return false;
     }
 }

@@ -78,16 +78,19 @@ async function waitForSocket(socketPath: string, timeout = 5000) {
     while (Date.now() - start < timeout) {
         try {
             await fs.access(socketPath);
+
             return true;
         } catch (err) {
             await new Promise(resolve => setTimeout(resolve, 200));
         }
     }
+
     return false;
 }
 
 async function generateSocketPath(): Promise<string> {
     const randomString = Math.random().toString(36).substring(2, 15);
+
     return `${os.tmpdir()}/nvim-${randomString}.sock`;
 }
 

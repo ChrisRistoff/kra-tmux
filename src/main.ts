@@ -17,21 +17,25 @@ const main = async (): Promise<void> => {
 
     if (args[0] === 'sys' && systemCommands[args[1]]) {
         await systemCommands[args[1]]();
+
         return;
     }
 
     if (args[0] === 'tmux' && tmuxCommands[args[1]]) {
         await tmuxCommands[args[1]]();
+
         return;
     }
 
     if (args[0] === 'git' && gitCommands[args[1]]) {
         await gitCommands[args[1]]();
+
         return;
     }
 
     if (args[0] === 'ai' && aiCommands[args[1]]) {
         await aiCommands[args[1]]();
+
         return;
     }
 
@@ -42,4 +46,4 @@ const main = async (): Promise<void> => {
     console.log('Command not a command.');
 };
 
-main();
+main().then((_res) => console.log('Done.')).catch((err) => console.log(err));

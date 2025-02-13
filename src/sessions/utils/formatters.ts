@@ -32,8 +32,11 @@ export async function formatWindow(window: string): Promise<Window> {
 async function getGitRepoLink(path: string): Promise<string | undefined> {
     try {
         const { stdout } = await bash.execCommand(`git -C ${path} remote get-url origin`);
+
         return stdout.split('\n')[0];
-    } catch (_error) {
+    } catch (error) {
+        console.log(error);
+
         return undefined;
     }
 }

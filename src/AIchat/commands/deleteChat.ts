@@ -9,6 +9,7 @@ export async function deleteChats(): Promise<void> {
 
         if (savedChats.length === 0) {
             console.log('No active chat sessions found.');
+
             return;
         }
 

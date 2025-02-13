@@ -11,8 +11,9 @@ export async function getCurrentSessions(): Promise<TmuxSessions> {
 
     try {
         output = await bash.execCommand(`tmux list-sessions -F '#S'`);
-    } catch (_error) {
-        console.log('No active sessions found!');
+    } catch (error) {
+        console.log(error);
+
         return currentSessions;
     }
 
@@ -49,9 +50,11 @@ export async function getPanesForWindow(session: string, windowIndex: number): P
             `tmux list-panes -t ${session}:${windowIndex} -F "#{pane_current_command}:#{pane_current_path}:#{pane_left}x#{pane_top}"`
         );
         const panesArray = panes.stdout.toString().trim().split('\n');
+
         return Promise.all(panesArray.map(formatPane));
     } catch (error) {
         console.log('Error getting panes:', error);
+
         return [];
     }
 }
@@ -61,12 +64,14 @@ export async function getSavedSessionsNames(): Promise<string[]> {
         return filterGitKeep(await fs.readdir(sessionFilesFolder));
     } catch (error) {
         console.error('Error reading directory:', error);
+
         return [];
     }
 }
 
 export async function getSavedSessionsByFilePath(filePath: string): Promise<TmuxSessions> {
     const latestSessions = await fs.readFile(filePath);
+
     return JSON.parse(latestSessions.toString());
 }
 
@@ -75,5 +80,6 @@ export function getDateString(): string {
     const timeArray = dateArray[4].split(':');
     timeArray.pop();
     const timeString = timeArray.join(':');
+
     return [dateArray[3], dateArray[1], dateArray[2], timeString].join('-');
 }

@@ -28,7 +28,7 @@ async function getFileNameFromUser(): Promise<string> {
         return await generalUI.searchAndSelect({
             prompt: 'Please write a name for save: ',
             itemsArray,
-        }) ?? '';
+        }) || '';
     }
 
     console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
@@ -58,6 +58,7 @@ export async function saveSessionsToFile(): Promise<void> {
 
     if (sessionString === '{}') {
         console.log('No sessions found to save!');
+
         return;
     }
 
