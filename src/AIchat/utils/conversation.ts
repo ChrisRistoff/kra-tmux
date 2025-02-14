@@ -139,6 +139,7 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
 
                         await appendToChat(chatFile, text);
                         await nvim.command('edit!');
+                        await nvim.command('redraw!');
                     }
 
                     await appendToChat(chatFile, '\n');

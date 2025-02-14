@@ -51,3 +51,13 @@ export function getOpenRouterKey(): string {
 
     return apiKey;
 }
+
+export function getMistralKey(): string {
+    const apiKey = process.env.MISTRAL;
+
+    if (!apiKey) {
+        throw new Error('MISTRAL environment variable is not set');
+    }
+
+    return apiKey;
+}

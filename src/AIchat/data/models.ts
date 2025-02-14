@@ -28,10 +28,16 @@ const openRouterModels: Models = {
     'o1-mini-openRouter': 'openai/o1-mini'
 }
 
+const mistralModels: Models = {
+    'open-7x22': 'open-mixtral-8x22b',
+    'large': 'mistral-large-2411',
+}
+
 export const providers: Providers = {
     'deep-infra': deepInfraModels,
     'gemini': geminiModels,
     'open-router': openRouterModels,
     'open-ai': openAiModels,
     'deep-seek': deepSeekModels,
+    'mistral': mistralModels,
 }

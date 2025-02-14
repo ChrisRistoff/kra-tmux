@@ -1,5 +1,8 @@
 import * as keys from '@AIchat/data/keys';
+import { Mistral } from '@mistralai/mistralai';
 import OpenAI from "openai";
+
+const formattingRules = '\n Respond without adding chat entries, we format that on our end.';
 
 export async function promptModel(provider: string, model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<any> | string> {
     let apiKey;
@@ -28,6 +31,10 @@ export async function promptModel(provider: string, model: string, prompt: strin
     }
 
     let openai;
+
+    if (provider === 'mistral') {
+        return createMistralStream(prompt, system, model);
+    }
 
     if (provider === 'gemini') {
         openai = new OpenAI({
@@ -74,7 +81,7 @@ async function createOpenAIStream(
     const completion = await openai.chat.completions.create({
         messages: [
             { role: "system", content: system },
-            { role: "user", content: prompt + '\n' + 'chat entries are added by us, do not add your own chat entry above your response.'},
+            { role: "user", content: prompt + formattingRules},
         ],
         model: llmModel,
         temperature: temperature,
@@ -84,6 +91,30 @@ async function createOpenAIStream(
     async function* streamResponse() {
         for await (const chunk of completion) {
             const text = chunk.choices[0]?.delta?.content || '';
+            yield {
+                text: () => text
+            };
+        }
+    }
+
+    return streamResponse();
+}
+
+async function createMistralStream(prompt: string, system: string, model: string): Promise<AsyncIterable<any> | string> {
+    const client = new Mistral({apiKey: keys.getMistralKey()});
+
+    async function* streamResponse() {
+        const stream = await client.chat.stream({
+            model,
+            messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: prompt + formattingRules },
+            ],
+            stream: true,
+        });
+
+        for await (const chunk of stream) {
+            const text = chunk.data?.choices[0]?.delta?.content || '';
             yield {
                 text: () => text
             };

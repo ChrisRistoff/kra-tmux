@@ -33,6 +33,7 @@
   "dependencies": {
     "@ai-sdk/deepinfra": "^0.1.9",
     "@google/generative-ai": "^0.21.0",
+    "@mistralai/mistralai": "^1.5.0",
     "ai": "^4.1.17",
     "dotenv": "^16.4.7",
     "events": "^3.3.0",
