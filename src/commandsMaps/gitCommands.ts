@@ -10,4 +10,5 @@ export const gitCommands: Commands = {
     'stash': git.applyOrDropStash,
     'stash-drop-multiple': git.dropMultipleStashes,
     'conflict-handle': git.handleConflicts,
+    'view-changed': git.handleViewChanged,
 };
