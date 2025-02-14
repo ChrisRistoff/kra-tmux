@@ -73,7 +73,7 @@ export async function converse(
     }
 }
 
-async function waitForSocket(socketPath: string, timeout = 5000) {
+async function waitForSocket(socketPath: string, timeout = 5000): Promise<boolean> {
     const start = Date.now();
     while (Date.now() - start < timeout) {
         try {
@@ -103,13 +103,13 @@ async function appendToChat(file: string, content: string): Promise<void> {
     await fs.appendFile(file, content, 'utf-8');
 }
 
-async function updateNvimAndGoToLastLine(nvim: neovim.NeovimClient) {
+async function updateNvimAndGoToLastLine(nvim: neovim.NeovimClient): Promise<void> {
     await nvim.command('edit!');
     await nvim.command('normal! G');
     await nvim.command('normal! o');
 }
 
-async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,provider: string, model: string, temperature: number, role: string) {
+async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,provider: string, model: string, temperature: number, role: string): Promise<void> {
     nvim.on('notification', async (method, args) => {
         if (method === 'prompt_action' && args[0] === 'submit_pressed') {
             const buffer = await nvim.buffer;
