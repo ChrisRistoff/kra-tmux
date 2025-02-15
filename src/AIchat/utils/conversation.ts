@@ -130,14 +130,28 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
 
                 await updateNvimAndGoToLastLine(nvim);
             } else {
-                // streaming
-                let fullResponse = '';
                 try {
-                    for await (const chunk of response) {
-                        const text = chunk.text();
-                        fullResponse += text;
+                    let fullResponse = '';
+                    let pendingBuffer = '';
+                    let lastUpdate = Date.now();
 
-                        await appendToChat(chatFile, text);
+                    const updateInterval = 300;
+
+                    for await (const chunk of response) {
+                        fullResponse += chunk;
+                        pendingBuffer += chunk;
+
+                        if (Date.now() - lastUpdate >= updateInterval) {
+                            await appendToChat(chatFile, pendingBuffer);
+                            await nvim.command('edit!');
+                            await nvim.command('redraw!');
+                            pendingBuffer = '';
+                            lastUpdate = Date.now();
+                        }
+                    }
+
+                    if (pendingBuffer) {
+                        await appendToChat(chatFile, pendingBuffer);
                         await nvim.command('edit!');
                         await nvim.command('redraw!');
                     }

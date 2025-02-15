@@ -51,8 +51,7 @@ export async function saveChat(
 
     let fullResponse = '';
     for await (const chunk of summary) {
-        const text = chunk.text();
-        fullResponse += text;
+        fullResponse += chunk;
     }
 
     const formattedSummary = formatChatEntry('Chat Summary', fullResponse, true);
