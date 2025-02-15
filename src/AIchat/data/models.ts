@@ -15,7 +15,7 @@ const geminiModels: Models = {
 }
 
 const openAiModels: Models = {
-    'o1-mini-openAI': 'o1-mini'
+    'o1-mini': 'o1-mini'
 }
 
 const deepSeekModels: Models = {
@@ -25,7 +25,9 @@ const deepSeekModels: Models = {
 
 const openRouterModels: Models = {
     'mistral-codestral': 'mistralai/codestral-2501',
-    'o1-mini-openRouter': 'openai/o1-mini'
+    'o1-mini': 'openai/o1-mini',
+    'o3-mini': 'openai/o3-mini',
+    'o3-mini-high': 'openai/o3-mini-high'
 }
 
 const mistralModels: Models = {
