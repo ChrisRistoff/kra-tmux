@@ -6,6 +6,7 @@ import { gitCommands } from './commandsMaps/gitCommands';
 import { tmuxCommands } from './commandsMaps/tmuxCommands';
 import { systemCommands } from './commandsMaps/systemCommands';
 import { handleChangeSettings } from './manageSettings';
+import { SystemCommands, TmuxCommands, GitCommands, AiCommands, Command } from './commandsMaps/types/commandTypes';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);
@@ -15,35 +16,44 @@ const main = async (): Promise<void> => {
         process.exit(1);
     }
 
-    if (args[0] === 'sys' && systemCommands[args[1]]) {
-        await systemCommands[args[1]]();
+    const commandType = args[0];
+    const commandName = args[1];
 
-        return;
+    if (!commandType || !commandName) {
+        console.log('Command not found.');
+        process.exit(1);
     }
 
-    if (args[0] === 'tmux' && tmuxCommands[args[1]]) {
-        await tmuxCommands[args[1]]();
+    let command: Command;
 
-        return;
+    switch (commandType) {
+        case 'sys':
+            command = systemCommands[commandName as keyof SystemCommands];
+            break;
+        case 'tmux':
+            command = tmuxCommands[commandName as keyof TmuxCommands];
+            break;
+        case 'git':
+            command = gitCommands[commandName as keyof GitCommands];
+            break;
+        case 'ai':
+            command = aiCommands[commandName as keyof AiCommands];
+            break;
+        case 'settings':
+            await handleChangeSettings();
+            return;
+        default:
+            console.log('Invalid command type.');
+            process.exit(1);
     }
 
-    if (args[0] === 'git' && gitCommands[args[1]]) {
-        await gitCommands[args[1]]();
-
-        return;
+    try {
+        await command();
+    } catch (error) {
+        throw new Error('Command not found');
     }
 
-    if (args[0] === 'ai' && aiCommands[args[1]]) {
-        await aiCommands[args[1]]();
-
-        return;
-    }
-
-    if (args[0] === 'settings') {
-        await handleChangeSettings();
-    }
-
-    console.log('Command not a command.');
-};
+    console.log("Done")
+}
 
 main().then((_res) => console.log('Done.')).catch((err) => console.log(err));

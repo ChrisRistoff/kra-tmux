@@ -1,7 +1,7 @@
 import * as sessions from '@sessions/index'
-import { Commands } from './types/commandTypes';
+import { TmuxCommands } from './types/commandTypes';
 
-export const tmuxCommands: Commands = {
+export const tmuxCommands: TmuxCommands = {
     'save-server': sessions.saveSessionsToFile,
     'load-server': loadSession,
     'list-sessions': sessions.printCurrentSessions,

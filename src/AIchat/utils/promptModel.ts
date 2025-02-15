@@ -2,9 +2,13 @@ import * as keys from '@AIchat/data/keys';
 import { Mistral } from '@mistralai/mistralai';
 import OpenAI from "openai";
 
-const formattingRules = '\n Respond without adding chat entries, we format that on our end.';
+const formattingRules = '\nRespond without adding chat entries, we format that on our end.';
 
-export async function promptModel(provider: string, model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<any> | string> {
+type ResponseChunk = {
+    text: () => string;
+};
+
+export async function promptModel(provider: string, model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<ResponseChunk>> {
     let apiKey;
     let baseURL;
 
@@ -77,7 +81,7 @@ async function createOpenAIStream(
     system: string,
     prompt: string,
     temperature: number
-): Promise<AsyncIterable<any>> {
+): Promise<AsyncIterable<ResponseChunk>> {
     const completion = await openai.chat.completions.create({
         messages: [
             { role: "system", content: system },
@@ -100,7 +104,7 @@ async function createOpenAIStream(
     return streamResponse();
 }
 
-async function createMistralStream(prompt: string, system: string, model: string): Promise<AsyncIterable<any> | string> {
+async function createMistralStream(prompt: string, system: string, model: string): Promise<AsyncIterable<ResponseChunk>> {
     const client = new Mistral({apiKey: keys.getMistralKey()});
 
     async function* streamResponse() {
@@ -114,9 +118,10 @@ async function createMistralStream(prompt: string, system: string, model: string
         });
 
         for await (const chunk of stream) {
-            const text = chunk.data?.choices[0]?.delta?.content || '';
+            const content = chunk.data?.choices[0]?.delta?.content;
+            const text = typeof content === 'string' ? content : content?.join('');
             yield {
-                text: () => text
+                text: () => text || ''
             };
         }
     }
