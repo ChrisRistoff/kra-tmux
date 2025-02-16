@@ -42,7 +42,7 @@ describe('saveChat', () => {
 
   it('should save chat and summary when TMUX is not set', async () => {
     (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(true);
-    (fs.readdir as jest.Mock).mockResolvedValue([]); // No existing save folders.
+    (fs.readdir as jest.Mock).mockResolvedValue([]);
     (ui.searchAndSelect as jest.Mock).mockResolvedValue(saveName);
     (fs.readFile as jest.Mock).mockResolvedValue(chatContent);
 
