@@ -36,9 +36,9 @@ const mistralModels: Models = {
 }
 
 export const providers: Providers = {
-    'deep-infra': deepInfraModels,
-    'gemini': geminiModels,
     'open-router': openRouterModels,
+    'gemini': geminiModels,
+    'deep-infra': deepInfraModels,
     'open-ai': openAiModels,
     'deep-seek': deepSeekModels,
     'mistral': mistralModels,
