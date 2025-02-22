@@ -5,6 +5,7 @@ import * as generalUI from '@UI/generalUI';
 import { sessionFilesFolder } from '@filePaths';
 import { getCurrentSessions, getDateString } from '@sessions/utils/sessionUtils';
 import { TmuxSessions } from '@customTypes/sessionTypes';
+import { filterGitKeep } from '@/utils/common';
 
 async function getFileNameFromUser(): Promise<string> {
     let branchName: string;
@@ -15,14 +16,17 @@ async function getFileNameFromUser(): Promise<string> {
         branchName = '';
     }
 
+    const itemsArray = filterGitKeep(await fs.readdir(sessionFilesFolder));
+
     if (!branchName) {
-        return await generalUI.askUserForInput('Please write a name for save: ');
+        return await generalUI.searchAndSelect({
+            itemsArray,
+            prompt: 'Please write a name for save: ',
+        });
     }
 
     const message = `Would you like to use ${branchName} as part of your name for your save?`;
     const shouldSaveBranchNameAsFileName = await generalUI.promptUserYesOrNo(message);
-
-    const itemsArray = await fs.readdir(sessionFilesFolder);
 
     if (!shouldSaveBranchNameAsFileName) {
         return await generalUI.searchAndSelect({
@@ -33,8 +37,8 @@ async function getFileNameFromUser(): Promise<string> {
 
     console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
     const sessionName = await generalUI.searchAndSelect({
-        prompt: 'Please write a name for save: ',
         itemsArray,
+        prompt: 'Please write a name for save: ',
     });
 
     return `${branchName}-${sessionName}-${getDateString()}`;

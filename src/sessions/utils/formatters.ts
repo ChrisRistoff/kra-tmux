@@ -34,9 +34,7 @@ async function getGitRepoLink(path: string): Promise<string | undefined> {
         const { stdout } = await bash.execCommand(`git -C ${path} remote get-url origin`);
 
         return stdout.split('\n')[0];
-    } catch (error) {
-        console.log(error);
-
+    } catch (_error) {
         return undefined;
     }
 }

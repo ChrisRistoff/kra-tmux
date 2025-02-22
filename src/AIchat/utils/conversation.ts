@@ -135,7 +135,7 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
                     let pendingBuffer = '';
                     let lastUpdate = Date.now();
 
-                    const updateInterval = 300;
+                    const updateInterval = 0;
 
                     for await (const chunk of response) {
                         fullResponse += chunk;
