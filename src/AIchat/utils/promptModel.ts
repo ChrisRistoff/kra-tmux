@@ -15,7 +15,7 @@ export async function promptModel(provider: string, model: string, prompt: strin
             break;
         case 'deep-seek':
             apiKey = keys.getDeepSeekKey();
-            baseURL = 'https://api.deepseek.com';
+            baseURL = 'https://api.deepseek.com/v1';
             break;
         case 'open-router':
             apiKey = keys.getOpenRouterKey();
