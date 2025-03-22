@@ -8,6 +8,7 @@ import * as nvim from '@/utils/neovimHelper';
 import { filterGitKeep } from '@/utils/common';
 import { providers } from '../data/models';
 import { pickProviderAndModel } from '../utils/aiUtils';
+import { Role } from '../types/aiTypes';
 
 export async function loadChat(): Promise<void> {
     try {
@@ -28,7 +29,6 @@ export async function loadChat(): Promise<void> {
         const chatFile = `/tmp/ai-chat-${timestamp}.md`;
 
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
-        const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
         const chatSummaryPath = path.join(aiHistoryPath, selectedChat, 'summary.md');
 
         if (process.env.TMUX) {
@@ -49,7 +49,17 @@ export async function loadChat(): Promise<void> {
 
         const chatData = JSON.parse(await fs.readFile(chatDataPath, 'utf-8'));
 
-        await fs.copyFile(chatHistoryPath, chatFile);
+        const chatHistoryContent = await fs.readFile(chatDataPath, 'utf-8');
+        const chatHistoryData = JSON.parse(chatHistoryContent);
+        const chatTranscript = formatFullChat(chatHistoryData);
+
+        if (chatTranscript.length > 0) {
+            fs.writeFile(chatFile, chatTranscript);
+        } else {
+            const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
+            await fs.copyFile(chatHistoryPath, chatFile);
+        }
+
 
         if (!chatData.provider || !checkProviderAndModelValid(chatData.provider, chatData.model)) {
             console.log('Pick a new provider');
@@ -74,6 +84,16 @@ export async function loadChat(): Promise<void> {
         console.error('Error loading chat:', (error as Error).message);
         throw error;
     }
+}
+
+function formatFullChat(chatData: any): string {
+    return chatData.chatHistory.map((entry: any) => {
+        if (entry.role === Role.AI) {
+            return `### ${entry.role} - ${chatData.model} - ${entry.timestamp}\n\n${entry.message}\n\n`
+        }
+
+        return `### ${entry.role} - ${entry.timestamp}\n\n${entry.message}\n\n`
+    }).join('');
 }
 
 function checkProviderAndModelValid(provider: string, model: string): boolean {
