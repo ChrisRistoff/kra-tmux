@@ -1,3 +1,7 @@
+export enum Role {
+    User = 'user',
+    AI = 'AI',
+}
 
 export interface AiRoles {
     [key: string]: string,
@@ -14,4 +18,10 @@ export interface Providers {
 export interface ChatModelDetails {
     provider: string,
     model: string
+}
+
+export interface ChatHistory {
+    role: Role,
+    message: string,
+    timestamp: string,
 }

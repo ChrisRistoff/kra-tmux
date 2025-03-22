@@ -7,6 +7,9 @@ import * as bash from '@utils/bashHelper';
 import os from 'os';
 import { formatChatEntry } from './aiUtils';
 import { openVim } from '@/utils/neovimHelper';
+import { ChatHistory, Role } from '@AIchat/types/aiTypes'
+
+const CHAT_HISTORY: ChatHistory[] = [];
 
 export async function converse(
     chatFile: string,
@@ -62,7 +65,7 @@ export async function converse(
             const conversationHistory = await fs.readFile(chatFile, 'utf8');
             const fullPrompt = conversationHistory + '\n';
 
-            await saveChat(chatFile, fullPrompt, temperature, role, provider, model);
+            await saveChat(chatFile, fullPrompt, temperature, role, provider, model, CHAT_HISTORY);
 
             await fs.rm(chatFile);
         })
@@ -109,6 +112,20 @@ async function updateNvimAndGoToLastLine(nvim: neovim.NeovimClient): Promise<voi
     await nvim.command('normal! o');
 }
 
+function appendToChatHistory(role: Role, message: string | string[]) {
+    const timestamp = new Date().toISOString();
+
+    if (role === Role.User) {
+        message = (message as string[]).filter((line: string) => line.trim() !== '').pop() || '';
+    }
+
+    CHAT_HISTORY.push({
+        role,
+        message: message as string,
+        timestamp,
+    })
+}
+
 async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,provider: string, model: string, temperature: number, role: string): Promise<void> {
     nvim.on('notification', async (method, args) => {
         if (method === 'prompt_action' && args[0] === 'submit_pressed') {
@@ -122,6 +139,8 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
             await appendToChat(chatFile, aiEntryHeader);
             await updateNvimAndGoToLastLine(nvim);
 
+            appendToChatHistory(Role.User, lines);
+
             const response = await promptModel(provider, model, fullPrompt, temperature, aiRoles[role]);
 
             if (typeof response === 'string') {
@@ -129,6 +148,8 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
                 await appendToChat(chatFile, '\n');
 
                 await updateNvimAndGoToLastLine(nvim);
+
+                appendToChatHistory(Role.AI, response);
             } else {
                 try {
                     let fullResponse = '';
@@ -155,6 +176,8 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
                         await nvim.command('edit!');
                         await nvim.command('redraw!');
                     }
+
+                    appendToChatHistory(Role.AI, fullResponse);
 
                     await appendToChat(chatFile, '\n');
                     await updateNvimAndGoToLastLine(nvim);
