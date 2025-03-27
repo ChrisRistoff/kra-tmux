@@ -18,7 +18,6 @@ jest.mock('@AIchat/utils/aiUtils', () => ({
 
 describe('saveChat', () => {
     const chatFile = 'dummyChat.txt';
-    const fullPrompt = 'Full prompt';
     const temperature = 0.5;
     const role = 'user';
     const provider = 'gemini';
@@ -38,7 +37,7 @@ describe('saveChat', () => {
     it('should not save chat if user declines', async () => {
         (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(false);
 
-        await saveChat(chatFile, fullPrompt, temperature, role, provider, model, chatHistory);
+        await saveChat(chatFile, temperature, role, provider, model, chatHistory);
 
         expect(ui.promptUserYesOrNo).toHaveBeenCalledWith('Do you want to save the chat history?');
         expect(ui.searchAndSelect).not.toHaveBeenCalled();
@@ -55,7 +54,7 @@ describe('saveChat', () => {
             yield "Generated summary";
         });
 
-        await saveChat(chatFile, fullPrompt, temperature, role, provider, model, chatHistory);
+        await saveChat(chatFile, temperature, role, provider, model, chatHistory);
 
         const expectedSavePath = `${aiHistoryPath}/${saveName}`;
         const expectedHistoryFile = `${expectedSavePath}/${saveName}`;
@@ -81,7 +80,7 @@ describe('saveChat', () => {
             yield "Summary chunk";
         });
 
-        await saveChat(chatFile, fullPrompt, temperature, role, provider, model, chatHistory);
+        await saveChat(chatFile, temperature, role, provider, model, chatHistory);
 
         const expectedSavePath = `${aiHistoryPath}/${saveName}`;
         const expectedHistoryFile = `${expectedSavePath}/${saveName}`;

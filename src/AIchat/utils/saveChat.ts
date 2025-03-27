@@ -9,11 +9,10 @@ import { formatChatEntry } from './aiUtils';
 import { summaryPrompt } from '../data/prompts';
 import { filterGitKeep } from '@/utils/common';
 import { providers } from '../data/models';
-import { ChatHistory } from '../types/aiTypes';
+import { ChatData, ChatHistory } from '../types/aiTypes';
 
 export async function saveChat(
     chatFile: string,
-    fullPrompt: string,
     temperature: number,
     role: string,
     provider: string,
@@ -37,7 +36,7 @@ export async function saveChat(
         await bash.execCommand(`rm -rf ${aiHistoryPath}/${saveName}`);
     }
 
-    const chatData = createChatData(chatFile, fullPrompt, temperature, role, provider, model, chatHistory);
+    const chatData = createChatData(chatFile, temperature, role, provider, model, chatHistory);
     const historyFile = `${aiHistoryPath}/${saveName}/${saveName}`;
 
     await fs.mkdir(`${aiHistoryPath}/${saveName}`);
@@ -79,14 +78,15 @@ export async function saveChat(
     return;
 }
 
-function createChatData(chatFile: string, fullPrompt: string, temperature: number, role: string, provider: string, model: string, chatHistory: ChatHistory[]): string {
-    return JSON.stringify({
+function createChatData(chatFile: string, temperature: number, role: string, provider: string, model: string, chatHistory: ChatHistory[]): string {
+    const chatData: ChatData = {
         chatFile,
-        fullPrompt,
         temperature,
         role,
         provider,
         model,
         chatHistory
-    }, null, 2)
+    }
+
+    return JSON.stringify(chatData, null, 2)
 }
