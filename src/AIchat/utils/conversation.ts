@@ -9,8 +9,6 @@ import { formatChatEntry } from './aiUtils';
 import { openVim } from '@/utils/neovimHelper';
 import { ChatHistory, Role } from '@AIchat/types/aiTypes'
 
-const CHAT_HISTORY: ChatHistory[] = [];
-
 export async function converse(
     chatFile: string,
     temperature: number,
@@ -21,7 +19,7 @@ export async function converse(
 ): Promise<void> {
     try {
         if (!isChatLoaded) {
-            await initializeUserPrompt(chatFile);
+            await initializeChatFile(chatFile, true);
         }
 
         const socketPath = await generateSocketPath();
@@ -65,7 +63,7 @@ export async function converse(
             const conversationHistory = await fs.readFile(chatFile, 'utf8');
             const fullPrompt = conversationHistory + '\n';
 
-            await saveChat(chatFile, fullPrompt, temperature, role, provider, model, CHAT_HISTORY);
+            await saveChat(chatFile, temperature, role, provider, model, parseChatHistory(fullPrompt));
 
             await fs.rm(chatFile);
         })
@@ -74,6 +72,16 @@ export async function converse(
 
         throw error;
     }
+}
+
+export async function initializeChatFile(filePath: string, userPrompt: boolean = false): Promise<void> {
+    let initialContent = `# AI Chat History\n\nThis file contains the conversation history between the user and AI.\n\n`;
+
+    if (userPrompt) {
+        initialContent += `---\n\n### USER (${new Date().toISOString()})\n\n`
+    }
+
+    await fs.writeFile(filePath, initialContent, 'utf-8');
 }
 
 async function waitForSocket(socketPath: string, timeout = 5000): Promise<boolean> {
@@ -97,11 +105,6 @@ async function generateSocketPath(): Promise<string> {
     return `${os.tmpdir()}/nvim-${randomString}.sock`;
 }
 
-async function initializeUserPrompt(filePath: string): Promise<void> {
-    const initialContent = `# AI Chat History\n\nThis file contains the conversation history between the user and AI.\n\n---\n\n### USER (${new Date().toISOString()})\n\n`;
-    await fs.writeFile(filePath, initialContent, 'utf-8');
-}
-
 async function appendToChat(file: string, content: string): Promise<void> {
     await fs.appendFile(file, content, 'utf-8');
 }
@@ -110,20 +113,6 @@ async function updateNvimAndGoToLastLine(nvim: neovim.NeovimClient): Promise<voi
     await nvim.command('edit!');
     await nvim.command('normal! G');
     await nvim.command('normal! o');
-}
-
-function appendToChatHistory(role: Role, message: string | string[]) {
-    const timestamp = new Date().toISOString();
-
-    if (role === Role.User) {
-        message = (message as string[]).filter((line: string) => line.trim() !== '').pop() || '';
-    }
-
-    CHAT_HISTORY.push({
-        role,
-        message: message as string,
-        timestamp,
-    })
 }
 
 async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,provider: string, model: string, temperature: number, role: string): Promise<void> {
@@ -139,8 +128,6 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
             await appendToChat(chatFile, aiEntryHeader);
             await updateNvimAndGoToLastLine(nvim);
 
-            appendToChatHistory(Role.User, lines);
-
             const response = await promptModel(provider, model, fullPrompt, temperature, aiRoles[role]);
 
             if (typeof response === 'string') {
@@ -148,8 +135,6 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
                 await appendToChat(chatFile, '\n');
 
                 await updateNvimAndGoToLastLine(nvim);
-
-                appendToChatHistory(Role.AI, response);
             } else {
                 try {
                     let fullResponse = '';
@@ -177,8 +162,6 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
                         await nvim.command('redraw!');
                     }
 
-                    appendToChatHistory(Role.AI, fullResponse);
-
                     await appendToChat(chatFile, '\n');
                     await updateNvimAndGoToLastLine(nvim);
                 } catch (error) {
@@ -192,4 +175,58 @@ async function onHitEnterInNeovim(nvim: neovim.NeovimClient, chatFile: string,pr
             await updateNvimAndGoToLastLine(nvim);
         }
     });
+}
+
+function parseChatHistory(historyString: string): ChatHistory[] {
+    const chatMessages: ChatHistory[] = [];
+    const lines = historyString.split(/\n/);
+
+    let currentRole: Role | null = null;
+    let currentTextLines: string[] = [];
+    let currentTimestamp: string | null = null;
+
+    for (const line of lines) {
+        // avoid occurrences of "###" or role names within message
+        const isUserMarker = line.startsWith("### USER (");
+        const isAiMarker = line.startsWith("### AI -");
+
+        if (isUserMarker || isAiMarker) {
+            if (currentRole !== null && currentTimestamp !== null && currentTextLines.length > 0) {
+                const messageText = currentTextLines.join("\n").trim();
+
+                if (messageText) {
+                    chatMessages.push({
+                        role: currentRole,
+                        message: messageText,
+                        timestamp: currentTimestamp,
+                    });
+                }
+            }
+
+            currentTimestamp = extractTimestamp(line);
+            currentRole = isUserMarker ? Role.User : Role.AI;
+            currentTextLines = [];
+        } else if (currentRole !== null) {
+            currentTextLines.push(line);
+        }
+    }
+
+    if (currentRole !== null && currentTimestamp !== null && currentTextLines.length > 0) {
+        const messageText = currentTextLines.join("\n").trim();
+
+        if (messageText) {
+            chatMessages.push({
+                role: currentRole,
+                message: messageText,
+                timestamp: currentTimestamp,
+            });
+        }
+    }
+
+    return chatMessages;
+}
+
+function extractTimestamp(line: string): string | null {
+    const match = line.match(/\(([^)]+)\)/);
+    return match ? match[1] : null;
 }

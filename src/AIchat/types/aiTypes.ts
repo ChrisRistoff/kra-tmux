@@ -25,3 +25,12 @@ export interface ChatHistory {
     message: string,
     timestamp: string,
 }
+
+export interface ChatData {
+    chatFile: string,
+    temperature: number,
+    role: string,
+    provider: string,
+    model: string,
+    chatHistory: ChatHistory[]
+}
