@@ -51,23 +51,25 @@ export async function loadChat(): Promise<void> {
 
         const chatHistoryContent = await fs.readFile(chatDataPath, 'utf-8');
         const chatHistoryData: ChatData = await JSON.parse(chatHistoryContent);
+        let chatTranscript;
 
-        chatHistoryData.chatHistory.push({
-            role: Role.User,
-            message: '',
-            timestamp: new Date().toISOString()
-        })
+        if (chatHistoryData.chatHistory) {
+            chatHistoryData.chatHistory.push({
+                role: Role.User,
+                message: '',
+                timestamp: new Date().toISOString()
+            })
 
-        const chatTranscript = formatFullChat(chatHistoryData);
+            chatTranscript = formatFullChat(chatHistoryData);
+        }
 
-        if (chatTranscript.length > 0) {
+        if (chatTranscript) {
             conversation.initializeChatFile(chatFile);
             fs.appendFile(chatFile, chatTranscript);
         } else {
             const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
             await fs.copyFile(chatHistoryPath, chatFile);
         }
-
 
         if (!chatData.provider || !checkProviderAndModelValid(chatData.provider, chatData.model)) {
             console.log('Pick a new provider');
