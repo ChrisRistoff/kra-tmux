@@ -37,7 +37,7 @@ describe('saveChat', () => {
     it('should not save chat if user declines', async () => {
         (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(false);
 
-        await saveChat(chatFile, temperature, role, provider, model, chatHistory);
+        await saveChat(chatFile, provider, model, role, temperature, chatHistory);
 
         expect(ui.promptUserYesOrNo).toHaveBeenCalledWith('Do you want to save the chat history?');
         expect(ui.searchAndSelect).not.toHaveBeenCalled();
@@ -54,13 +54,12 @@ describe('saveChat', () => {
             yield "Generated summary";
         });
 
-        await saveChat(chatFile, temperature, role, provider, model, chatHistory);
+        await saveChat(chatFile, provider, model, role, temperature, chatHistory);
 
         const expectedSavePath = `${aiHistoryPath}/${saveName}`;
         const expectedHistoryFile = `${expectedSavePath}/${saveName}`;
 
         expect(fs.mkdir).toHaveBeenCalledWith(expectedSavePath);
-        expect(bash.execCommand).toHaveBeenCalledWith(`cp ${chatFile} ${expectedHistoryFile}.md`);
         expect(fs.writeFile).toHaveBeenCalledWith(`${expectedHistoryFile}.json`, expect.any(String));
 
         const formattedSummary = `Formatted: Chat Summary: Generated summary`;
@@ -80,15 +79,13 @@ describe('saveChat', () => {
             yield "Summary chunk";
         });
 
-        await saveChat(chatFile, temperature, role, provider, model, chatHistory);
+        await saveChat(chatFile, provider, model, role, temperature, chatHistory);
 
         const expectedSavePath = `${aiHistoryPath}/${saveName}`;
-        const expectedHistoryFile = `${expectedSavePath}/${saveName}`;
 
         expect(bash.execCommand).toHaveBeenCalledWith(`rm -rf ${aiHistoryPath}/${saveName}`);
 
         expect(fs.mkdir).toHaveBeenCalledWith(expectedSavePath);
-        expect(bash.execCommand).toHaveBeenCalledWith(`cp ${chatFile} ${expectedHistoryFile}.md`);
 
         const formattedSummary = `Formatted: Chat Summary: Summary chunk`;
         expect(fs.writeFile).toHaveBeenCalledWith(`${expectedSavePath}/summary.md`, formattedSummary);
