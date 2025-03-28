@@ -27,10 +27,11 @@ export interface ChatHistory {
 }
 
 export interface ChatData {
-    chatFile: string,
-    temperature: number,
-    role: string,
+    title?: string,
+    summary?: string,
     provider: string,
     model: string,
+    role: string,
+    temperature: number,
     chatHistory: ChatHistory[]
 }

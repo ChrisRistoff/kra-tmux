@@ -108,10 +108,10 @@ describe('converse', () => {
         expect(fs.readFile).toHaveBeenCalledWith(chatFile, 'utf8');
         expect(saveChat).toHaveBeenCalledWith(
             chatFile,
-            temperature,
-            role,
             provider,
             model,
+            role,
+            temperature,
             []
         );
         expect(fs.rm).toHaveBeenCalledWith(chatFile);

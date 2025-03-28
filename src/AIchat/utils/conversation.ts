@@ -63,7 +63,7 @@ export async function converse(
             const conversationHistory = await fs.readFile(chatFile, 'utf8');
             const fullPrompt = conversationHistory + '\n';
 
-            await saveChat(chatFile, temperature, role, provider, model, parseChatHistory(fullPrompt));
+            await saveChat(chatFile, provider, model, role, temperature, parseChatHistory(fullPrompt));
 
             await fs.rm(chatFile);
         })

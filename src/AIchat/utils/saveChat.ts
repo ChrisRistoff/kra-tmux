@@ -13,10 +13,10 @@ import { ChatData, ChatHistory } from '../types/aiTypes';
 
 export async function saveChat(
     chatFile: string,
-    temperature: number,
-    role: string,
     provider: string,
     model: string,
+    role: string,
+    temperature: number,
     chatHistory: ChatHistory[]
 ): Promise<void> {
     const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
@@ -36,12 +36,9 @@ export async function saveChat(
         await bash.execCommand(`rm -rf ${aiHistoryPath}/${saveName}`);
     }
 
-    const chatData = createChatData(chatFile, temperature, role, provider, model, chatHistory);
     const historyFile = `${aiHistoryPath}/${saveName}/${saveName}`;
 
     await fs.mkdir(`${aiHistoryPath}/${saveName}`);
-    await bash.execCommand(`cp ${chatFile} ${historyFile}.md`);
-    await fs.writeFile(`${historyFile}.json`, chatData);
 
     const chatContent = await fs.readFile(chatFile, 'utf-8');
 
@@ -55,6 +52,10 @@ export async function saveChat(
         fullResponse += chunk;
     }
 
+    const chatData = createChatData(saveName, fullResponse, provider, model, role, temperature, chatHistory);
+
+    await fs.writeFile(`${historyFile}.json`, chatData);
+
     const formattedSummary = formatChatEntry('Chat Summary', fullResponse, true);
     const summaryFile = `${aiHistoryPath}/${saveName}/summary.md`;
 
@@ -65,26 +66,32 @@ export async function saveChat(
             tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim  \\"${summaryFile}\\";
             tmux send-keys exit C-m"' C-m`
 
-        bash.execCommand(tmuxCommand);
+        await bash.execCommand(tmuxCommand);
     } else {
-        nvim.openVim(summaryFile);
+        await nvim.openVim(summaryFile);
     }
 
-    const editedSummary = await fs.readFile(summaryFile, 'utf-8');
-    await fs.writeFile(`${aiHistoryPath}/${saveName}/summary.md`, editedSummary);
-
-    console.log('Chat and summary saved as ', saveName);
+    console.log('Chat saved as ', saveName);
 
     return;
 }
 
-function createChatData(chatFile: string, temperature: number, role: string, provider: string, model: string, chatHistory: ChatHistory[]): string {
+function createChatData(
+    title: string,
+    summary: string,
+    provider: string,
+    model: string,
+    role: string,
+    temperature: number,
+    chatHistory: ChatHistory[]
+): string {
     const chatData: ChatData = {
-        chatFile,
-        temperature,
-        role,
+        title,
+        summary,
         provider,
         model,
+        role,
+        temperature,
         chatHistory
     }
 
