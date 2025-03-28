@@ -183,27 +183,28 @@ function parseChatHistory(historyString: string): ChatHistory[] {
 
     let currentRole: Role | null = null;
     let currentTextLines: string[] = [];
-    let currentTimestamp: string | null = null;
+    let currentTimestamp: string = '';
+
+    const flushMessage = () => {
+        if (currentRole !== null && currentTextLines.length > 0) {
+            const messageText = currentTextLines.join("\n").trim();
+            if (messageText) {
+                chatMessages.push({
+                    role: currentRole,
+                    message: messageText,
+                    timestamp: currentTimestamp,
+                });
+            }
+        }
+    };
 
     for (const line of lines) {
-        // avoid occurrences of "###" or role names within message
         const isUserMarker = line.startsWith("### USER (");
         const isAiMarker = line.startsWith("### AI -");
 
         if (isUserMarker || isAiMarker) {
-            if (currentRole !== null && currentTimestamp !== null && currentTextLines.length > 0) {
-                const messageText = currentTextLines.join("\n").trim();
-
-                if (messageText) {
-                    chatMessages.push({
-                        role: currentRole,
-                        message: messageText,
-                        timestamp: currentTimestamp,
-                    });
-                }
-            }
-
-            currentTimestamp = extractTimestamp(line);
+            flushMessage();
+            currentTimestamp = extractTimestamp(line) || '';
             currentRole = isUserMarker ? Role.User : Role.AI;
             currentTextLines = [];
         } else if (currentRole !== null) {
@@ -211,17 +212,7 @@ function parseChatHistory(historyString: string): ChatHistory[] {
         }
     }
 
-    if (currentRole !== null && currentTimestamp !== null && currentTextLines.length > 0) {
-        const messageText = currentTextLines.join("\n").trim();
-
-        if (messageText) {
-            chatMessages.push({
-                role: currentRole,
-                message: messageText,
-                timestamp: currentTimestamp,
-            });
-        }
-    }
+    flushMessage();
 
     return chatMessages;
 }

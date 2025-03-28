@@ -1,8 +1,9 @@
 import { Models, Providers } from "../types/aiTypes";
 
 const deepInfraModels: Models = {
-    'deepSeek70B': 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
+    'deepSeekR1-turbo': 'deepseek-ai/DeepSeek-R1-Turbo',
     'deepSeekR1': 'deepseek-ai/DeepSeek-R1',
+    'deepSeek70B': 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
     'deepSeekV3': 'deepseek-ai/DeepSeek-V3',
     'llama405B': 'meta-llama/Meta-Llama-3.1-405B-Instruct',
     'nemotron340B': 'nvidia/Nemotron-4-340B-Instruct',
@@ -38,8 +39,8 @@ const mistralModels: Models = {
 
 export const providers: Providers = {
     'open-router': openRouterModels,
-    'gemini': geminiModels,
     'deep-infra': deepInfraModels,
+    'gemini': geminiModels,
     'open-ai': openAiModels,
     'deep-seek': deepSeekModels,
     'mistral': mistralModels,

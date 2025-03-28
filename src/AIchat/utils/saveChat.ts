@@ -56,7 +56,7 @@ export async function saveChat(
 
     await fs.writeFile(`${historyFile}.json`, chatData);
 
-    const formattedSummary = formatChatEntry('Chat Summary', fullResponse, true);
+    const formattedSummary = formatChatEntry('Chat Summary', fullResponse + '\n', true);
     const summaryFile = `${aiHistoryPath}/${saveName}/summary.md`;
 
     await fs.writeFile(summaryFile, formattedSummary);
