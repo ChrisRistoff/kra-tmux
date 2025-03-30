@@ -26,10 +26,11 @@ const deepSeekModels: Models = {
 }
 
 const openRouterModels: Models = {
-    'mistral-codestral': 'mistralai/codestral-2501',
-    'o1-mini': 'openai/o1-mini',
+    'perplexity-deep-research': 'perplexity/sonar-deep-research',
     'o3-mini': 'openai/o3-mini',
-    'o3-mini-high': 'openai/o3-mini-high'
+    'o3-mini-high': 'openai/o3-mini-high',
+    'o1-mini': 'openai/o1-mini',
+    'mistral-codestral': 'mistralai/codestral-2501',
 }
 
 const mistralModels: Models = {
