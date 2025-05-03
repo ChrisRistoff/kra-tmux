@@ -15,23 +15,19 @@ Explore the features below and click the links to jump to detailed sections:
 
 My tmux integration module is engineered to give you full control over your server sessions.
 
-Can be accessed typing
+Access with.
 ```
 kra tmux
 ```
 
-and continue with:
-
-• **save-server** entire servers, each server is stores separately so you can work on multiple projects with different setups comfortably. I also use this for different tickets in different scopes, I save the server for current ticket with all the files I work on opened, if ticket comes back from testing or I need to do something else on it, it's there for me to bring back just how I left it.
-
-• **load-server** your server just how you left it off, all the sessions, all the windows, all the panes and their sizes and all neovim sessions just how you left them off. If a server was saved inside a git repo and it is not available when you load, the app will try to clone the repo you were in and navigate to the folder.
-
-• **delete-session** your servers individually. An overview of the server with sessions, number of windows and their names will be shown once you select it so you can decide whether you want to delete it or not.
-
-• **list-sessions** your current server with number of windows etc.
-
-• **kill** your currently running server.
-
+### Avaiable commands:
+| Command            | Description                                                                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **save-server**    | 💾 Save entire servers — including all sessions, windows, panes, and Neovim states. Perfect for multitasking across different projects or tickets. |
+| **load-server**    | ♻️ Reload your saved server *exactly* how you left it — including repos (auto-clones if missing), directories, layouts, and editor states.         |
+| **delete-session** | 🧹 Clean up specific saved servers. Preview the structure (sessions, windows, names) before confirming deletion.                                   |
+| **list-sessions**  | 📋 View a summary of the current server's sessions and windows.                                                                                    |
+| **kill**           | ❌ Terminate the currently running server instantly.                                                                                                |
 ---
 
 ## Git Integration
@@ -39,28 +35,28 @@ and continue with:
 The Git integration in this tool is designed to facilitate efficient source control management.
 
 Access with:
-```bash
+```
 kra tmux
 ```
-
-• **restore** Recover single or multiple files effortlessly.
-
-• **cache-untracked** Save untracked files in a separate project folder, they get saved under the branch name and can only be retrieved inside the same branch.
-
-• **retrieve-untracked:** Retrieve your cached untracked files when needed.
-
-• **hard-reset** Fetch with pruning and perform a hard reset to keep your branch in sync.
-
-• **log** Generate a beautifully formatted Git log that's navigable in neovim using '{' and '}' keys.
-
-• **stash** Apply or drop stashes with an intuitive selection menu.
-
-• **stash-drop-multiple** Drop multiple stashes by selecting from a dynamic list.
-
-• **conflict-handle** Access a list of conflicted files and resolve them using a three-way split in neovim, with continuous scans until all conflicts are addressed.
-
-• **view-changed** Quickly see what’s changed and open files to inspect modifications.
-
+| Command                 | Description                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **restore**             | ♻️ Recover single or multiple files effortlessly.                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **cache-untracked**     | 📦 Save untracked files in a branch-specific cache. Files are stored per branch and retrievable only within the same branch. |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **retrieve-untracked**  | 🔄 Retrieve your previously cached untracked files.                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **hard-reset**          | 🧹 Perform a `git fetch --prune` and hard reset to keep your local branch clean and in sync.                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **log**                 | 📜 View a rich, navigable Git log inside Neovim. Use `{` and `}` keys to jump between commits.                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **stash**               | 💼 Apply or drop stashes using an intuitive selection interface.                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **stash-drop-multiple** | 🗑️ Select and drop multiple stashes in one go from a dynamic list.                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
 ---
 
 ## AI Chatbot Integration
