@@ -13,7 +13,7 @@ Welcome to the Kra Worflow! This project brings together a suite of integrations
 
 ---
 
-## 🔗 Tmux Integration
+## Tmux Integration
 
 My tmux integration module is engineered to give you full control over your server sessions.
 
@@ -32,7 +32,7 @@ kra tmux
 | **kill**           | ❌ Terminate the currently running server instantly.                                                                                                |
 ---
 
-## 🔧 Git Integration
+## Git Integration
 
 The Git integration in this tool is designed to facilitate efficient source control management.
 
@@ -55,7 +55,7 @@ kra tmux
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
 ---
 
-## 🤖 AI Chatbot Integration
+## AI Chatbot Integration
 
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
