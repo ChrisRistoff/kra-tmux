@@ -1,6 +1,11 @@
-# Kra workflow
+# Kra Workflow
 
-Welcome to the Kra Worflow! This project brings together a suite of integrations designed to supercharge user's development workflow. With powerful features built around tmux server management, Git operations, and an AI chatbot, you get a comprehensive tool that streamlines your workflow.
+Welcome to **Kra Workflow** — a powerful suite of integrations designed to supercharge your development workflow. With **seamless terminal integrations**, including Tmux server management, Git operations, and an AI chatbot interface, Kra streamlines your workflow with ease.
+
+- All menus are **grep-searchable** for fast access to any functionality.
+- Enjoy full **tab autocompletion** in the terminal, ensuring an efficient and intuitive experience when interacting with the tool.
+
+With Kra, you can effortlessly switch between projects, manage Git tasks, and chat with an AI right from your terminal. This comprehensive tool is designed to help you work smarter and more efficiently.
 
 ---
 
@@ -38,7 +43,7 @@ The Git integration in this tool is designed to facilitate efficient source cont
 
 > 📦 Access via:
 ```
-kra tmux
+kra git
 ```
 
 ### 🛠️ Available Commands
@@ -60,9 +65,11 @@ kra tmux
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
 
+[Watch the Kra Demo Video](docs-assets/ai-chat-bot.mp4)
+
 > 📦 Access via:
 ```
-kra tmux
+kra ai
 ```
 
 ### 🛠️ Available Commands
