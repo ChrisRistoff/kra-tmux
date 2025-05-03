@@ -38,24 +38,17 @@ Access with:
 ```
 kra tmux
 ```
+### Avaiable commands:
 | Command                 | Description                                                                                                                  |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **restore**             | ♻️ Recover single or multiple files effortlessly.                                                                            |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **cache-untracked**     | 📦 Save untracked files in a branch-specific cache. Files are stored per branch and retrievable only within the same branch. |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **retrieve-untracked**  | 🔄 Retrieve your previously cached untracked files.                                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **hard-reset**          | 🧹 Perform a `git fetch --prune` and hard reset to keep your local branch clean and in sync.                                 |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **log**                 | 📜 View a rich, navigable Git log inside Neovim. Use `{` and `}` keys to jump between commits.                               |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **stash**               | 💼 Apply or drop stashes using an intuitive selection interface.                                                             |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **stash-drop-multiple** | 🗑️ Select and drop multiple stashes in one go from a dynamic list.                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
 ---
 
@@ -64,19 +57,16 @@ kra tmux
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
 
-Can be accessed typing
+Access with:
 ```
 kra tmux
 ```
-
-and continue with:
-
-• **chat**: Will start a new chat inside neovim, it's using sockets to listen to user pressing enter in normal mode, once enter is sent entire chat is sent as a prompt. Once the user closes the file they will be asked if they want to save the chat, if yes summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
-
-• **load**: User will be presented with a list of all saved chats, once they choose one the summary of said chat will be opened in neovim, once the user closes that they can choose whether they still want to load the chat or not, if they do chat will be opened in neovim, if not they will be presented with the list of chats to pick a new one.
-
-• **delete**: User will be presented with a list of saved chats, they can pick one and delete it.
-
+### Avaiable commands:
+| Command    | Description                                                                                                                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **chat**   | 🗨️ Start a new chat session in Neovim. Uses socket-based input — send prompts by pressing `Enter` in normal mode. On closing, you're prompted to save the chat. If saved, a summary is generated and editable before final save. |
+| **load**   | 📂 Browse saved chats. View the summary first, then decide whether to open the full chat or return to the chat list.                                                                                                              |
+| **delete** | 🧽 Select and delete any saved chat from a presented list.                                                                                                                                                                        |
 ---
 
 ## Getting Started
