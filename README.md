@@ -2,25 +2,27 @@
 
 Welcome to the Kra Worflow! This project brings together a suite of integrations designed to supercharge user's development workflow. With powerful features built around tmux server management, Git operations, and an AI chatbot, you get a comprehensive tool that streamlines your workflow.
 
-Explore the features below and click the links to jump to detailed sections:
+---
 
-• [Tmux Integration](#tmux-integration)
-• [Git Integration](#git-integration)
-• [AI Chatbot Integration](#ai-chatbot-integration)
-• [Getting started](#getting-started)
+## 📚 Contents
+
+- [Tmux Integration](#tmux-integration)
+- [Git Integration](#git-integration)
+- [AI Chatbot Integration](#ai-chatbot-integration)
+- [Getting Started](#getting-started)
 
 ---
 
-## Tmux Integration
+## 🔗 Tmux Integration
 
 My tmux integration module is engineered to give you full control over your server sessions.
 
-Access with.
+> 📦 Access via:
 ```
 kra tmux
 ```
 
-### Avaiable commands:
+### 🛠️ Available Commands
 | Command            | Description                                                                                                                                        |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **save-server**    | 💾 Save entire servers — including all sessions, windows, panes, and Neovim states. Perfect for multitasking across different projects or tickets. |
@@ -30,15 +32,16 @@ kra tmux
 | **kill**           | ❌ Terminate the currently running server instantly.                                                                                                |
 ---
 
-## Git Integration
+## 🔧 Git Integration
 
 The Git integration in this tool is designed to facilitate efficient source control management.
 
-Access with:
+> 📦 Access via:
 ```
 kra tmux
 ```
-### Avaiable commands:
+
+### 🛠️ Available Commands
 | Command                 | Description                                                                                                                  |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **restore**             | ♻️ Recover single or multiple files effortlessly.                                                                            |
@@ -52,16 +55,17 @@ kra tmux
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
 ---
 
-## AI Chatbot Integration
+## 🤖 AI Chatbot Integration
 
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
 
-Access with:
+> 📦 Access via:
 ```
 kra tmux
 ```
-### Avaiable commands:
+
+### 🛠️ Available Commands
 | Command    | Description                                                                                                                                                                                                                       |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **chat**   | 🗨️ Start a new chat session in Neovim. Uses socket-based input — send prompts by pressing `Enter` in normal mode. On closing, you're prompted to save the chat. If saved, a summary is generated and editable before final save. |
