@@ -22,6 +22,8 @@ With Kra, you can effortlessly switch between projects, manage Git tasks, and ch
 
 My tmux integration module is engineered to give you full control over your server sessions.
 
+![tmux demo](docs-assets/tmux.gif)
+
 > 📦 Access via:
 ```
 kra tmux
@@ -40,6 +42,8 @@ kra tmux
 ## Git Integration
 
 The Git integration in this tool is designed to facilitate efficient source control management.
+
+![git demo](docs-assets/git.gif)
 
 > 📦 Access via:
 ```
@@ -82,4 +86,4 @@ kra ai
 
 ## Getting Started
 
-To get started, please refer to the [Installation Guide](docs/installation.md) which covers the prerequisites, setup instructions, and initial configuration. Once you're set up, dive into each integration module with the links provided above.
+To get started, please refer to the [Installation Guide](installation.md) which covers the prerequisites, setup instructions, and initial configuration. Once you're set up, dive into each integration module with the links provided above.
