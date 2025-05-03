@@ -65,9 +65,7 @@ kra git
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
 
-<video src="https://github.com/ChrisRistoff/kra-tmux/blob/main/docs-assets/ai-chat-bot.mp4" controls width="600"></video>
-
-https://youtu.be/ETMV-mxUNBA
+<https://github.com/ChrisRistoff/kra-tmux/blob/main/docs-assets/ai-chat-bot.mp4>
 
 > 📦 Access via:
 ```
