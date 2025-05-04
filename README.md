@@ -57,7 +57,7 @@ kra git
 | **cache-untracked**     | 📦 Save untracked files in a branch-specific cache. Files are stored per branch and retrievable only within the same branch. |
 | **retrieve-untracked**  | 🔄 Retrieve your previously cached untracked files.                                                                          |
 | **hard-reset**          | 🧹 Perform a `git fetch --prune` and hard reset to keep your local branch clean and in sync.                                 |
-| <details><summary>**log**</summary>![Log Demo](docs-assets/git-log.gif)</details>                 | 📜 View a rich, navigable Git log inside Neovim. Use `{` and `}` keys to jump between commits.                               |  |
+| <details><summary>**log**</summary>![Log Demo](docs-assets/git.gif)</details>                 | 📜 View a rich, navigable Git log inside Neovim. Use `{` and `}` keys to jump between commits.                               |  |
 | **stash**               | 💼 Apply or drop stashes using an intuitive selection interface.                                                             |
 | **stash-drop-multiple** | 🗑️ Select and drop multiple stashes in one go from a dynamic list.                                                          |
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
