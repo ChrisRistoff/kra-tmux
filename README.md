@@ -25,7 +25,7 @@ With Kra, you can effortlessly switch between projects, manage Git tasks, and ch
 
 My tmux integration module is engineered to give you full control over your server sessions.
 
-![tmux](docs-assets/tmux.png)
+![tmux](docs-assets/tmux/tmux.png)
 
 > 📦 Access via:
 ```
@@ -41,12 +41,23 @@ kra tmux
 | **list-sessions**  | 📋 View a summary of the current server's sessions and windows.                                                                                    |
 | **kill**           | ❌ Terminate the currently running server instantly.                                                                                                |
 
-### 📜 `load-server` Command Demo
+### Commands short demos below, click to expand.
 <details>
-<summary>Click to view tmux load-server demo</summary>
+<summary>♻️ kra tmux load-server </summary>
 
-![Log Demo](docs-assets/tmux-load.gif)
+![Load](docs-assets/tmux/tmux-load.gif)
+</details>
 
+<details>
+<summary>💾 kra tmux save-server </summary>
+
+![Save](docs-assets/tmux/tmux-save-server.gif)
+</details>
+
+<details>
+<summary>🧹 kra tmux delete-sessions </summary>
+
+![Delete](docs-assets/tmux/tmux-delete-server.gif)
 </details>
 
 ---
@@ -55,7 +66,7 @@ kra tmux
 
 The Git integration in this tool is designed to facilitate efficient source control management.
 
-![git](docs-assets/git.png)
+![git](docs-assets/git/git.png)
 
 > 📦 Access via:
 ```
@@ -75,12 +86,59 @@ kra git
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
 
-### 📜 `log` Command Demo
+### Commands short demos below, click to expand.
 <details>
-<summary>Click to view git log demo</summary>
+<summary>♻️  kra git restore</summary>
 
-![Log Demo](docs-assets/git-log.gif)
+![Restore](docs-assets/git/git-restore.gif)
+</details>
 
+<details>
+<summary>📦 kra git cache-untraccked</summary>
+
+![Cache untracked](docs-assets/git/git-cache-untracked.gif)
+</details>
+
+<details>
+<summary>🔄 kra git retrieve-untracked</summary>
+
+![Retrieve untracked](docs-assets/git/git-retrieve-untracked.gif)
+</details>
+
+<details>
+<summary>🧹 kra git hard-reset</summary>
+
+![hard reset](docs-assets/git/git-hard-reset.gif)
+</details>
+
+<details>
+<summary>📜 kra git log</summary>
+
+![log](docs-assets/git/git-log.gif)
+</details>
+
+<details>
+<summary>💼 kra git stash</summary>
+
+![stash](docs-assets/git/git-stash.gif)
+</details>
+
+<details>
+<summary>🗑️ kra git stash-drop-multiple</summary>
+
+![stash drop multipe](docs-assets/git/git-stash-drop-multiple.gif)
+</details>
+
+<details>
+<summary>⚔️ kra git conflict-handle</summary>
+
+![conflict handle](docs-assets/git/git-log.gif)
+</details>
+
+<details>
+<summary>🔍 kra git view-changed</summary>
+
+![view changed](docs-assets/git/git-view-changed.gif)
 </details>
 
 ---
@@ -90,7 +148,7 @@ kra git
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
 
-![AI Chat Bot Demo](docs-assets/ai-chat-bot.png)
+![AI Chat Bot Demo](docs-assets/chat/ai-chat-bot.png)
 
 > 📦 Access via:
 ```
@@ -104,12 +162,29 @@ kra ai
 | **load**   | 📂 Browse saved chats. View the summary first, then decide whether to open the full chat or return to the chat list.                                                                                                              |
 | **delete** | 🧽 Select and delete any saved chat from a presented list.                                                                                                                                                                        |
 
-### 📜 `chat` Command Demo
+### Commands short demos below, click to expand.
 <details>
-<summary>Click to view ai chat demo</summary>
+<summary>🗨️ kra ai chat</summary>
 
-![Log Demo](docs-assets/ai-chat-bot-new-chat.gif)
+![new chat](docs-assets/chat/ai-new-chat.gif)
+</details>
 
+<details>
+<summary>💾 save chat feature</summary>
+
+![save chat](docs-assets/chat/ai-save-chat.gif)
+</details>
+
+<details>
+<summary>📂 kra ai load-chat</summary>
+
+![load chat](docs-assets/chat/ai-load-chat.gif)
+</details>
+
+<details>
+<summary>🧽 kra ai delete</summary>
+
+![delete chat](docs-assets/chat/ai-delete-chat.gif)
 </details>
 
 ---
@@ -118,7 +193,7 @@ kra ai
 
 The system utilities module provides basic project cleanup tools and is still in early development.
 
-![System Utils](docs-assets/system.png)
+![System Utils](docs-assets/sys/system.png)
 
 > 📦 Access via:
 ```
@@ -128,10 +203,30 @@ kra sys
 ### 🛠️ Available Commands
 | Command            | Description                                                                           |
 | ------------------ | -----------------------------------------------------                                 |
-| **grep-file-remove** | 🗑️  Search and delete individual files quickly.                                     |
-| **grep-dir-remove**  | 📁  Locate and remove directories with ease.                                        |
-| **scripts**          | 🧪  Run user scripts (experimental and in progress).                                |
+| **grep-file-remove** | 🗑️ Search and delete individual files quickly.                                     |
+| **grep-dir-remove**  | 📁 Locate and remove directories with ease.                                        |
+| **scripts**          | 🧪 Run user scripts (experimental and in progress).                                |
 |                      | Currently there is no way to save the scripts, user will have to add them manually. |
+
+### Commands short demos below, click to expand.
+<details>
+<summary>🗑️ kra sys grep-file-remove</summary>
+
+![grep file remove](docs-assets/sys/sys-grep-file-remove.gif)
+</details>
+
+<details>
+<summary>📁 kra sys grep-dir-remove</summary>
+
+![grep dir remove](docs-assets/sys/sys-grep-dir-remove.gif)
+</details>
+
+<details>
+<summary>📂 kra sys scripts</summary>
+
+![scripts](docs-assets/sys/sys-scripts.gif)
+</details>
+
 ---
 
 ## Getting Started

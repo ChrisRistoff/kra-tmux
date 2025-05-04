@@ -8,7 +8,7 @@ export async function handleViewChanged(): Promise<void> {
     while (changedFiles.size > 0) {
         const file = await ui.searchSelectAndReturnFromArray({
             itemsArray: Array.from(changedFiles),
-            prompt: "Pick a file to add: "
+            prompt: "Pick a file to view: "
         })
 
         if (process.env.TMUX) {
