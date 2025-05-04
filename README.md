@@ -7,6 +7,8 @@ Welcome to **Kra Workflow** — a powerful suite of integrations designed to sup
 
 With Kra, you can effortlessly switch between projects, manage Git tasks, and chat with an AI right from your terminal. This comprehensive tool is designed to help you work smarter and more efficiently.
 
+![Workflow](docs-assets/kra-workflow-png.png)
+
 ---
 
 ## 📚 Contents
@@ -14,6 +16,7 @@ With Kra, you can effortlessly switch between projects, manage Git tasks, and ch
 - [Tmux Integration](#tmux-integration)
 - [Git Integration](#git-integration)
 - [AI Chatbot Integration](#ai-chatbot-integration)
+- [System Utilities](#system-utilities)
 - [Getting Started](#getting-started)
 
 ---
@@ -22,7 +25,7 @@ With Kra, you can effortlessly switch between projects, manage Git tasks, and ch
 
 My tmux integration module is engineered to give you full control over your server sessions.
 
-![tmux demo](docs-assets/tmux.gif)
+![tmux](docs-assets/tmux.png)
 
 > 📦 Access via:
 ```
@@ -37,13 +40,22 @@ kra tmux
 | **delete-session** | 🧹 Clean up specific saved servers. Preview the structure (sessions, windows, names) before confirming deletion.                                   |
 | **list-sessions**  | 📋 View a summary of the current server's sessions and windows.                                                                                    |
 | **kill**           | ❌ Terminate the currently running server instantly.                                                                                                |
+
+### 📜 `load-server` Command Demo
+<details>
+<summary>Click to view tmux load-server demo</summary>
+
+![Log Demo](docs-assets/tmux-load.gif)
+
+</details>
+
 ---
 
 ## Git Integration
 
 The Git integration in this tool is designed to facilitate efficient source control management.
 
-![git demo](docs-assets/git.gif)
+![git](docs-assets/git.png)
 
 > 📦 Access via:
 ```
@@ -62,12 +74,12 @@ kra git
 | **stash-drop-multiple** | 🗑️ Select and drop multiple stashes in one go from a dynamic list.                                                          |
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
+
 ### 📜 `log` Command Demo
-
 <details>
-<summary>Click to view Git log demo</summary>
+<summary>Click to view git log demo</summary>
 
-![Log Demo](docs-assets/git.gif)
+![Log Demo](docs-assets/git-log.gif)
 
 </details>
 
@@ -78,7 +90,7 @@ kra git
 User can chat with any model, chat is opened up in neovim, pressing enter in normal mode will send the entire chat as prompt, user and AI messages are formatted in markdown.
 **Save** your chats along with a summary. summary will be generated for them and opened in neovim where they can edit it if they so choose. Once the summary is closed the save will be created.
 
-![AI Chat Bot Demo](docs-assets/ai-chat-bot.gif)
+![AI Chat Bot Demo](docs-assets/ai-chat-bot.png)
 
 > 📦 Access via:
 ```
@@ -91,6 +103,35 @@ kra ai
 | **chat**   | 🗨️ Start a new chat session in Neovim. Uses socket-based input — send prompts by pressing `Enter` in normal mode. On closing, you're prompted to save the chat. If saved, a summary is generated and editable before final save. |
 | **load**   | 📂 Browse saved chats. View the summary first, then decide whether to open the full chat or return to the chat list.                                                                                                              |
 | **delete** | 🧽 Select and delete any saved chat from a presented list.                                                                                                                                                                        |
+
+### 📜 `chat` Command Demo
+<details>
+<summary>Click to view ai chat demo</summary>
+
+![Log Demo](docs-assets/ai-chat-bot-new-chat.gif)
+
+</details>
+
+---
+
+## System Utilities
+
+The system utilities module provides basic project cleanup tools and is still in early development.
+
+![System Utils](docs-assets/system.png)
+
+> 📦 Access via:
+```
+kra sys
+```
+
+### 🛠️ Available Commands
+| Command            | Description                                                                           |
+| ------------------ | -----------------------------------------------------                                 |
+| **grep-file-remove** | 🗑️  Search and delete individual files quickly.                                     |
+| **grep-dir-remove**  | 📁  Locate and remove directories with ease.                                        |
+| **scripts**          | 🧪  Run user scripts (experimental and in progress).                                |
+|                      | Currently there is no way to save the scripts, user will have to add them manually. |
 ---
 
 ## Getting Started

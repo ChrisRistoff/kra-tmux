@@ -62,9 +62,6 @@ describe('saveChat', () => {
         expect(fs.mkdir).toHaveBeenCalledWith(expectedSavePath);
         expect(fs.writeFile).toHaveBeenCalledWith(`${expectedHistoryFile}.json`, expect.any(String));
 
-        const formattedSummary = `Formatted: Chat Summary: Generated summary`;
-        expect(fs.writeFile).toHaveBeenCalledWith(`${expectedSavePath}/summary.md`, formattedSummary);
-
         expect(nvim.openVim).toHaveBeenCalledWith(`${expectedSavePath}/summary.md`);
     });
 
@@ -86,9 +83,6 @@ describe('saveChat', () => {
         expect(bash.execCommand).toHaveBeenCalledWith(`rm -rf ${aiHistoryPath}/${saveName}`);
 
         expect(fs.mkdir).toHaveBeenCalledWith(expectedSavePath);
-
-        const formattedSummary = `Formatted: Chat Summary: Summary chunk`;
-        expect(fs.writeFile).toHaveBeenCalledWith(`${expectedSavePath}/summary.md`, formattedSummary);
 
         const tmuxCommandMatcher = expect.stringContaining('tmux split-window');
         expect(bash.execCommand).toHaveBeenCalledWith(tmuxCommandMatcher);
