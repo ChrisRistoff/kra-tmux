@@ -3,7 +3,7 @@ export type Command = (args?: string[]) => Promise<void>;
 export type SystemCommandName = {
     'grep-file-remove': Command,
     'grep-dir-remove': Command,
-    'scripts': Command
+    'scripts': Command,
 }
 
 type TmuxCommandName = {
@@ -23,7 +23,7 @@ export type GitCommandName = {
     'stash': Command,
     'stash-drop-multiple': Command,
     'conflict-handle': Command,
-    'view-changed': Command
+    'view-changed': Command,
 }
 
 export type AiCommandName = {
