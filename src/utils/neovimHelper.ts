@@ -42,6 +42,14 @@ export async function openVim(filePath: string, ...args: string[]): Promise<void
             shell: false,
         });
 
+        if (args.length) {
+            args.forEach(async (arg) => {
+                if (arg.startsWith(':')) {
+                    await bash.execCommand(`tmux send-keys ${arg} C-m`)
+                }
+            })
+        }
+
         vimProcess.on('close', (code: number) => {
             if (code === 0) {
                 return resolve();

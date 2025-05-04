@@ -24,7 +24,9 @@ export async function handleConflicts(): Promise<void> {
 
         const conflicts = await bash.grepFileForString(fileName, `<<<<<<<|=======|>>>>>>>`);
 
-        if (!conflicts) {
+        if (conflicts) {
+            console.table({'Conflicts Markers Still Found In': fileName})
+        } else {
             conflictedFilesSet.delete(fileName);
         }
     }

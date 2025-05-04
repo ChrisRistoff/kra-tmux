@@ -94,8 +94,6 @@ export async function grepFileForString(fileName: string, searchString: string):
 
         return stdout !== "";
     } catch (error) {
-        console.log(error)
-
         return false;
     }
 }

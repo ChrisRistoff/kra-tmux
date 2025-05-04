@@ -132,7 +132,7 @@ kra git
 <details>
 <summary>⚔️ kra git conflict-handle</summary>
 
-![conflict handle](docs-assets/git/git-log.gif)
+![conflict handle](docs-assets/git/git-conflict-handle.gif)
 </details>
 
 <details>
