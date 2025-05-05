@@ -26,12 +26,12 @@ export const workflowAscii = `
                   +----------+------------------------------------------------------------------------------------------------------------------------------+
                   | tmux     | 🧱  Tmux integration for saving, restoring, and managing full workspace servers with sessions, windows, and editor state.    |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
-                  | git      | 🔧  Git integration for logging, stashing, resetting, and resolving conflicts — all within Neovim.                           |
+                  | git      | 🔧  Git integration for logging, stashing, resetting, and resolving conflicts.                                               |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
                   | ai       | 🤖  Built-in AI chatbot that runs in a Neovim buffer. Supports live prompts, summaries, and persistent chat history.         |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
                   | sys      | 🛠️  System utilities like file search (grep), folder removal, and other quick project tools.                                 |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
-                  | settings | ⚙️  Opens your configuration TOML file for customizing behavior, themes, and integrations.                                   |
+                  | settings | ⚙️  Opens your configuration TOML file for customizing behavior.                                                             |
                   +----------+------------------------------------------------------------------------------------------------------------------------------+
 `;
