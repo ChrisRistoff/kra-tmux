@@ -67,14 +67,3 @@ export async function openVim(filePath: string, ...args: string[]): Promise<void
         });
     });
 }
-
-export async function openNvimInTmuxAndWait(filePath: string): Promise<void> {
-    try {
-        await bash.execCommand(`tmux new-window "nvim +'normal GA' '${filePath}'; tmux wait-for -S vim-done"`);
-
-        // wait for the marker to be set
-        await bash.execCommand('tmux wait-for vim-done');
-    } catch (error) {
-        throw error;
-    }
-}
