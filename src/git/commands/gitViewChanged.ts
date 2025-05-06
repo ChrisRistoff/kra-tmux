@@ -11,11 +11,7 @@ export async function handleViewChanged(): Promise<void> {
             prompt: "Pick a file to view: "
         })
 
-        if (process.env.TMUX) {
-            await nvim.openNvimInTmuxAndWait(file);
-        } else {
-            await nvim.openVim(file);
-        }
+        await nvim.openVim(file, ':Gvdiffsplit');
 
         changedFiles.delete(file);
     }
