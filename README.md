@@ -160,10 +160,10 @@ Displays a list of files with merge conflicts. Select a file to open a 3-way dif
 ![conflict handle](docs-assets/git/git-conflict-handle.gif)
 </details>
 
-Displays a list of modified files. Select one to open a 2-way diff in Neovim. Once closed, the file is removed from the list and the updated list is shown.
-
 <details>
 <summary>🔍 kra git view-changed</summary>
+
+Displays a list of modified files. Select one to open a 2-way diff in Neovim. Once closed, the file is removed from the list and the updated list is shown.
 
 ![view changed](docs-assets/git/git-view-changed.gif)
 </details>
