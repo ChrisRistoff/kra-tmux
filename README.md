@@ -190,8 +190,8 @@ kra ai
 | **delete** | 🧽 Select and delete any saved chat from a presented list.                                                                                                                                                                        |
 
 ### Commands short demos below, click to expand.
-<summary>🗨️ kra ai chat</summary>
 <details>
+<summary>🗨️ kra ai chat</summary>
 
 Starts a new AI chat. You'll be prompted to select:
 
