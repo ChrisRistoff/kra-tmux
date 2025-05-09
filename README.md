@@ -2,7 +2,7 @@
 
 Welcome to **Kra Workflow** — a powerful suite of integrations designed to supercharge your development workflow. With **seamless terminal integrations**, including Tmux server management, Git operations, and an AI chatbot interface, Kra streamlines your workflow with ease.
 
-- All menus are **grep-searchable** for fast access to any functionality.
+- All menus and interactive lists are **grep-searchable** for fast access to any functionality.
 - Enjoy full **tab autocompletion** in the terminal, ensuring an efficient and intuitive experience when interacting with the tool.
 
 With Kra, you can effortlessly switch between projects, manage Git tasks, and chat with an AI right from your terminal. This comprehensive tool is designed to help you work smarter and more efficiently.
@@ -43,19 +43,25 @@ kra tmux
 
 ### Commands short demos below, click to expand.
 <details>
-<summary>♻️ kra tmux load-server </summary>
-
-![Load](docs-assets/tmux/tmux-load.gif)
-</details>
-
-<details>
 <summary>💾 kra tmux save-server </summary>
+
+Saves the current tmux server, including all sessions, windows (with their names), panes (with sizes and positions), and active Neovim sessions.
 
 ![Save](docs-assets/tmux/tmux-save-server.gif)
 </details>
 
 <details>
+<summary>♻️ kra tmux load-server </summary>
+
+Select a saved tmux server from a list to load. If a window name, watch setting, or command is configured, it will automatically run the associated build/watch command in that window.
+
+![Load](docs-assets/tmux/tmux-load.gif)
+</details>
+
+<details>
 <summary>🧹 kra tmux delete-sessions </summary>
+
+Deletes a saved server. Displays its sessions along with the number of windows and panes, then asks for confirmation before deletion.
 
 ![Delete](docs-assets/tmux/tmux-delete-server.gif)
 </details>
@@ -86,9 +92,14 @@ kra git
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
 
+
+All interactive lists are grep searchable and change depending on input.
+
 ### Commands short demos below, click to expand.
 <details>
 <summary>♻️  kra git restore</summary>
+
+Displays a list of modified files, select the one you want to restore or "all" to restore all of them.
 
 ![Restore](docs-assets/git/git-restore.gif)
 </details>
@@ -96,11 +107,15 @@ kra git
 <details>
 <summary>📦 kra git cache-untraccked</summary>
 
+Displays a list of untracked files. Select the ones you want to cache. Files are stored in a branch-specific folder and can only be restored within a branch of the same name.
+
 ![Cache untracked](docs-assets/git/git-cache-untracked.gif)
 </details>
 
 <details>
 <summary>🔄 kra git retrieve-untracked</summary>
+
+Displays a list of cached untracked files. Select the ones you want to retrieve.
 
 ![Retrieve untracked](docs-assets/git/git-retrieve-untracked.gif)
 </details>
@@ -108,11 +123,15 @@ kra git
 <details>
 <summary>🧹 kra git hard-reset</summary>
 
+Runs git fetch --prune and resets the current branch to its head. Displays a console table showing all pruned and fetched branches, and the current HEAD.
+
 ![hard reset](docs-assets/git/git-hard-reset.gif)
 </details>
 
 <details>
 <summary>📜 kra git log</summary>
+
+Opens the Git log in Neovim with a readable, navigable format, optimized for jumping through commits.
 
 ![log](docs-assets/git/git-log.gif)
 </details>
@@ -120,11 +139,15 @@ kra git
 <details>
 <summary>💼 kra git stash</summary>
 
+Displays a list of stashes. Select one to apply or drop.
+
 ![stash](docs-assets/git/git-stash.gif)
 </details>
 
 <details>
 <summary>🗑️ kra git stash-drop-multiple</summary>
+
+Displays a list of stashes. Select one to drop, the list updates after each drop. Repeat until you choose "done".
 
 ![stash drop multipe](docs-assets/git/git-stash-drop-multiple.gif)
 </details>
@@ -132,8 +155,12 @@ kra git
 <details>
 <summary>⚔️ kra git conflict-handle</summary>
 
+Displays a list of files with merge conflicts. Select a file to open a 3-way diff in Neovim. Once conflict markers are resolved, the file is removed from the list. If markers remain, it stays in the list.
+
 ![conflict handle](docs-assets/git/git-conflict-handle.gif)
 </details>
+
+Displays a list of modified files. Select one to open a 2-way diff in Neovim. Once closed, the file is removed from the list and the updated list is shown.
 
 <details>
 <summary>🔍 kra git view-changed</summary>
@@ -163,8 +190,16 @@ kra ai
 | **delete** | 🧽 Select and delete any saved chat from a presented list.                                                                                                                                                                        |
 
 ### Commands short demos below, click to expand.
-<details>
 <summary>🗨️ kra ai chat</summary>
+<details>
+
+Starts a new AI chat. You'll be prompted to select:
+
+    1. Role – Choose from preconfigured roles or add your own in roles.ts.
+    2. Provider – Select from configured providers or define new ones in models.ts.
+    3. Temperature – Set a value between 0–10 (divided by 10 internally) or 0–20 when using Gemini.
+
+Once configured, the chat opens in Neovim. You can edit your first message freely. Pressing ENTER in normal mode sends the full chat as a prompt. This setup allows precise control, including removing context or editing hallucinated responses before sending or saving.
 
 ![new chat](docs-assets/chat/ai-new-chat.gif)
 </details>
@@ -172,17 +207,23 @@ kra ai
 <details>
 <summary>💾 save chat feature</summary>
 
+After closing a chat, you'll be prompted to save it (Y/N). If confirmed, Gemini (for its larger context window) is used to generate a summary of the chat. The summary opens in Neovim for editing before being saved.
+
 ![save chat](docs-assets/chat/ai-save-chat.gif)
 </details>
 
 <details>
 <summary>📂 kra ai load-chat</summary>
 
+Displays a list of saved chats. After selecting one, its summary opens in Neovim. Once reviewed, you can choose whether to load the full chat.
+
 ![load chat](docs-assets/chat/ai-load-chat.gif)
 </details>
 
 <details>
 <summary>🧽 kra ai delete</summary>
+
+Displays a list of saved chats. Select one to permanently delete.
 
 ![delete chat](docs-assets/chat/ai-delete-chat.gif)
 </details>
