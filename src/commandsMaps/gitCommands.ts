@@ -12,6 +12,7 @@ export const gitCommands: GitCommands = {
     'stash-drop-multiple': git.dropMultipleStashes,
     'conflict-handle': git.handleConflicts,
     'view-changed': git.handleViewChanged,
+    'open-pr': git.openRemoteUrl
 };
 
 export function handleGitCommandNotExist(commandName: string): void {
