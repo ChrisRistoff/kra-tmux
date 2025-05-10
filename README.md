@@ -88,9 +88,11 @@ kra git
 | **hard-reset**          | 🧹 Perform a `git fetch --prune` and hard reset to keep your local branch clean and in sync.                                 |
 | **log**                 | 📜 View a rich, navigable Git log inside Neovim. Use `{` and `}` keys to jump between commits.                               |
 | **stash**               | 💼 Apply or drop stashes using an intuitive selection interface.                                                             |
-| **stash-drop-multiple** | 🗑️ Select and drop multiple stashes in one go from a dynamic list.                                                          |
+| **stash-drop-multiple** | 🗑️ Select and drop multiple stashes in one go from a dynamic list.                                                           |
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
+| **open-pr**            | 🔗 Instantly open the associated pull request link in your browser.                                                          |
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
+
 
 
 All interactive lists are grep searchable and change depending on input.
@@ -158,6 +160,14 @@ Displays a list of stashes. Select one to drop, the list updates after each drop
 Displays a list of files with merge conflicts. Select a file to open a 3-way diff in Neovim. Once conflict markers are resolved, the file is removed from the list. If markers remain, it stays in the list.
 
 ![conflict handle](docs-assets/git/git-conflict-handle.gif)
+</details>
+
+<details>
+<summary>🔍 kra git open-pr</summary>
+
+Opens the pull request associated with the current branch in your default browser. Works with github and bitbucket, works on Mac and Linux.
+
+![open pr](docs-assets/git/git-open-pr.gif)
 </details>
 
 <details>
