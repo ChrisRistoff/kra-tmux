@@ -24,6 +24,7 @@ export type GitCommandName = {
     'stash-drop-multiple': Command,
     'conflict-handle': Command,
     'view-changed': Command,
+    'open-pr': Command,
 }
 
 export type AiCommandName = {
