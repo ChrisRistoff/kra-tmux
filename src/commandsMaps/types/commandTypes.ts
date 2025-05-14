@@ -10,7 +10,7 @@ type TmuxCommandName = {
     'save-server': Command,
     'load-server': Command,
     'list-sessions': Command,
-    'delete-session': Command,
+    'delete-server': Command,
     'kill': Command,
 };
 

@@ -1,4 +1,4 @@
-import { getCurrentSessions } from '@sessions/utils/sessionUtils';
+import { getCurrentSessions } from '@tmux/utils/sessionUtils';
 import { TmuxSessions } from '@customTypes/sessionTypes';
 
 export async function printCurrentSessions(): Promise<void> {

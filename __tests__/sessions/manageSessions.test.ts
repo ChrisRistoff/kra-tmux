@@ -1,13 +1,13 @@
-import { deleteSession } from '@sessions/commands/manageSessions';
-import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@sessions/utils/sessionUtils';
-import { printSessions } from '@sessions/commands/printSessions';
+import { deleteSession } from '@tmux/commands/manageSessions';
+import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@tmux/utils/sessionUtils';
+import { printSessions } from '@tmux/commands/printSessions';
 import * as fs from 'fs/promises';
 import * as generalUI from '@UI/generalUI';
 import { TmuxSessions } from '@/types/sessionTypes';
 import { sessionFilesFolder } from '@filePaths';
 
-jest.mock('@sessions/utils/sessionUtils');
-jest.mock('@sessions/commands/printSessions');
+jest.mock('@tmux/utils/sessionUtils');
+jest.mock('@tmux/commands/printSessions');
 jest.mock('fs/promises');
 jest.mock('@UI/generalUI');
 

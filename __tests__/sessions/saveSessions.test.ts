@@ -1,11 +1,11 @@
-import { saveSessionsToFile } from '@sessions/commands/saveSessions';
-import * as sessionUtils from '@sessions/utils/sessionUtils';
+import { saveSessionsToFile } from '@tmux/commands/saveSessions';
+import * as sessionUtils from '@tmux/utils/sessionUtils';
 import * as bash from '@utils/bashHelper';
 import * as generalUI from '@UI/generalUI';
 import * as fs from 'fs/promises';
 import * as nvim from '@utils/neovimHelper';
 
-jest.mock('@sessions/utils/sessionUtils');
+jest.mock('@tmux/utils/sessionUtils');
 jest.mock('@utils/bashHelper');
 jest.mock('@UI/generalUI');
 jest.mock('fs/promises');

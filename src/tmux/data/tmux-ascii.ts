@@ -21,7 +21,7 @@ export const tmuxAscii = `
     |-------------------|------------------------------------------------------------------------------------------------------------------------------------------|
     | load-server       | ♻️  Reload saved servers as-is. Reopens repos, layout, and Neovim in the exact state. Auto-clones missing directories.                   |
     |-------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-    | delete-session    | 🧹  Delete saved servers after previewing their structure (sessions, windows, names, etc.).                                              |
+    | delete-server     | 🧹  Delete saved servers after previewing their structure (sessions, windows, names, etc.).                                              |
     |-------------------|------------------------------------------------------------------------------------------------------------------------------------------|
     | list-sessions     | 📋  List all sessions and windows in the current server.                                                                                 |
     |-------------------|------------------------------------------------------------------------------------------------------------------------------------------|

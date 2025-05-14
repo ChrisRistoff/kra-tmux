@@ -16,7 +16,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@types/(.*)$': '<rootDir>/src/types/$1',
-    '^@sessions/(.*)$': '<rootDir>/src/sessions/$1',
+    '^@tmux/(.*)$': '<rootDir>/src/tmux/$1',
     '^@git/(.*)$': '<rootDir>/src/git/$1',
     '^@UI/(.*)$': '<rootDir>/src/UI/$1',
     '^@commandsMaps/(.*)$': '<rootDir>/src/commandsMaps/$1',

@@ -1,8 +1,8 @@
-import { printSessions, printCurrentSessions } from '@sessions/commands/printSessions';
-import { getCurrentSessions } from '@sessions/utils/sessionUtils';
+import { printSessions, printCurrentSessions } from '@tmux/commands/printSessions';
+import { getCurrentSessions } from '@tmux/utils/sessionUtils';
 import { TmuxSessions } from '@/types/sessionTypes';
 
-jest.mock('@sessions/utils/sessionUtils');
+jest.mock('@tmux/utils/sessionUtils');
 
 const mockConsoleTable = jest.fn();
 global.console = {

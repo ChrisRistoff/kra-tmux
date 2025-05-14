@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as bash from '@utils/bashHelper';
 import { sessionFilesFolder } from '@filePaths';
 import { TmuxSessions, Window, Pane } from '@customTypes/sessionTypes';
-import { formatWindow, formatPane } from '@sessions/utils/formatters';
+import { formatWindow, formatPane } from '@tmux/utils/formatters';
 import { filterGitKeep } from '@/utils/common';
 
 export async function getCurrentSessions(): Promise<TmuxSessions> {

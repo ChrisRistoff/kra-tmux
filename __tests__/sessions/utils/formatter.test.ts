@@ -1,4 +1,4 @@
-import { formatPane, formatWindow } from '@sessions/utils/formatters';
+import { formatPane, formatWindow } from '@tmux/utils/formatters';
 import * as bash from '@utils/bashHelper';
 
 jest.mock('@utils/bashHelper');

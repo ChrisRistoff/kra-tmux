@@ -3,7 +3,7 @@ import * as nvim from '@utils/neovimHelper';
 import * as fs from 'fs/promises';
 import * as generalUI from '@UI/generalUI';
 import { sessionFilesFolder } from '@filePaths';
-import { getCurrentSessions, getDateString } from '@sessions/utils/sessionUtils';
+import { getCurrentSessions, getDateString } from '@tmux/utils/sessionUtils';
 import { TmuxSessions } from '@customTypes/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
 

@@ -37,7 +37,7 @@ kra tmux
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **save-server**    | 💾 Save entire servers — including all sessions, windows, panes, and Neovim states. Perfect for multitasking across different projects or tickets. |
 | **load-server**    | ♻️ Reload your saved server *exactly* how you left it — including repos (auto-clones if missing), directories, layouts, and editor states.         |
-| **delete-session** | 🧹 Clean up specific saved servers. Preview the structure (sessions, windows, names) before confirming deletion.                                   |
+| **delete-server** | 🧹 Clean up specific saved servers. Preview the structure (sessions, windows, names) before confirming deletion.                                   |
 | **list-sessions**  | 📋 View a summary of the current server's sessions and windows.                                                                                    |
 | **kill**           | ❌ Terminate the currently running server instantly.                                                                                                |
 
@@ -59,7 +59,7 @@ Select a saved tmux server from a list to load. If a window name, watch setting,
 </details>
 
 <details>
-<summary>🧹 kra tmux delete-sessions </summary>
+<summary>🧹 kra tmux delete-server </summary>
 
 Deletes a saved server. Displays its sessions along with the number of windows and panes, then asks for confirmation before deletion.
 
