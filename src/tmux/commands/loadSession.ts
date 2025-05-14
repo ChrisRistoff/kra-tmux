@@ -6,10 +6,10 @@ import * as nvim from '@utils/neovimHelper';
 import { sessionFilesFolder } from '@filePaths';
 import { TmuxSessions, Pane } from '@customTypes/sessionTypes';
 import { Settings } from '@customTypes/settingsTypes';
-import { getCurrentSessions, getSavedSessionsNames } from '@sessions/utils/sessionUtils';
-import { printSessions } from '@sessions/commands/printSessions';
-import * as tmux from '@sessions/core/tmux';
-import { saveSessionsToFile } from '@sessions/commands/saveSessions';
+import { getCurrentSessions, getSavedSessionsNames } from '@tmux/utils/sessionUtils';
+import { printSessions } from '@tmux/commands/printSessions';
+import * as tmux from '@tmux/core/tmux';
+import { saveSessionsToFile } from '@tmux/commands/saveSessions';
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
     const itemsArray = await getSavedSessionsNames();

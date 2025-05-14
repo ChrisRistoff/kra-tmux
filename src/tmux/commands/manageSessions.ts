@@ -1,8 +1,8 @@
 import * as generalUI from '@UI/generalUI';
 import * as fs from 'fs/promises';
 import { sessionFilesFolder } from '@filePaths';
-import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@sessions/utils/sessionUtils';
-import { printSessions } from '@sessions/commands/printSessions';
+import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@tmux/utils/sessionUtils';
+import { printSessions } from '@tmux/commands/printSessions';
 
 export async function deleteSession(): Promise<void> {
     const savedServers = await getSavedSessionsNames();

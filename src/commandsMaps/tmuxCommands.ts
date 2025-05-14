@@ -1,12 +1,12 @@
-import * as sessions from '@sessions/index'
+import * as sessions from '@tmux/index'
 import { TmuxCommands } from './types/commandTypes';
-import { tmuxAscii } from '@/sessions/data/tmux-ascii';
+import { tmuxAscii } from '@/tmux/data/tmux-ascii';
 
 export const tmuxCommands: TmuxCommands = {
     'save-server': sessions.saveSessionsToFile,
     'load-server': loadSession,
     'list-sessions': sessions.printCurrentSessions,
-    'delete-session': sessions.deleteSession,
+    'delete-server': sessions.deleteSession,
     'kill': sessions.killServer,
 };
 

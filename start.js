@@ -5,7 +5,7 @@ require('tsconfig-paths').register({
     '@/*': ['./*'],
     '@utils/*': ['utils/*'],
     '@customTypes/*': ['types/*'],
-    '@sessions/*': ['sessions/*'],
+    '@tmux/*': ['tmux/*'],
     '@system/*': ['system/*'],
     '@git/*': ['git/*'],
     '@UI/*': ['UI/*'],

@@ -5,7 +5,7 @@
     "@AIchat": "dest/src/AIchat",
     "@utils": "dest/src/utils",
     "@customTypes": "dest/src/types",
-    "@sessions": "dest/src/sessions",
+    "@tmux": "dest/src/tmux",
     "@system": "dest/src/system",
     "@git": "dest/src/git",
     "@UI": "dest/src/UI",

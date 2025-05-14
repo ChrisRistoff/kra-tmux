@@ -34,7 +34,7 @@
       "@AIchat/*": ["AIchat/*"],
       "@utils/*": ["utils/*"],
       "@customTypes/*": ["types/*"],
-      "@sessions/*": ["sessions/*"],
+      "@tmux/*": ["tmux/*"],
       "@system/*": ["system/*"],
       "@git/*": ["git/*"],
       "@UI/*": ["UI/*"],
