@@ -12,7 +12,8 @@ export const gitCommands: GitCommands = {
     'stash-drop-multiple': git.dropMultipleStashes,
     'conflict-handle': git.handleConflicts,
     'view-changed': git.handleViewChanged,
-    'open-pr': git.openRemoteUrl
+    'open-pr': git.openRemoteUrl,
+    'create-branch': git.createBranch,
 };
 
 export function handleGitCommandNotExist(commandName: string): void {

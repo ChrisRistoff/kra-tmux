@@ -25,6 +25,7 @@ export type GitCommandName = {
     'conflict-handle': Command,
     'view-changed': Command,
     'open-pr': Command,
+    'create-branch': Command,
 }
 
 export type AiCommandName = {
