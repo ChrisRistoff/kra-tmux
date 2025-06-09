@@ -26,6 +26,7 @@ export type GitCommandName = {
     'view-changed': Command,
     'open-pr': Command,
     'create-branch': Command,
+    'checkout': Command,
 }
 
 export type AiCommandName = {

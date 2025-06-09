@@ -14,6 +14,7 @@ export const gitCommands: GitCommands = {
     'view-changed': git.handleViewChanged,
     'open-pr': git.openRemoteUrl,
     'create-branch': git.createBranch,
+    'checkout': git.checkoutBranch,
 };
 
 export function handleGitCommandNotExist(commandName: string): void {
