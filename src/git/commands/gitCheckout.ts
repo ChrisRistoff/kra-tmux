@@ -9,8 +9,8 @@ export async function checkoutBranch() {
         ? `date -v-${days}d +%s`
         : `date -d '${days} days ago' +%s`;
 
-    const command = `git for-each-ref --format='%(refname:short) %(contents:subject)' refs/heads/ |
-                        awk -v cutoff=$(${date}) '$2 >= cutoff'`;
+    const command = `git for-each-ref --format='%(refname:short) %(committerdate:unix) %(contents:subject)' refs/heads/ |
+        awk -v cutoff=$(${date}) '$2 >= cutoff'`;
 
     const branchList = await bash.execCommand(command).then((res) => res.stdout.trim().split('\n').map((item) => {
         const splitItem = item.split(' ');
