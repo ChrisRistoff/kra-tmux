@@ -39,5 +39,7 @@ export const gitAscii =`
             | view-changed           | 🔍  See file changes instantly and open them                                 |
             |------------------------|------------------------------------------------------------------------------|
             | create-branch          | 🌿  Checkout base branch, fetch/prune with hard reset, create & switch branch|
+            |------------------------|------------------------------------------------------------------------------|
+            | checkout               | ⏳  Prompt for days to filter branches, select from dynamic list & checkout  |
             +------------------------+------------------------------------------------------------------------------+
 `
