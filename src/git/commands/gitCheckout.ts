@@ -1,6 +1,7 @@
 import * as bash from "@utils/bashHelper";
 import * as ui from '@UI/generalUI';
 import { platform } from 'os';
+import { getModifiedFiles, getUntrackedFiles } from "../utils/gitFileUtils";
 
 export async function checkoutBranch() {
     const days = Number(await ui.askUserForInput('How many days ago'));
@@ -26,5 +27,22 @@ export async function checkoutBranch() {
 
     const branchToCheckoutTo = selectedBranch.split(':')[0];
 
+    const modifiedFiles = [...await getModifiedFiles(), ...await getUntrackedFiles()]
+
+    if (modifiedFiles.length > 0) {
+        await handleModifiedFiles(branchToCheckoutTo);
+    }
+
     await bash.execCommand(`git checkout ${branchToCheckoutTo}`);
+}
+
+async function handleModifiedFiles(branchName: string): Promise<void> {
+    const stashChanges = await ui.promptUserYesOrNo(`Do you want to stash changes before you checkout to ${branchName}`);
+    const stashMessage = await ui.askUserForInput('Write stash message: ');
+
+    console.log(stashMessage);
+
+    if (stashChanges) {
+        await bash.execCommand(`git stash --include-untracked -m "${stashMessage}"`);
+    }
 }
