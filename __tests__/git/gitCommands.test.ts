@@ -5,6 +5,7 @@ import { handleConflicts } from '@git/commands/gitConflicts';
 import { restoreFile } from '@git/commands/gitRestore';
 import { applyOrDropStash, dropMultipleStashes } from '@git/commands/gitStash';
 import { GIT_COMMANDS } from '@git/config/gitConstants';
+import { allFiles } from '@/git/utils/gitFileUtils';
 
 // Mock dependencies
 jest.mock('@utils/bashHelper');
@@ -53,7 +54,7 @@ describe('Git Commands', () => {
     describe('restoreFile', () => {
         it('should restore all files when "All" is selected', async () => {
             mockExecCommand.mockResolvedValueOnce({ stdout: 'file1.ts\nfile2.ts', stderr: '' });
-            mockSearchSelect.mockResolvedValueOnce('All');
+            mockSearchSelect.mockResolvedValueOnce(allFiles);
 
             await restoreFile();
 

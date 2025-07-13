@@ -1,11 +1,13 @@
 import * as bash from "@utils/bashHelper";
 import * as ui from '@UI/generalUI';
 
+const currentBranch = 'current';
+
 export async function createBranch() {
     const branchList = await bash.execCommand('git branch');
     const branchArray = branchList.stdout.trim().split('\n').map((branch) => {
         if (branch.startsWith('*')) {
-            return 'current';
+            return currentBranch;
         }
 
         return branch.trim();
@@ -18,7 +20,7 @@ export async function createBranch() {
 
     const nameForNewBranch = await ui.askUserForInput('Enter the name of new branch: ');
 
-    if (chosenBranchToCreateOff !== 'current') {
+    if (chosenBranchToCreateOff !== currentBranch) {
         await bash.execCommand(`git checkout ${chosenBranchToCreateOff}`);
     }
 

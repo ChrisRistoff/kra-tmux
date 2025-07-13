@@ -6,6 +6,7 @@ import { getCurrentBranch } from '../../src/git/core/gitBranch';
 import path from 'path';
 import { gitFilesFolder } from '@/filePaths';
 import { UNTRACKED_CONFIG } from '@/git/config/gitConstants';
+import { allFiles } from '@/git/utils/gitFileUtils';
 
 jest.mock('fs');
 jest.mock('path');
@@ -56,7 +57,7 @@ describe('Git Untracked Operations', () => {
                 .mockResolvedValueOnce({ stdout: files.join('\n'), stderr: '' }) // getUntrackedFiles
                 .mockResolvedValueOnce({ stdout: topLevel, stderr: '' }); // getTopLevelPath
 
-            mockSearchSelect.mockResolvedValue('all');
+            mockSearchSelect.mockResolvedValue(allFiles);
 
             await saveUntracked();
 
@@ -108,7 +109,7 @@ describe('Git Untracked Operations', () => {
             mockFs.readFileSync.mockReturnValue(Buffer.from(JSON.stringify(pathInfoObject)));
 
             // Mock user selection
-            mockSearchSelect.mockResolvedValue('all');
+            mockSearchSelect.mockResolvedValue(allFiles);
 
             await loadUntracked();
 
