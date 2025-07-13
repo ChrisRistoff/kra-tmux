@@ -17,7 +17,7 @@ export async function applyOrDropStash(): Promise<void> {
 
     const command = `git stash ${applyOrDrop} stash@\{${stashList.indexOf(stash)}\}`;
     await bash.execCommand(command);
-    console.log(`Stash ${applyOrDrop}ed: ${stash}`);
+    console.log(`Stash ${applyOrDrop} complete for: ${stash}`);
 }
 
 export async function dropMultipleStashes(): Promise<void> {
