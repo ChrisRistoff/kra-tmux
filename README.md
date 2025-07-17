@@ -92,6 +92,10 @@ kra git
 | **conflict-handle**     | ⚔️ Easily resolve merge conflicts in Neovim with a three-way split and auto-scan until all are resolved.                     |
 | **open-pr**            | 🔗 Instantly open the associated pull request link in your browser.                                                          |
 | **view-changed**        | 🔍 Instantly see file changes and open them for inspection.                                                                  |
+| **create-branch**       | 🌿 Checkout base branch, fetch/prune with hard reset, create & switch branch.                                               |
+| **checkout**            | ⏳ Prompt for days to filter branches, select from dynamic list & checkout.                                                  |
+
+
 
 
 
@@ -176,6 +180,22 @@ Opens the pull request associated with the current branch in your default browse
 Displays a list of modified files. Select one to open a 2-way diff in Neovim. Once closed, the file is removed from the list and the updated list is shown.
 
 ![view changed](docs-assets/git/git-view-changed.gif)
+</details>
+
+<details>
+<summary>🔍 kra git create-branch</summary>
+
+Checks out base branch chosen by the user from a lsit, performs remote sync with fetch/prune/hard-reset, then creates and switches to new branch. Ensures clean starting state for development.
+
+![create-branch](docs-assets/git/git-create-branch.gif)
+</details>
+
+<details>
+<summary>🔍 kra git checkout</summary>
+
+Filters branches by last activity date. Enter days-back value to see recent branches, select from dynamically updated list, if user has unstashed changes they will be asked if they want to stash the current changes.
+
+![checkout](docs-assets/git/git-checkout.gif)
 </details>
 
 ---

@@ -38,11 +38,9 @@ export async function checkoutBranch() {
 
 async function handleModifiedFiles(branchName: string): Promise<void> {
     const stashChanges = await ui.promptUserYesOrNo(`Do you want to stash changes before you checkout to ${branchName}`);
-    const stashMessage = await ui.askUserForInput('Write stash message: ');
-
-    console.log(stashMessage);
 
     if (stashChanges) {
+        const stashMessage = await ui.askUserForInput('Write stash message: ');
         await bash.execCommand(`git stash --include-untracked -m "${stashMessage}"`);
     }
 }
