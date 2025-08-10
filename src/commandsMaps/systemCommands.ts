@@ -1,6 +1,6 @@
-import * as systemFileManager from "@system/commands/systemFileManager";
-import * as scripts from "@system/commands/scripts/executeScripts";
-import { SystemCommands } from "./types/commandTypes";
+import * as systemFileManager from "@/system/commands/systemFileManager";
+import * as scripts from "@/system/commands/scripts/executeScripts";
+import { SystemCommands } from "@/commandsMaps/types/commandTypes";
 import { sysAscii } from "@/system/data/sys-ascii";
 
 export const systemCommands: SystemCommands = {

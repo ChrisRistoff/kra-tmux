@@ -1,7 +1,7 @@
-import * as conversation from '@AIchat/utils/conversation';
-import * as utils from '@AIchat/utils/aiUtils';
-import * as ui from '@UI/generalUI';
-import { aiRoles } from '../data/roles';
+import * as conversation from '@/AIchat/utils/conversation';
+import * as utils from '@/AIchat/utils/aiUtils';
+import { aiRoles } from '@/AIchat/data/roles';
+import * as ui from '@/UI/generalUI';
 
 export async function startNewChat(): Promise<void> {
     try {

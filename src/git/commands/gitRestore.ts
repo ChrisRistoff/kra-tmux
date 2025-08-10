@@ -1,7 +1,7 @@
-import * as bash from "@utils/bashHelper";
-import * as ui from "@UI/generalUI";
-import { GitSearchOptions } from "@customTypes/gitTypes";
-import { allFiles, getModifiedFiles } from "@git/utils/gitFileUtils";
+import * as bash from "@/utils/bashHelper";
+import * as ui from "@/UI/generalUI";
+import { GitSearchOptions } from "@/types/gitTypes";
+import { allFiles, getModifiedFiles } from "@/git/utils/gitFileUtils";
 
 async function getFileToRestoreFromUser(): Promise<string> {
     const itemsArray = [allFiles, ...await getModifiedFiles()];

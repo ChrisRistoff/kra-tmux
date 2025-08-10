@@ -1,7 +1,6 @@
 import inquirer from 'inquirer';
-import { promptUserYesOrNo, askUserForInput, searchSelectAndReturnFromArray, searchAndSelect } from '@UI/generalUI';
+import { promptUserYesOrNo, askUserForInput, searchSelectAndReturnFromArray, searchAndSelect } from '@/UI/generalUI';
 
-// Mock inquirer
 jest.mock('inquirer');
 const mockInquirer = inquirer as jest.Mocked<typeof inquirer>;
 
@@ -82,13 +81,12 @@ describe('generalUI', () => {
 
             const result = await searchSelectAndReturnFromArray(options);
 
-            // Get the source function from the mock calls
+            // source function from the mock calls
             const promptQuestions = mockInquirer.prompt.mock.calls[0][0] as Array<{
                 source?: (answers: string[], input: string) => Promise<string[]> | string[];
             }>;
             const sourceFunction = promptQuestions[0].source;
 
-            // Test the source function if it exists
             if (sourceFunction) {
                 const filteredResults = await sourceFunction([], 'test');
                 expect(filteredResults).toEqual(['test1', 'test2']);
@@ -120,10 +118,10 @@ describe('generalUI', () => {
                 prompt: 'Select:'
             };
 
-            // Mock the inquirer prompts sequence
+            // inquirer prompts sequence
             mockInquirer.prompt
-                .mockResolvedValueOnce({ userSelection: 'newInput' })  // First prompt for initial selection
-                .mockResolvedValueOnce({ finalChoice: 'newInput' });   // Second prompt for final choice
+                .mockResolvedValueOnce({ userSelection: 'newInput' })  // prompt for initial selection
+                .mockResolvedValueOnce({ finalChoice: 'newInput' });   // prompt for final choice
 
             const result = await searchAndSelect(options);
 

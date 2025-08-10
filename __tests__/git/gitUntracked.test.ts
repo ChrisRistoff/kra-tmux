@@ -1,8 +1,8 @@
 import fs from 'fs';
-import * as bash from '../../src/utils/bashHelper';
-import * as ui from '../../src/UI/generalUI';
-import { saveUntracked, loadUntracked } from '../../src/git/commands/gitUntracked';
-import { getCurrentBranch } from '../../src/git/core/gitBranch';
+import * as bash from '@/utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import { saveUntracked, loadUntracked } from '@/git/commands/gitUntracked';
+import { getCurrentBranch } from '@/git/core/gitBranch';
 import path from 'path';
 import { gitFilesFolder } from '@/filePaths';
 import { UNTRACKED_CONFIG } from '@/git/config/gitConstants';
@@ -10,9 +10,9 @@ import { allFiles } from '@/git/utils/gitFileUtils';
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('@utils/bashHelper');
-jest.mock('@UI/generalUI');
-jest.mock('@git/core/gitBranch');
+jest.mock('@/utils/bashHelper');
+jest.mock('@/UI/generalUI');
+jest.mock('@/git/core/gitBranch');
 
 describe('Git Untracked Operations', () => {
     const mockFs = jest.mocked(fs);
@@ -47,12 +47,10 @@ describe('Git Untracked Operations', () => {
             const files = ['test1.txt', 'test2.txt'];
             const topLevel = '/project';
 
-            // Mock the file operations
             mockFs.existsSync.mockReturnValue(false);
             mockFs.mkdirSync.mockImplementation(() => undefined);
             mockFs.writeFileSync.mockImplementation(() => undefined);
 
-            // Mock the commands
             mockExecCommand
                 .mockResolvedValueOnce({ stdout: files.join('\n'), stderr: '' }) // getUntrackedFiles
                 .mockResolvedValueOnce({ stdout: topLevel, stderr: '' }); // getTopLevelPath
@@ -61,7 +59,7 @@ describe('Git Untracked Operations', () => {
 
             await saveUntracked();
 
-            // Verify mv commands for each file
+            // mv commands for each file
             files.forEach(file => {
                 expect(mockExecCommand).toHaveBeenCalledWith(
                     expect.stringContaining(`mv ${path.join(topLevel, file)}`)
@@ -74,9 +72,9 @@ describe('Git Untracked Operations', () => {
         it('should load single untracked file', async () => {
             const file = 'test.txt';
             mockFs.readdirSync.mockReturnValue([
-                { name: file, isFile: () => true },
-                { name: 'pathInfo', isFile: () => true }
-            ] as unknown as fs.Dirent[]);
+                { name: file, isFile: () => true } as fs.Dirent,
+                { name: 'pathInfo', isFile: () => true } as fs.Dirent
+            ]);
             mockSearchSelect.mockResolvedValue(file);
             mockFs.readFileSync.mockReturnValue(JSON.stringify({
                 [file]: '/project/test.txt'
@@ -95,25 +93,21 @@ describe('Git Untracked Operations', () => {
             };
             const branchName = 'main';
 
-            // Mock branch name
             mockGetCurrentBranch.mockResolvedValue(branchName);
 
-            // Mock directory reading
             mockFs.readdirSync.mockReturnValue([
-                { name: 'test1.txt', isFile: () => true },
-                { name: 'test2.txt', isFile: () => true },
-                { name: 'pathInfo', isFile: () => true }
-            ] as unknown as fs.Dirent[]);
+                { name: 'test1.txt', isFile: () => true } as fs.Dirent,
+                { name: 'test2.txt', isFile: () => true } as fs.Dirent,
+                { name: 'pathInfo', isFile: () => true } as fs.Dirent
+            ]);
 
-            // Mock path info file reading
             mockFs.readFileSync.mockReturnValue(Buffer.from(JSON.stringify(pathInfoObject)));
 
-            // Mock user selection
             mockSearchSelect.mockResolvedValue(allFiles);
 
             await loadUntracked();
 
-            // Verify mv commands
+            // mv commands
             expect(mockExecCommand).toHaveBeenCalledTimes(2);
             files.forEach(file => {
                 const sourcePath = path.join(gitFilesFolder, UNTRACKED_CONFIG.untrackedFilesFolderName, branchName, file);
@@ -123,15 +117,15 @@ describe('Git Untracked Operations', () => {
         });
 
         it('should throw error when path info is missing for a file', async () => {
-            const pathInfoObject = {}; // Empty path info
+            const pathInfoObject = {}; // empty path info
             const branchName = 'main';
 
             mockGetCurrentBranch.mockResolvedValue(branchName);
 
             mockFs.readdirSync.mockReturnValue([
-                { name: 'test1.txt', isFile: () => true },
-                { name: 'pathInfo', isFile: () => true }
-            ] as unknown as fs.Dirent[]);
+                { name: 'test1.txt', isFile: () => true } as fs.Dirent,
+                { name: 'pathInfo', isFile: () => true } as fs.Dirent
+            ]);
 
             mockFs.readFileSync.mockReturnValue(Buffer.from(JSON.stringify(pathInfoObject)));
 

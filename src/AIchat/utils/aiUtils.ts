@@ -1,7 +1,7 @@
 import inquirer from 'inquirer';
-import { ChatModelDetails } from '../types/aiTypes';
-import { providers } from '../data/models';
-import * as ui from '@UI/generalUI';
+import * as ui from '@/UI/generalUI';
+import { ChatModelDetails } from '@/AIchat/types/aiTypes';
+import { providers } from '@/AIchat/data/models';
 
 export async function promptUserForTemperature(model: string) {
     const maxTemp = model.startsWith('gemini') ? 20 : 10;

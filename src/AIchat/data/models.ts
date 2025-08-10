@@ -1,4 +1,4 @@
-import { Models, Providers } from "../types/aiTypes";
+import { Models, Providers } from "@/AIchat/types/aiTypes";
 
 const deepInfraModels: Models = {
     'deepSeekR1-turbo': 'deepseek-ai/DeepSeek-R1-Turbo',

@@ -1,13 +1,13 @@
-import * as fs from 'fs/promises';
-import { aiRoles } from '@AIchat/data/roles';
-import { promptModel } from './promptModel';
-import { saveChat } from './saveChat';
-import * as neovim from 'neovim';
-import * as bash from '@utils/bashHelper';
 import os from 'os';
-import { formatChatEntry } from './aiUtils';
+import * as fs from 'fs/promises';
+import * as neovim from 'neovim';
+import { aiRoles } from '@/AIchat/data/roles';
+import { promptModel } from '@/AIchat/utils/promptModel';
+import { saveChat } from '@/AIchat/utils/saveChat';
+import { formatChatEntry } from '@/AIchat/utils/aiUtils';
+import { ChatHistory, Role } from '@/AIchat/types/aiTypes'
+import * as bash from '@/utils/bashHelper';
 import { openVim } from '@/utils/neovimHelper';
-import { ChatHistory, Role } from '@AIchat/types/aiTypes'
 
 export async function converse(
     chatFile: string,
