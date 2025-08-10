@@ -1,4 +1,4 @@
-import { loadLatestSession, handleSessionsIfServerIsRunning } from '@tmux/commands/loadSession';
+import { loadSession, handleSessionsIfServerIsRunning } from '@tmux/commands/loadSession';
 import * as sessionUtils from '@tmux/utils/sessionUtils';
 import * as generalUI from '@UI/generalUI';
 import * as fs from 'fs/promises';
@@ -25,7 +25,7 @@ afterAll(() => {
   (process.stdout.write as jest.Mock).mockRestore();
 });
 
-describe('loadLatestSession', () => {
+describe('loadSession', () => {
     const mockGetSavedSessionsNames = jest.mocked(sessionUtils.getSavedSessionsNames);
     const mockGeneralUI = jest.mocked(generalUI);
     const mockFsReadFile = jest.mocked(fs.readFile);
@@ -68,7 +68,7 @@ describe('loadLatestSession', () => {
             personalCommandForWatch: 'personal-watch'
         });
 
-        await loadLatestSession();
+        await loadSession();
 
         expect(mockTmux.createSession).toHaveBeenCalledWith('testSession');
         expect(mockTmux.setLayout).toHaveBeenCalledWith(
@@ -93,7 +93,7 @@ describe('loadLatestSession', () => {
 
         const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-        await loadLatestSession();
+        await loadSession();
 
         expect(consoleErrorSpy).toHaveBeenCalledWith('No saved sessions found.');
         consoleErrorSpy.mockRestore();

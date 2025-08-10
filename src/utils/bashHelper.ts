@@ -80,6 +80,47 @@ export async function sendKeysToTmuxTargetSession(options: SendKeysArguments): P
     await execCommand(commandString);
 }
 
+export async function sendKeysToTargetSessionAndWait(options: SendKeysArguments): Promise<void> {
+    const marker = `__DONE_`;
+    const cmdWithMarker = `echo ${marker}`;
+
+    await sendKeysToTmuxTargetSession({ ...options, command: cmdWithMarker });
+
+    await waitForTmuxMarker(options, marker);
+}
+
+async function waitForTmuxMarker(options: SendKeysArguments, marker: string) {
+    return new Promise<void>((resolve) => {
+        const interval = setInterval(async () => {
+            const target = getTmuxTarget(options);
+            const { stdout } = await execCommand(`tmux capture-pane -p -t ${target}`);
+
+            if (stdout.includes(marker)) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 200);
+    });
+}
+
+function getTmuxTarget({ sessionName, windowIndex, paneIndex }: SendKeysArguments): string {
+    let target = '';
+
+    if (sessionName) {
+        target += sessionName;
+    }
+
+    if (typeof windowIndex === 'number') {
+        target += `:${windowIndex}`;
+    }
+
+    if (typeof paneIndex === 'number') {
+        target += `.${paneIndex}`;
+    }
+
+    return target;
+}
+
 export async function grepFileForString(fileName: string, searchString: string): Promise<boolean> {
     try {
         const command = `grep -E "${searchString}" '${fileName}'`;

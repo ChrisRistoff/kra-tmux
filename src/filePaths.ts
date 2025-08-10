@@ -22,3 +22,6 @@ export const aiHistoryPath = path.join(homeDir, projectPath, 'ai-files/chat-hist
 // system
 export const systemFilesPath = path.join(homeDir, projectPath, 'system-files');
 export const systemScriptsPath = path.join(homeDir, projectPath, 'system-files', 'scripts');
+
+// lock
+export const lockFilesPath = path.join(homeDir, projectPath, 'lock-files');

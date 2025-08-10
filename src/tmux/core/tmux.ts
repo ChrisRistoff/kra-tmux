@@ -21,7 +21,7 @@ export async function attachToSession(sessionName: string): Promise<void> {
     }
 
     console.log(`Attaching to tmux session: ${sessionName}`);
-    await bash.runCommand('tmux', ['attach-session', '-t', sessionName], {
+    bash.runCommand('tmux', ['attach-session', '-t', sessionName], {
         stdio: 'inherit',
         shell: true,
         env: { ...process.env, TMUX: '' },

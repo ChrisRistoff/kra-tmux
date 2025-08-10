@@ -1,64 +1,66 @@
 {
-  "name": "kra-cli",
-  "_moduleAliases": {
-    "@": "dest/src",
-    "@AIchat": "dest/src/AIchat",
-    "@utils": "dest/src/utils",
-    "@customTypes": "dest/src/types",
-    "@tmux": "dest/src/tmux",
-    "@system": "dest/src/system",
-    "@git": "dest/src/git",
-    "@UI": "dest/src/UI",
-    "@commandsMaps": "dest/src/commandsMaps",
-    "@helpers": "dest/src/helpers",
-    "@filePaths": "dest/src/filePaths.js"
-  },
-  "version": "1.0.2",
-  "description": "A cli helper for tmux and git, for now",
-  "bin": {
-    "kra": "dest/src/main.js"
-  },
-  "preferGlobal": true,
-  "files": [
-    "dest",
-    "src"
-  ],
-  "scripts": {
-    "postinstall": "tsc && node ./dest/autocomplete.js",
-    "lint": "eslint --fix",
-    "test": "jest"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@ai-sdk/deepinfra": "^0.1.9",
-    "@google/generative-ai": "^0.21.0",
-    "@mistralai/mistralai": "^1.5.0",
-    "ai": "^4.1.17",
-    "dotenv": "^16.4.7",
-    "events": "^3.3.0",
-    "inquirer": "^8.2.5",
-    "inquirer-autocomplete-prompt": "^2.0.0",
-    "module-alias": "^2.2.3",
-    "neovim": "^4.0.0",
-    "openai": "^4.83.0",
-    "toml": "^3.0.0"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@types/events": "^3.0.3",
-    "@types/inquirer": "^9.0.7",
-    "@types/inquirer-autocomplete-prompt": "^3.0.3",
-    "@types/jest": "^29.5.14",
-    "@types/node": "^22.7.4",
-    "@typescript-eslint/eslint-plugin": "^8.24.0",
-    "@typescript-eslint/parser": "^8.24.0",
-    "eslint": "^9.20.1",
-    "globals": "^15.14.0",
-    "jest": "^29.7.0",
-    "jest-mock": "^29.7.0",
-    "ts-jest": "^29.2.5",
-    "typescript": "^5.6.2",
-    "typescript-eslint": "^8.22.0"
-  }
+    "name": "kra-cli",
+    "_moduleAliases": {
+        "@": "dest/src",
+        "@AIchat": "dest/src/AIchat",
+        "@utils": "dest/src/utils",
+        "@customTypes": "dest/src/types",
+        "@tmux": "dest/src/tmux",
+        "@system": "dest/src/system",
+        "@git": "dest/src/git",
+        "@UI": "dest/src/UI",
+        "@commandsMaps": "dest/src/commandsMaps",
+        "@helpers": "dest/src/helpers",
+        "@filePaths": "dest/src/filePaths.js"
+    },
+    "version": "1.0.2",
+    "description": "A cli helper for tmux and git, for now",
+    "bin": {
+        "kra": "dest/src/main.js"
+    },
+    "preferGlobal": true,
+    "files": [
+        "dest",
+        "src"
+    ],
+    "scripts": {
+        "postinstall": "tsc && node ./dest/automationScripts/auto.js",
+        "lint": "eslint --fix",
+        "test": "jest"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@google/generative-ai": "^0.21.0",
+        "@mistralai/mistralai": "^1.5.0",
+        "dotenv": "^16.4.7",
+        "events": "^3.3.0",
+        "inquirer": "^8.2.5",
+        "inquirer-autocomplete-prompt": "^2.0.0",
+        "module-alias": "^2.2.3",
+        "neovim": "^4.0.0",
+        "openai": "^4.83.0",
+        "socket.io": "^4.8.1",
+        "socket.io-client": "^4.8.1",
+        "toml": "^3.0.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.19.0",
+        "@types/events": "^3.0.3",
+        "@types/inquirer": "^9.0.7",
+        "@types/inquirer-autocomplete-prompt": "^3.0.3",
+        "@types/jest": "^29.5.14",
+        "@types/node": "^22.7.4",
+        "@typescript-eslint/eslint-plugin": "^8.24.0",
+        "@typescript-eslint/parser": "^8.24.0",
+        "@types/socket.io": "^3.0.1",
+        "@types/socket.io-client": "^1.4.36",
+        "eslint": "^9.20.1",
+        "globals": "^15.14.0",
+        "jest": "^29.7.0",
+        "jest-mock": "^29.7.0",
+        "ts-jest": "^29.2.5",
+        "typescript": "^5.6.2",
+        "typescript-eslint": "^8.22.0"
+    }
 }

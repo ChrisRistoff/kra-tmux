@@ -10,6 +10,7 @@ import { getCurrentSessions, getSavedSessionsNames } from '@tmux/utils/sessionUt
 import { printSessions } from '@tmux/commands/printSessions';
 import * as tmux from '@tmux/core/tmux';
 import { saveSessionsToFile } from '@tmux/commands/saveSessions';
+import { createLockFile, deleteLockFile, LockFiles } from '../../../eventSystem/lockFiles';
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
     const itemsArray = await getSavedSessionsNames();
@@ -35,23 +36,22 @@ async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileNam
 async function navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
     const pathArray = pane.currentPath.split('/');
 
-    await bash.sendKeysToTmuxTargetSession({
+    await bash.sendKeysToTargetSessionAndWait({
         paneIndex: paneIndex,
         command: 'cd'
     });
 
     for (let i = 3; i < pathArray.length; i++) {
         const folderPath = pathArray[i];
-        console.log(`Checking existence of directory: ${folderPath}`);
 
         try {
-            await bash.sendKeysToTmuxTargetSession({
+            await bash.sendKeysToTargetSessionAndWait({
                 paneIndex,
-                command: `[ -d '${folderPath}' ] && echo 'Directory exists' || (git clone ${pane.gitRepoLink} ${folderPath})`,
+                command: `[ -d '${folderPath}' ] || (git clone ${pane.gitRepoLink} ${folderPath})`,
             });
-            await bash.sendKeysToTmuxTargetSession({
+            await bash.sendKeysToTargetSessionAndWait({
                 paneIndex,
-                command: `cd ${folderPath} && echo 'Navigated to ${folderPath}'`,
+                command: `cd ${folderPath}'`,
             });
         } catch (error) {
             console.error(`Error while checking or navigating: ${error}`);
@@ -113,25 +113,45 @@ async function createTmuxSession(sessionName: string, sessions: TmuxSessions, fi
     await tmux.renameWindow(sessionName, 0, sessions[sessionName].windows[0].windowName);
 }
 
-export async function loadLatestSession(): Promise<void> {
+export async function loadSession(): Promise<void> {
     try {
+        await createLockFile(LockFiles.LoadInProgress);
+
         const savedData = await getSessionsFromSaved();
 
         if (!savedData || Object.keys(savedData.sessions).length === 0) {
             console.error('No saved sessions found.');
-
+            await deleteLockFile(LockFiles.LoadInProgress);
             return;
         }
 
-        for (const sess of Object.keys(savedData.sessions)) {
-            await createTmuxSession(sess, savedData.sessions, savedData.fileName);
+        const sessionsKeys = Object.keys(savedData.sessions);
+
+        for (let i = 0; i  < sessionsKeys.length; i ++) {
+            if (i === 0) {
+                console.log('Loading in progress...');
+                await createTmuxSession(sessionsKeys[i], savedData.sessions, savedData.fileName);
+
+                await tmux.sourceTmuxConfig();
+
+                bash.runCommand('tmux', ['attach-session', '-t', sessionsKeys[i]], {
+                    stdio: 'inherit',
+                    shell: true,
+                    env: { ...process.env, TMUX: '' },
+                });
+            } else {
+                await createTmuxSession(sessionsKeys[i], savedData.sessions, savedData.fileName);
+            }
         }
 
-        await tmux.sourceTmuxConfig();
-        const firstSession = Object.keys(savedData.sessions)[0];
-        await tmux.attachToSession(firstSession);
+        await deleteLockFile(LockFiles.LoadInProgress);
     } catch (error) {
-        console.error('Error in loadLatestSession:', error);
+        console.error('Error in loadSession:', error);
+        try {
+            await deleteLockFile(LockFiles.LoadInProgress);
+        } catch (e) {
+            console.error('Error cleaning up lock file:', e);
+        }
     }
 }
 

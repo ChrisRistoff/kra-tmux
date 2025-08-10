@@ -7,6 +7,40 @@ import { getCurrentSessions, getDateString } from '@tmux/utils/sessionUtils';
 import { TmuxSessions } from '@customTypes/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
 
+export async function quickSave(): Promise<void> {
+    const currentSessions = await getCurrentSessions();
+    const sessionString = JSON.stringify(currentSessions, null, 2);
+
+    if (sessionString === '{}') {
+        return;
+    }
+
+    const fileName = 'auto-save-wtf'
+    await saveNeovimSessions(currentSessions, fileName);
+
+    const filePath = `${sessionFilesFolder}/${fileName}`;
+    await fs.writeFile(filePath, sessionString, 'utf-8');
+}
+
+
+export async function saveSessionsToFile(): Promise<void> {
+    const currentSessions = await getCurrentSessions();
+    const sessionString = JSON.stringify(currentSessions, null, 2);
+
+    if (sessionString === '{}') {
+        console.log('No sessions found to save!');
+
+        return;
+    }
+
+    const fileName = await getFileNameFromUser();
+    await saveNeovimSessions(currentSessions, fileName);
+
+    const filePath = `${sessionFilesFolder}/${fileName}`;
+    await fs.writeFile(filePath, sessionString, 'utf-8');
+    console.log('Save Successful!');
+}
+
 async function getFileNameFromUser(): Promise<string> {
     let branchName: string;
 
@@ -54,22 +88,4 @@ async function saveNeovimSessions(sessions: TmuxSessions, fileName: string): Pro
             }
         }
     }
-}
-
-export async function saveSessionsToFile(): Promise<void> {
-    const currentSessions = await getCurrentSessions();
-    const sessionString = JSON.stringify(currentSessions, null, 2);
-
-    if (sessionString === '{}') {
-        console.log('No sessions found to save!');
-
-        return;
-    }
-
-    const fileName = await getFileNameFromUser();
-    await saveNeovimSessions(currentSessions, fileName);
-
-    const filePath = `${sessionFilesFolder}/${fileName}`;
-    await fs.writeFile(filePath, sessionString, 'utf-8');
-    console.log('Save Successful!');
 }

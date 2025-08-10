@@ -8,11 +8,12 @@ export const tmuxCommands: TmuxCommands = {
     'list-sessions': sessions.printCurrentSessions,
     'delete-server': sessions.deleteSession,
     'kill': sessions.killServer,
+    'quicksave': sessions.quickSave,
 };
 
 async function loadSession(): Promise<void> {
     await sessions.handleSessionsIfServerIsRunning();
-    await sessions.loadLatestSession();
+    await sessions.loadSession();
 }
 
 export function handleTmuxCommandNotExist(commandName: string): void {
