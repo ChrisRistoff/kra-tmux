@@ -56,7 +56,7 @@ const main = async (): Promise<void> => {
 
 }
 
-main().then((_res) => {
+main().then(async (_res) => {
     console.log('Done.')
     process.exit();
 }).catch((err) => console.log(err));

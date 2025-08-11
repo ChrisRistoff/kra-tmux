@@ -115,6 +115,16 @@ async function createTmuxSession(sessionName: string, sessions: TmuxSessions, fi
 
 export async function loadSession(): Promise<void> {
     try {
+        process.on('SIGINT', async () => {
+            await deleteLockFile(LockFiles.LoadInProgress);
+            process.kill(0);
+        });
+
+        process.on('exit', async () => {
+            await deleteLockFile(LockFiles.LoadInProgress);
+            process.kill(0);
+        });
+
         await createLockFile(LockFiles.LoadInProgress);
 
         const savedData = await getSessionsFromSaved();
