@@ -53,6 +53,10 @@ const main = async (): Promise<void> => {
     } catch (error) {
         throw new Error('Command not found');
     }
+
 }
 
-main().then((_res) => console.log('Done.')).catch((err) => console.log(err));
+main().then((_res) => {
+    console.log('Done.')
+    process.exit();
+}).catch((err) => console.log(err));

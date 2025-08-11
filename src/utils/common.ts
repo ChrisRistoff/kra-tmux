@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import { Settings } from '@/types/settingsTypes';
 
 export async function sleep(ms: number): Promise<void> {
-        await new Promise(resolve => setTimeout(resolve, ms));
+    await new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export async function loadSettings(): Promise<Settings> {

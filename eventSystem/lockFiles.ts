@@ -11,7 +11,9 @@ export async function createLockFile(type: LockFiles): Promise<void> {
 }
 
 export async function deleteLockFile(type: LockFiles): Promise<void> {
-    await fs.rm(`${lockFilesPath}/${type}`);
+    if (await lockFileExist(type)) {
+        await fs.rm(`${lockFilesPath}/${type}`);
+    }
 }
 
 export async function lockFileExist(type: LockFiles): Promise<boolean> {

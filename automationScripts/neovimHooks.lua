@@ -1,15 +1,11 @@
 local function setup_autosave()
-    -- check if in a tmux session
-    if vim.v.shell_error ~= 0 or tmux_session == "" then
-        return
-    end
 
     local home = vim.fn.expand("~")
     local script_path = home .. "/programming/kra-tmux/dest/automationScripts/autoSaveManager.js"
 
     local events = {
-        "BufEnter", -- opening a new file/buffer
-        "BufLeave", -- closing/leaving a file/buffer
+	"BufEnter", -- entering a buffer
+        "BufDelete", -- closing a file/buffer
         "VimEnter", -- opening neovim
         "VimLeave", -- closing neovim
         "WinNew"    -- splitting screen (new window created)
@@ -71,7 +67,13 @@ local function setup_autosave()
                 local tmux_window = vim.fn.system("tmux display-message -p '#I'"):gsub("%s+", "")
                 local tmux_pane = vim.fn.system("tmux display-message -p '#P'"):gsub("%s+", "")
 
-                -- print("Event:", event, "Session:", tmux_session, "Window:", tmux_window, "Pane:", tmux_pane)
+		-- check if in a tmux session
+		if vim.v.shell_error ~= 0 or tmux_session == "" then
+		    return
+		end
+
+
+                print("Event:", event, "Session:", tmux_session, "Window:", tmux_window, "Pane:", tmux_pane)
 
                 local job_id = vim.fn.jobstart({
                     "node",
@@ -81,7 +83,7 @@ local function setup_autosave()
                     detach = true,
                     on_stderr = function(_, data)
                         if data and #data > 0 then
-                            vim.notify("Autosave script error: " .. table.concat(data, "\n"), vim.log.levels.ERROR)
+                            print("Autosave script error: " .. table.concat(data, "\n"), vim.log.levels.ERROR)
                         end
                     end
                 })

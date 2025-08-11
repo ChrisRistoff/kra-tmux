@@ -10,7 +10,6 @@ async function main() {
 
     const event = process.argv[2];
     console.log(event);
-    const client = createIPCClient('/tmp/autosave.sock');
 
     if (!await lockFileExist(LockFiles.AutoSaveInProgress)) {
         const cmd = `${'~/programming/kra-tmux/dest/automationScripts/autosave.js'.replace('~', os.homedir())}`;
@@ -21,6 +20,7 @@ async function main() {
         });
     }
 
+    const client = createIPCClient('/tmp/autosave.sock');
     await client.ensureConnected();
     await client.emit(event);
 

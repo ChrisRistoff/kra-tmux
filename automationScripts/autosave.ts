@@ -8,9 +8,9 @@ let saveTimer: NodeJS.Timeout | undefined;
 async function resetSaveTimer() {
     if (!process.env.TMUX || await lockFileExist(LockFiles.LoadInProgress)) {
         await deleteLockFile(LockFiles.AutoSaveInProgress);
-
         process.exit(0);
     }
+
     if (saveTimer) {
         clearTimeout(saveTimer)
     }
@@ -24,6 +24,7 @@ async function resetSaveTimer() {
                 server.close();
                 process.exit(0);
             } catch (error) {
+                await deleteLockFile(LockFiles.AutoSaveInProgress);
                 console.error('Save failed:', error);
             }
         }

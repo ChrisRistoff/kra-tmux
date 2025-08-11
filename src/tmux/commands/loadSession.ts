@@ -36,7 +36,7 @@ async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileNam
 async function navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
     const pathArray = pane.currentPath.split('/');
 
-    await bash.sendKeysToTargetSessionAndWait({
+    await bash.sendKeysToTmuxTargetSession({
         paneIndex: paneIndex,
         command: 'cd'
     });
@@ -45,13 +45,13 @@ async function navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
         const folderPath = pathArray[i];
 
         try {
-            await bash.sendKeysToTargetSessionAndWait({
+            await bash.sendKeysToTmuxTargetSession({
                 paneIndex,
                 command: `[ -d '${folderPath}' ] || (git clone ${pane.gitRepoLink} ${folderPath})`,
             });
-            await bash.sendKeysToTargetSessionAndWait({
+            await bash.sendKeysToTmuxTargetSession({
                 paneIndex,
-                command: `cd ${folderPath}'`,
+                command: `cd '${folderPath}'`,
             });
         } catch (error) {
             console.error(`Error while checking or navigating: ${error}`);
@@ -122,29 +122,21 @@ export async function loadSession(): Promise<void> {
         if (!savedData || Object.keys(savedData.sessions).length === 0) {
             console.error('No saved sessions found.');
             await deleteLockFile(LockFiles.LoadInProgress);
+
             return;
         }
 
         const sessionsKeys = Object.keys(savedData.sessions);
 
+        console.log('Loading in progress...');
+
         for (let i = 0; i  < sessionsKeys.length; i ++) {
-            if (i === 0) {
-                console.log('Loading in progress...');
-                await createTmuxSession(sessionsKeys[i], savedData.sessions, savedData.fileName);
-
-                await tmux.sourceTmuxConfig();
-
-                bash.runCommand('tmux', ['attach-session', '-t', sessionsKeys[i]], {
-                    stdio: 'inherit',
-                    shell: true,
-                    env: { ...process.env, TMUX: '' },
-                });
-            } else {
-                await createTmuxSession(sessionsKeys[i], savedData.sessions, savedData.fileName);
-            }
+            await createTmuxSession(sessionsKeys[i], savedData.sessions, savedData.fileName);
         }
 
-        await deleteLockFile(LockFiles.LoadInProgress);
+        await tmux.sourceTmuxConfig();
+
+        tmux.attachToSession(sessionsKeys[0]);
     } catch (error) {
         console.error('Error in loadSession:', error);
         try {
