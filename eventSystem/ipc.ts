@@ -77,8 +77,15 @@ export function createIPCClient(socketPath: string): IPCClient {
     };
 
     const ensureConnected = async () => {
-        while (!fs.existsSync(socketPath)) {
+        let tries = 0;
+
+        while (!fs.existsSync(socketPath) && tries < 50) {
+            tries++
             await new Promise(r => setTimeout(r, 50));
+        }
+
+        if (tries === 50) {
+            console.log('Socket file not found.');
         }
     };
 

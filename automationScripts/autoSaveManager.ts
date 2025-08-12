@@ -1,5 +1,4 @@
 import { createIPCClient } from '../eventSystem/ipc';
-import * as bash from '../src/utils/bashHelper';
 import os from 'os';
 import { lockFileExist, LockFiles } from '../eventSystem/lockFiles';
 
@@ -11,16 +10,14 @@ async function main() {
     const event = process.argv[2];
     console.log(event);
 
-    if (!await lockFileExist(LockFiles.AutoSaveInProgress)) {
-        const cmd = `${'~/programming/kra-tmux/dest/automationScripts/autosave.js'.replace('~', os.homedir())}`;
+    const client = createIPCClient('/tmp/autosave.sock');
 
-        bash.runCommand('node', [cmd], {
-            detached: true,
-            stdio: 'ignore'
-        });
+    if (!await lockFileExist(LockFiles.AutoSaveInProgress)) {
+        const script = `${'~/programming/kra-tmux/dest/automationScripts/autosave.js'.replace('~', os.homedir())}`;
+
+        await client.ensureServerRunning(script);
     }
 
-    const client = createIPCClient('/tmp/autosave.sock');
     await client.ensureConnected();
     await client.emit(event);
 

@@ -16,12 +16,10 @@ export async function quickSave(): Promise<void> {
     }
 
     const fileName = 'auto-save-wtf'
-    await saveNeovimSessions(currentSessions, fileName);
 
     const filePath = `${sessionFilesFolder}/${fileName}`;
     await fs.writeFile(filePath, sessionString, 'utf-8');
 }
-
 
 export async function saveSessionsToFile(): Promise<void> {
     const currentSessions = await getCurrentSessions();
