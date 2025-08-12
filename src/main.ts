@@ -58,5 +58,5 @@ const main = async (): Promise<void> => {
 
 main().then(async (_res) => {
     console.log('Done.')
-    process.exit();
+    // process.exit();
 }).catch((err) => console.log(err));

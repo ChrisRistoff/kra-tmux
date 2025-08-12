@@ -115,15 +115,9 @@ async function createTmuxSession(sessionName: string, sessions: TmuxSessions, fi
 
 export async function loadSession(): Promise<void> {
     try {
-        process.on('SIGINT', async () => {
-            await deleteLockFile(LockFiles.LoadInProgress);
-            process.kill(0);
-        });
-
-        process.on('exit', async () => {
-            await deleteLockFile(LockFiles.LoadInProgress);
-            process.kill(0);
-        });
+        process.on('SIGIO', () => {
+            deleteLockFile(LockFiles.LoadInProgress);
+        })
 
         await createLockFile(LockFiles.LoadInProgress);
 
@@ -145,8 +139,7 @@ export async function loadSession(): Promise<void> {
         }
 
         await tmux.sourceTmuxConfig();
-
-        tmux.attachToSession(sessionsKeys[0]);
+        await deleteLockFile(LockFiles.LoadInProgress);
     } catch (error) {
         console.error('Error in loadSession:', error);
         try {
