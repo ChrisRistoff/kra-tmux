@@ -1,6 +1,6 @@
 import net from 'net';
 import fs from 'fs';
-import * as bash from '../src/utils/bashHelper';
+import * as bash from '@/utils/bashHelper';
 
 export interface IPCServer {
     addListener: (handler: (event: string) => void) => Promise<void>;

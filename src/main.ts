@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import 'module-alias/register';
-import { aiCommands, handleAiCommandNotExist } from './commandsMaps/aiCommands';
-import { gitCommands, handleGitCommandNotExist } from './commandsMaps/gitCommands';
-import { handleTmuxCommandNotExist , tmuxCommands } from './commandsMaps/tmuxCommands';
-import { handleSysCommandNotExist, systemCommands } from './commandsMaps/systemCommands';
-import { handleChangeSettings } from './manageSettings';
-import { SystemCommands, TmuxCommands, GitCommands, AiCommands, Command } from './commandsMaps/types/commandTypes';
-import { workflowAscii } from './data/workflow-ascii';
+import { aiCommands, handleAiCommandNotExist } from '@/commandsMaps/aiCommands';
+import { gitCommands, handleGitCommandNotExist } from '@/commandsMaps/gitCommands';
+import { handleTmuxCommandNotExist , tmuxCommands } from '@/commandsMaps/tmuxCommands';
+import { handleSysCommandNotExist, systemCommands } from '@/commandsMaps/systemCommands';
+import { handleChangeSettings } from '@/manageSettings';
+import { SystemCommands, TmuxCommands, GitCommands, AiCommands, Command } from '@/commandsMaps/types/commandTypes';
+import { workflowAscii } from '@/data/workflow-ascii';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);

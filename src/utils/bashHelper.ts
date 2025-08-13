@@ -1,5 +1,5 @@
 import { spawn, exec } from 'child_process';
-import { AllowedCommandsForNoCode, SendKeysArguments } from '@customTypes/bashTypes';
+import { AllowedCommandsForNoCode, SendKeysArguments } from '@/types/bashTypes';
 
 const allowedCommandsForNoCode: AllowedCommandsForNoCode = {
     'tmux': new Set(['attach-session', 'has-session', 'kill-server']),

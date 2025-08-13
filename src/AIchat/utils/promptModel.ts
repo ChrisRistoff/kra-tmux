@@ -1,4 +1,4 @@
-import * as keys from '@AIchat/data/keys';
+import * as keys from '@/AIchat/data/keys';
 import { Mistral } from '@mistralai/mistralai';
 import OpenAI from "openai";
 

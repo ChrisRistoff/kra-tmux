@@ -1,14 +1,14 @@
-import * as bash from '@utils/bashHelper';
+import * as bash from '@/utils/bashHelper';
 import {
     getFileList,
     getModifiedFiles,
     getUntrackedFiles,
     getConflictedFiles,
     getStashes
-} from '@git/utils/gitFileUtils';
-import { GIT_COMMANDS } from '@git/config/gitConstants';
+} from '@/git/utils/gitFileUtils';
+import { GIT_COMMANDS } from '@/git/config/gitConstants';
 
-jest.mock('@utils/bashHelper');
+jest.mock('@/utils/bashHelper');
 
 describe('Git File Utils', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);

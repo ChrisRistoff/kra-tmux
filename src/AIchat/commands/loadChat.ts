@@ -1,14 +1,14 @@
 import * as fs from 'fs/promises';
-import * as bash from '@utils/bashHelper';
 import * as path from 'path';
-import * as conversation from '@AIchat/utils/conversation';
-import * as ui from '@UI/generalUI';
-import { aiHistoryPath } from '@/filePaths';
+import * as conversation from '@/AIchat/utils/conversation';
+import { ChatData, Role } from '@/AIchat/types/aiTypes'
+import { providers } from '@/AIchat/data/models';
+import { formatChatEntry, pickProviderAndModel } from '@/AIchat/utils/aiUtils';
+import * as ui from '@/UI/generalUI';
 import * as nvim from '@/utils/neovimHelper';
+import * as bash from '@/utils/bashHelper';
 import { filterGitKeep } from '@/utils/common';
-import { providers } from '../data/models';
-import { formatChatEntry, pickProviderAndModel } from '../utils/aiUtils';
-import { ChatData, Role } from '../types/aiTypes';
+import { aiHistoryPath } from '@/filePaths';
 
 export async function loadChat(): Promise<void> {
     try {

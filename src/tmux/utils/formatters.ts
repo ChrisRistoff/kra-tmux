@@ -1,5 +1,5 @@
-import * as bash from '@utils/bashHelper';
-import { Window, Pane } from '@customTypes/sessionTypes';
+import * as bash from '@/utils/bashHelper';
+import { Window, Pane } from '@/types/sessionTypes';
 
 export async function formatPane(pane: string): Promise<Pane> {
     const [currentCommand, currentPath, paneCoords] = pane.split(':');

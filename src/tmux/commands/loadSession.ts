@@ -1,16 +1,16 @@
-import * as bash from '@utils/bashHelper';
-import * as utils from '@utils/common';
-import * as generalUI from '@UI/generalUI';
+import * as bash from '@/utils/bashHelper';
+import * as utils from '@/utils/common';
+import * as generalUI from '@/UI/generalUI';
 import * as fs from 'fs/promises';
-import * as nvim from '@utils/neovimHelper';
-import { sessionFilesFolder } from '@filePaths';
-import { TmuxSessions, Pane } from '@customTypes/sessionTypes';
-import { Settings } from '@customTypes/settingsTypes';
-import { getCurrentSessions, getSavedSessionsNames } from '@tmux/utils/sessionUtils';
-import { printSessions } from '@tmux/commands/printSessions';
-import * as tmux from '@tmux/core/tmux';
-import { saveSessionsToFile } from '@tmux/commands/saveSessions';
-import { createLockFile, deleteLockFile, LockFiles } from '../../../eventSystem/lockFiles';
+import * as nvim from '@/utils/neovimHelper';
+import { sessionFilesFolder } from '@/filePaths';
+import { TmuxSessions, Pane } from '@/types/sessionTypes';
+import { Settings } from '@/types/settingsTypes';
+import { getCurrentSessions, getSavedSessionsNames } from '@/tmux/utils/sessionUtils';
+import { printSessions } from '@/tmux/commands/printSessions';
+import * as tmux from '@/tmux/core/tmux';
+import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
+import { createLockFile, deleteLockFile, LockFiles } from '@/../eventSystem/lockFiles'
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
     const itemsArray = await getSavedSessionsNames();

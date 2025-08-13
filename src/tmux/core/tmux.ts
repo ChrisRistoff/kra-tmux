@@ -1,4 +1,7 @@
-import * as bash from '@utils/bashHelper';
+import * as bash from '@/utils/bashHelper';
+import { lockFileExist, LockFiles } from '@/../eventSystem/lockFiles';
+import { createIPCClient } from '@/../eventSystem/ipc';
+import * as utils from '@/utils/common';
 
 export async function checkSessionExists(sessionName: string): Promise<boolean> {
     try {
@@ -36,6 +39,19 @@ export async function sourceTmuxConfig(): Promise<void> {
 
 export async function killServer(): Promise<void> {
     try {
+        if (await lockFileExist(LockFiles.AutoSaveInProgress)) {
+            const client = createIPCClient('/tmp/autosave.sock');
+
+            await client.ensureConnected();
+            await client.emit('interrupt');
+        }
+
+        while(await lockFileExist(LockFiles.AutoSaveInProgress)) {
+            console.log("Autosaving completing before exit");
+
+            await utils.sleep(500);
+        }
+
         await bash.execCommand('tmux kill-server');
     } catch (_error) {
         console.log('No Server Running');
@@ -51,8 +67,7 @@ export async function detachSession(): Promise<void> {
 }
 
 export async function createSession(sessionName: string): Promise<void> {
-    const createSessionCommand = `tmux new-session -d -s ${sessionName}`;
-    await bash.execCommand(createSessionCommand);
+    await bash.execCommand(`tmux new-session -d -s ${sessionName}`);
 }
 
 export async function createWindow(windowName: string): Promise<void> {

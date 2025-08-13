@@ -1,10 +1,10 @@
-import * as bash from '@utils/bashHelper';
-import * as ui from '@UI/generalUI';
-import { removeFile, removeDirectory } from '@system/commands/systemFileManager';
+import * as bash from '@/utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import { removeFile, removeDirectory } from '@/system/commands/systemFileManager';
 
 
-jest.mock('@utils/bashHelper');
-jest.mock('@UI/generalUI');
+jest.mock('@/utils/bashHelper');
+jest.mock('@/UI/generalUI');
 
 describe('SystemFileManager', () => {
 

@@ -1,8 +1,8 @@
-import * as bash from "@utils/bashHelper";
-import * as vim from "@utils/neovimHelper";
-import * as ui from "@UI/generalUI";
-import { getConflictedFiles } from "@git/utils/gitFileUtils";
-import { Conflicts } from "@customTypes/gitTypes";
+import * as bash from "@/utils/bashHelper";
+import * as vim from "@/utils/neovimHelper";
+import * as ui from "@/UI/generalUI";
+import { getConflictedFiles } from "@/git/utils/gitFileUtils";
+import { Conflicts } from "@/types/gitTypes";
 
 export async function handleConflicts(): Promise<void> {
     const conflictsArray = await getConflictedFiles();

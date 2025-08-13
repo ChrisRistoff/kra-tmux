@@ -1,10 +1,10 @@
 import inquirer from 'inquirer';
-import { promptUserForTemperature, formatChatEntry, pickProviderAndModel } from '@AIchat/utils/aiUtils';
-import * as ui from '@UI/generalUI';
-import { providers } from '@AIchat/data/models';
+import { promptUserForTemperature, formatChatEntry, pickProviderAndModel } from '@/AIchat/utils/aiUtils';
+import * as ui from '@/UI/generalUI';
+import { providers } from '@/AIchat/data/models';
 
 jest.mock('inquirer');
-jest.mock('@UI/generalUI', () => ({
+jest.mock('@/UI/generalUI', () => ({
   searchSelectAndReturnFromArray: jest.fn()
 }));
 

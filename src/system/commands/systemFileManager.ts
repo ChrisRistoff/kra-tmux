@@ -1,6 +1,6 @@
-import * as bash from '@utils/bashHelper';
-import * as ui from '@UI/generalUI';
-import { SearchCriteria } from '@system/types/systemFileTypes';
+import * as bash from '@/utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import { SearchCriteria } from '@/system/types/systemFileTypes';
 
 enum SearchTargetType {
     File = 'f',

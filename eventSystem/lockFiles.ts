@@ -1,4 +1,4 @@
-import { lockFilesPath } from "../src/filePaths";
+import { lockFilesPath } from "@/filePaths";
 import * as fs from 'fs/promises';
 
 export enum LockFiles {

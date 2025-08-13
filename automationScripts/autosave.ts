@@ -4,6 +4,7 @@ import { createLockFile, deleteLockFile, lockFileExist, LockFiles } from '../eve
 import * as nvim from 'neovim';
 import os from 'os';
 import path from 'path';
+import fs from 'fs';
 
 const scheduledJobs = new Set<string>();
 let saveTimer: NodeJS.Timeout | undefined;
@@ -14,7 +15,7 @@ const homeDir = os.homedir();
 const projectPath = 'programming/kra-tmux/'
 export const nvimSessionsPath = path.join(homeDir, projectPath, 'tmux-files/nvim-sessions');
 
-async function resetSaveTimer() {
+async function resetSaveTimer(timeout = 20000) {
     if (!process.env.TMUX || await lockFileExist(LockFiles.LoadInProgress)) {
         await deleteLockFile(LockFiles.AutoSaveInProgress);
         process.exit(0);
@@ -32,41 +33,45 @@ async function resetSaveTimer() {
                 }
 
                 scheduledJobs.forEach((job) => {
-                    if (job.startsWith('neovim')) {
+                    if (job.startsWith('neovim') && neovim) {
                         const splitJob = job.split(':');
                         const folderName = 'auto-save-wtf';
                         const nvimSessionFileName = `${splitJob[1]}_${splitJob[2]}_${splitJob[3]}.vim`
 
-                        // if event vim leave, delete session
+                        if (splitJob[splitJob.length - 2] === 'VimLeave') {
+                            fs.unlinkSync(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
+                        }
 
-                        neovim?.command(`mksession! ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
-                        neovim?.command(`echo 'session autosaved : ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}'`);
+                        neovim.command(`mksession! ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
+                        neovim.command(`echo 'kra workflow autosaved : ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}'`);
                     }
                 })
             } catch (error) {
-                console.log(error, 'INSIDE TIMER');
+                console.log(error);
             } finally {
-                console.log('finally in timer');
                 await deleteLockFile(LockFiles.AutoSaveInProgress);
                 server?.close();
                 process.exit(0);
             }
         }
-    }, 20000);
+    }, timeout);
 }
 
 async function main(): Promise<void> {
     try {
         const server = createIPCServer('/tmp/autosave.sock');
 
-        await server.addListener(event => {
-            console.log(event);
+        await server.addListener(async (event) => {
+            if (event === 'interrupt') {
+                resetSaveTimer(0);
+
+                return;
+            }
+
             const splitEvent = event.split(':');
 
             if (typeof event === 'string' && event.startsWith('neovim:') && !scheduledJobs.has(event)) {
                 const socket = splitEvent[splitEvent.length - 1];
-
-                console.log(splitEvent[splitEvent.length - 2])
 
                 if (splitEvent[splitEvent.length - 2] !== 'VimLeave') {
                     neovim = nvim.attach({ socket })
@@ -79,10 +84,10 @@ async function main(): Promise<void> {
         });
 
         await createLockFile(LockFiles.AutoSaveInProgress);
-        await resetSaveTimer();
+        resetSaveTimer();
     } catch (error) {
-        console.log(error, 'INSIDE MAIN');
+        console.log(error);
     }
 }
 
-main().then((_res) => console.log('wooop'));
+main().then((_res) => console.log('done'));

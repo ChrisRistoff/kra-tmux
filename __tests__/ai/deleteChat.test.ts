@@ -1,6 +1,6 @@
-import { deleteChats } from '@AIchat/commands/deleteChat';
+import { deleteChats } from '@/AIchat/commands/deleteChat';
 import * as fs from 'fs/promises';
-import * as ui from '@UI/generalUI';
+import * as ui from '@/UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 
 jest.mock('fs/promises', () => ({

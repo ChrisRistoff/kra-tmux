@@ -1,7 +1,7 @@
-import { getCurrentBranch } from '@git/core/gitBranch';
-import * as bash from '@utils/bashHelper';
-import { platform } from 'os';
 import { URL } from 'url';
+import { platform } from 'os';
+import { getCurrentBranch } from '@/git/core/gitBranch';
+import * as bash from '@/utils/bashHelper';
 
 export async function openRemoteUrl(): Promise<void> {
     const branchName = await getCurrentBranch();

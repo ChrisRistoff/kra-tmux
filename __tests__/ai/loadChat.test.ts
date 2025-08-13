@@ -1,20 +1,20 @@
 import * as fs from 'fs/promises';
-import * as bash from '@utils/bashHelper';
+import * as bash from '@/utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
-import * as ui from '@UI/generalUI';
-import * as conversation from '@AIchat/utils/conversation';
-import { loadChat } from '@AIchat/commands/loadChat';
-import { aiHistoryPath } from '../../src/filePaths';
-import { pickProviderAndModel } from '@AIchat/utils/aiUtils';
-import { providers } from '@AIchat/data/models';
+import * as ui from '@/UI/generalUI';
+import * as conversation from '@/AIchat/utils/conversation';
+import { loadChat } from '@/AIchat/commands/loadChat';
+import { aiHistoryPath } from '@/filePaths';
+import { pickProviderAndModel } from '@/AIchat/utils/aiUtils';
+import { providers } from '@/AIchat/data/models';
 import * as path from 'path';
 
 jest.mock('fs/promises');
-jest.mock('@utils/bashHelper');
+jest.mock('@/utils/bashHelper');
 jest.mock('@/utils/neovimHelper');
-jest.mock('@UI/generalUI');
-jest.mock('@AIchat/utils/conversation');
-jest.mock('@AIchat/utils/aiUtils');
+jest.mock('@/UI/generalUI');
+jest.mock('@/AIchat/utils/conversation');
+jest.mock('@/AIchat/utils/aiUtils');
 jest.mock('@/utils/common', () => ({
   filterGitKeep: jest.fn((chats) => chats)
 }));

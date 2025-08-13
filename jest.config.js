@@ -12,16 +12,6 @@ module.exports = {
   coverageDirectory: 'coverage',
   coveragePathIgnorePatterns: ['/node_modules/'],
   moduleNameMapper: {
-    '^@AIchat/(.*)$': '<rootDir>/src/AIchat/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
-    '^@utils/(.*)$': '<rootDir>/src/utils/$1',
-    '^@types/(.*)$': '<rootDir>/src/types/$1',
-    '^@tmux/(.*)$': '<rootDir>/src/tmux/$1',
-    '^@git/(.*)$': '<rootDir>/src/git/$1',
-    '^@UI/(.*)$': '<rootDir>/src/UI/$1',
-    '^@commandsMaps/(.*)$': '<rootDir>/src/commandsMaps/$1',
-    '^@helpers/(.*)$': '<rootDir>/src/helpers/$1',
-    '^@system/(.*)$': '<rootDir>/src/system/$1',
-    '^@filePaths$': '<rootDir>/src/filePaths.ts',
   },
 };

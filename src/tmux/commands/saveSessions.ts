@@ -1,10 +1,10 @@
-import * as bash from '@utils/bashHelper';
-import * as nvim from '@utils/neovimHelper';
 import * as fs from 'fs/promises';
-import * as generalUI from '@UI/generalUI';
-import { sessionFilesFolder } from '@filePaths';
-import { getCurrentSessions, getDateString } from '@tmux/utils/sessionUtils';
-import { TmuxSessions } from '@customTypes/sessionTypes';
+import * as bash from '@/utils/bashHelper';
+import * as nvim from '@/utils/neovimHelper';
+import * as generalUI from '@/UI/generalUI';
+import { sessionFilesFolder } from '@/filePaths';
+import { getCurrentSessions, getDateString } from '@/tmux/utils/sessionUtils';
+import { TmuxSessions } from '@/types/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
 
 export async function quickSave(): Promise<void> {

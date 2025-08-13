@@ -1,7 +1,7 @@
-import * as nvim from '@utils/neovimHelper';
+import * as nvim from '@/utils/neovimHelper';
 import * as toml from 'toml';
 import * as fs from 'fs/promises';
-import { settingsFilePath } from "@filePaths";
+import { settingsFilePath } from "@/filePaths";
 
 export async function handleChangeSettings(): Promise<void> {
     let settingsFileString = await fs.readFile(settingsFilePath, 'utf8');

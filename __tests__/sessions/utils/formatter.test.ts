@@ -1,7 +1,7 @@
-import { formatPane, formatWindow } from '@tmux/utils/formatters';
-import * as bash from '@utils/bashHelper';
+import { formatPane, formatWindow } from '@/tmux/utils/formatters';
+import * as bash from '@/utils/bashHelper';
 
-jest.mock('@utils/bashHelper');
+jest.mock('@/utils/bashHelper');
 
 describe('formatters', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);

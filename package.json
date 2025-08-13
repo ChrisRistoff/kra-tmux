@@ -1,17 +1,7 @@
 {
     "name": "kra-cli",
     "_moduleAliases": {
-        "@": "dest/src",
-        "@AIchat": "dest/src/AIchat",
-        "@utils": "dest/src/utils",
-        "@customTypes": "dest/src/types",
-        "@tmux": "dest/src/tmux",
-        "@system": "dest/src/system",
-        "@git": "dest/src/git",
-        "@UI": "dest/src/UI",
-        "@commandsMaps": "dest/src/commandsMaps",
-        "@helpers": "dest/src/helpers",
-        "@filePaths": "dest/src/filePaths.js"
+        "@": "dest/src"
     },
     "version": "1.0.2",
     "description": "A cli helper for tmux and git, for now",

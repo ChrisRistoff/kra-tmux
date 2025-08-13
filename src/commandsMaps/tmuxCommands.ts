@@ -1,5 +1,5 @@
-import * as sessions from '@tmux/index'
-import { TmuxCommands } from './types/commandTypes';
+import * as sessions from '@/tmux/index';
+import { TmuxCommands } from '@/commandsMaps/types/commandTypes';
 import { tmuxAscii } from '@/tmux/data/tmux-ascii';
 
 export const tmuxCommands: TmuxCommands = {

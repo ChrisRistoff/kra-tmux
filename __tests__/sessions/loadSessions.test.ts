@@ -1,19 +1,19 @@
-import { loadSession, handleSessionsIfServerIsRunning } from '@tmux/commands/loadSession';
-import * as sessionUtils from '@tmux/utils/sessionUtils';
-import * as generalUI from '@UI/generalUI';
+import { loadSession, handleSessionsIfServerIsRunning } from '@/tmux/commands/loadSession';
+import * as sessionUtils from '@/tmux/utils/sessionUtils';
+import * as generalUI from '@/UI/generalUI';
 import * as fs from 'fs/promises';
-import * as tmux from '@tmux/core/tmux';
-import * as utils from '@utils/common';
-import { saveSessionsToFile } from '@tmux/commands/saveSessions';
+import * as tmux from '@/tmux/core/tmux';
+import * as utils from '@/utils/common';
+import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
 
-jest.mock('@tmux/utils/sessionUtils');
-jest.mock('@UI/generalUI');
+jest.mock('@/tmux/utils/sessionUtils');
+jest.mock('@/UI/generalUI');
 jest.mock('fs/promises');
-jest.mock('@tmux/core/tmux');
-jest.mock('@utils/common');
-jest.mock('@utils/neovimHelper');
-jest.mock('@tmux/commands/saveSessions');
-jest.mock('@utils/bashHelper', () => ({
+jest.mock('@/tmux/core/tmux');
+jest.mock('@/utils/common');
+jest.mock('@/utils/neovimHelper');
+jest.mock('@/tmux/commands/saveSessions');
+jest.mock('@/utils/bashHelper', () => ({
   sendKeysToTmuxTargetSession: jest.fn(() => Promise.resolve())
 }));
 
@@ -115,7 +115,7 @@ describe('handleSessionsIfServerIsRunning', () => {
     it('should save sessions, kill server and sleep when confirmed', async () => {
         const currentSessions = { session1: { windows: [] } };
         mockGetCurrentSessions.mockResolvedValue(currentSessions);
-        jest.spyOn(require('@tmux/commands/printSessions'), 'printSessions').mockImplementation(mockPrintSessions);
+        jest.spyOn(require('@/tmux/commands/printSessions'), 'printSessions').mockImplementation(mockPrintSessions);
         mockPrompt.mockResolvedValue(true);
         mockUtils.sleep.mockResolvedValue(undefined);
 
@@ -130,7 +130,7 @@ describe('handleSessionsIfServerIsRunning', () => {
     it('should only kill server when not confirmed to save sessions', async () => {
         const currentSessions = { session1: { windows: [] } };
         mockGetCurrentSessions.mockResolvedValue(currentSessions);
-        jest.spyOn(require('@tmux/commands/printSessions'), 'printSessions').mockImplementation(mockPrintSessions);
+        jest.spyOn(require('@/tmux/commands/printSessions'), 'printSessions').mockImplementation(mockPrintSessions);
         mockPrompt.mockResolvedValue(false);
         mockUtils.sleep.mockResolvedValue(undefined);
 

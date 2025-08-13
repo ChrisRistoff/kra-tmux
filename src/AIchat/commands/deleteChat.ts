@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import * as ui from '@UI/generalUI';
+import * as ui from '@/UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 import { filterGitKeep } from '@/utils/common';
 

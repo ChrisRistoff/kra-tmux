@@ -1,21 +1,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { removeFile, removeDirectory } from '@system/commands/systemFileManager';
+import { removeFile, removeDirectory } from '@/system/commands/systemFileManager';
 
 // Mock the UI and bash helper modules
-jest.mock('@UI/generalUI', () => ({
+jest.mock('@/UI/generalUI', () => ({
     askUserForInput: jest.fn(),
     promptUserYesOrNo: jest.fn(),
     searchSelectAndReturnFromArray: jest.fn()
 }));
 
-jest.mock('@utils/bashHelper', () => ({
+jest.mock('@/utils/bashHelper', () => ({
     execCommand: jest.fn()
 }));
 
 // Import after mocking
-import * as ui from '@UI/generalUI';
-import * as bash from '@utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import * as bash from '@/utils/bashHelper';
 
 describe('SystemFileManager Integration Tests', () => {
     const TEST_DIR = path.join(process.cwd(), '__tests__/test-files');

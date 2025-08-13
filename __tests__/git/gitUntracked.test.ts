@@ -1,8 +1,8 @@
 import fs from 'fs';
-import * as bash from '../../src/utils/bashHelper';
-import * as ui from '../../src/UI/generalUI';
-import { saveUntracked, loadUntracked } from '../../src/git/commands/gitUntracked';
-import { getCurrentBranch } from '../../src/git/core/gitBranch';
+import * as bash from '@/utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import { saveUntracked, loadUntracked } from '@/git/commands/gitUntracked';
+import { getCurrentBranch } from '@/git/core/gitBranch';
 import path from 'path';
 import { gitFilesFolder } from '@/filePaths';
 import { UNTRACKED_CONFIG } from '@/git/config/gitConstants';
@@ -10,9 +10,9 @@ import { allFiles } from '@/git/utils/gitFileUtils';
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('@utils/bashHelper');
-jest.mock('@UI/generalUI');
-jest.mock('@git/core/gitBranch');
+jest.mock('@/utils/bashHelper');
+jest.mock('@/UI/generalUI');
+jest.mock('@/git/core/gitBranch');
 
 describe('Git Untracked Operations', () => {
     const mockFs = jest.mocked(fs);
