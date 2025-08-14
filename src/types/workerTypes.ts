@@ -1,3 +1,5 @@
+import { Window } from "./sessionTypes";
+
 export type SessionWorkerData = {
     sessionName: string;
     sessionData: any;
@@ -6,6 +8,7 @@ export type SessionWorkerData = {
 
 export type WorkerResult = {
     sessionName: string;
+    windows: Window[]
     success: boolean;
     error?: string;
 }

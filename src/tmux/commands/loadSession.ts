@@ -9,8 +9,10 @@ import { printSessions } from '@/tmux/commands/printSessions';
 import * as tmux from '@/tmux/core/tmux';
 import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
 import { createLockFile, deleteLockFile, LockFiles } from '@/../eventSystem/lockFiles'
-import { SessionWorkerData, WorkerResult } from '@/types/workerTypes';
+import { WorkerResult } from '@/types/workerTypes';
 import { Worker } from 'worker_threads';
+import { cpus } from 'os';
+import PQueue from 'p-queue';
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
     const itemsArray = await getSavedSessionsNames();
@@ -38,7 +40,7 @@ const createWorkerPromise = (
     savedData: any
 ): Promise<WorkerResult> => {
     return new Promise((resolve, reject) => {
-        const workerData: SessionWorkerData = {
+        const workerData = {
             sessionName,
             sessionData: { [sessionName]: savedData.sessions[sessionName] },
             fileName: savedData.fileName
@@ -48,33 +50,15 @@ const createWorkerPromise = (
             workerData
         });
 
-        const cleanup = () => {
-            worker.terminate().catch(console.error);
-        };
+        const cleanup = () => worker.terminate().catch(console.error);
 
         worker.on('message', (result: WorkerResult) => {
             cleanup();
-            if (result.success) {
-                console.log(`✅ Session ${result.sessionName} created successfully`);
-                resolve(result);
-            } else {
-                console.error(`❌ Session ${result.sessionName} failed: ${result.error}`);
-                reject(new Error(result.error));
-            }
+            result.success ? resolve(result) : reject(result.error);
         });
 
-        worker.on('error', (error) => {
-            cleanup();
-            console.error(`Worker error for session ${sessionName}:`, error);
-            reject(error);
-        });
-
-        worker.on('exit', (code) => {
-            cleanup();
-            if (code !== 0) {
-                reject(new Error(`Worker stopped with exit code ${code}`));
-            }
-        });
+        worker.on('error', reject);
+        worker.on('exit', code => code !== 0 && reject(`Exit code ${code}`));
     });
 };
 
@@ -83,37 +67,46 @@ export async function loadSession(): Promise<void> {
         await createLockFile(LockFiles.LoadInProgress);
         const savedData = await getSessionsFromSaved();
 
-        if (!savedData || !Object.keys(savedData.sessions).length) {
+        if (!savedData?.sessions) {
             console.error('No saved sessions found.');
             await deleteLockFile(LockFiles.LoadInProgress);
             return;
         }
 
-        const sessionKeys = Object.keys(savedData.sessions);
-        console.log(`Loading ${sessionKeys.length} sessions in parallel...`);
+        const sessionQueue = new PQueue({ concurrency: cpus().length });
+        const sessionNames = Object.keys(savedData.sessions);
 
-        // Fire all workers at once for maximum speed
-        const workerPromises = sessionKeys.map(sessionName =>
-            createWorkerPromise(sessionName, savedData)
-        );
+        const processSession = async (sessionName: string, serverName: string) => {
+            const result = await createWorkerPromise(sessionName, savedData);
+            const windowQueue = new PQueue({ concurrency: 4 });
 
-        const results = await Promise.allSettled(workerPromises);
+            for (const [windowIndex, window] of result.windows.entries()) {
+                await windowQueue.add(() =>
+                    new Promise((resolve, reject) => {
+                        const worker = new Worker(path.join(__dirname, '../workers/windowWorker.js'), {
+                            workerData: { sessionName, windowIndex, window, serverName }
+                        });
 
-        // Log results
-        results.forEach((result, index) => {
-            if (result.status === 'fulfilled') {
-                console.log(`✅ Session ${sessionKeys[index]} created successfully`);
-            } else {
-                console.error(`❌ Session ${sessionKeys[index]} failed:`, result.reason);
+                        worker.on('message', resolve);
+                        worker.on('error', reject);
+                        worker.on('exit', code =>
+                            code !== 0 ? reject(`Exit code ${code}`) : resolve(null)
+                        );
+                    })
+                );
             }
-        });
+        };
+
+        await sessionQueue.addAll(sessionNames.map(sessionName =>
+            () => processSession(sessionName, savedData.fileName)
+        ));
 
         await tmux.sourceTmuxConfig();
         await deleteLockFile(LockFiles.LoadInProgress);
     } catch (error) {
-        console.log(error);
+        console.error('Load session error:', error);
     }
-};
+}
 
 export async function handleSessionsIfServerIsRunning(): Promise<void> {
     const currentSessions = await getCurrentSessions();
