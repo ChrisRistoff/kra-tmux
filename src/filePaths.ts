@@ -25,3 +25,6 @@ export const systemScriptsPath = path.join(homeDir, projectPath, 'system-files',
 
 // lock
 export const lockFilesPath = path.join(homeDir, projectPath, 'lock-files');
+
+// lock
+export const loadSessionWorkerPath = path.join(homeDir, projectPath, 'src/tmux/workers/loadSessionWorker.js');

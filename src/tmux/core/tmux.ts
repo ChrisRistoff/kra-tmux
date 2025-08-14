@@ -16,21 +16,6 @@ export async function checkSessionExists(sessionName: string): Promise<boolean> 
     }
 }
 
-export async function attachToSession(sessionName: string): Promise<void> {
-    if (!await checkSessionExists(sessionName)) {
-        console.log(`Session does not exist: ${sessionName}`);
-
-        return;
-    }
-
-    console.log(`Attaching to tmux session: ${sessionName}`);
-    bash.runCommand('tmux', ['attach-session', '-t', sessionName], {
-        stdio: 'inherit',
-        shell: true,
-        env: { ...process.env, TMUX: '' },
-    });
-}
-
 export async function sourceTmuxConfig(): Promise<void> {
     const sourceTmux = `tmux source ${__dirname}/../../../../tmux-files/.tmux.conf`;
     await bash.execCommand(sourceTmux);

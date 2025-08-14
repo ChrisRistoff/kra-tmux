@@ -1,16 +1,16 @@
-import * as bash from '@/utils/bashHelper';
+import path from 'path';
+import * as fs from 'fs/promises';
 import * as utils from '@/utils/common';
 import * as generalUI from '@/UI/generalUI';
-import * as fs from 'fs/promises';
-import * as nvim from '@/utils/neovimHelper';
 import { sessionFilesFolder } from '@/filePaths';
-import { TmuxSessions, Pane } from '@/types/sessionTypes';
-import { Settings } from '@/types/settingsTypes';
+import { TmuxSessions } from '@/types/sessionTypes';
 import { getCurrentSessions, getSavedSessionsNames } from '@/tmux/utils/sessionUtils';
 import { printSessions } from '@/tmux/commands/printSessions';
 import * as tmux from '@/tmux/core/tmux';
 import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
 import { createLockFile, deleteLockFile, LockFiles } from '@/../eventSystem/lockFiles'
+import { SessionWorkerData, WorkerResult } from '@/types/workerTypes';
+import { Worker } from 'worker_threads';
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
     const itemsArray = await getSavedSessionsNames();
@@ -33,122 +33,87 @@ async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileNam
     };
 }
 
-async function navigateToFolder(pane: Pane, paneIndex: number): Promise<void> {
-    const pathArray = pane.currentPath.split('/');
-
-    await bash.sendKeysToTmuxTargetSession({
-        paneIndex: paneIndex,
-        command: 'cd'
-    });
-
-    for (let i = 3; i < pathArray.length; i++) {
-        const folderPath = pathArray[i];
-
-        try {
-            await bash.sendKeysToTmuxTargetSession({
-                paneIndex,
-                command: `[ -d '${folderPath}' ] || (git clone ${pane.gitRepoLink} ${folderPath})`,
-            });
-            await bash.sendKeysToTmuxTargetSession({
-                paneIndex,
-                command: `cd '${folderPath}'`,
-            });
-        } catch (error) {
-            console.error(`Error while checking or navigating: ${error}`);
-        }
-    }
-}
-
-async function handleWatchCommands(
-    settings: Settings,
-    windowName: string,
+const createWorkerPromise = (
     sessionName: string,
-    windowIndex: number
-): Promise<void> {
-    if (settings.work && windowName === settings.workWindowNameForWatch) {
-        await bash.sendKeysToTmuxTargetSession({
+    savedData: any
+): Promise<WorkerResult> => {
+    return new Promise((resolve, reject) => {
+        const workerData: SessionWorkerData = {
             sessionName,
-            windowIndex,
-            paneIndex: 0,
-            command: settings.workCommandForWatch,
+            sessionData: { [sessionName]: savedData.sessions[sessionName] },
+            fileName: savedData.fileName
+        };
+
+        const worker = new Worker(path.join(__dirname, '../workers/loadSessionWorker.js'), {
+            workerData
         });
-    } else if (!settings.work && windowName === settings.personalWindowNameForWatch) {
-        await bash.sendKeysToTmuxTargetSession({
-            sessionName,
-            windowIndex,
-            paneIndex: 0,
-            command: settings.personalCommandForWatch,
+
+        const cleanup = () => {
+            worker.terminate().catch(console.error);
+        };
+
+        worker.on('message', (result: WorkerResult) => {
+            cleanup();
+            if (result.success) {
+                console.log(`✅ Session ${result.sessionName} created successfully`);
+                resolve(result);
+            } else {
+                console.error(`❌ Session ${result.sessionName} failed: ${result.error}`);
+                reject(new Error(result.error));
+            }
         });
-    }
-}
 
-async function createTmuxSession(sessionName: string, sessions: TmuxSessions, fileName: string): Promise<void> {
-    await tmux.createSession(sessionName);
+        worker.on('error', (error) => {
+            cleanup();
+            console.error(`Worker error for session ${sessionName}:`, error);
+            reject(error);
+        });
 
-    for (const [windowIndex, window] of sessions[sessionName].windows.entries()) {
-        if (windowIndex > 0) {
-            await tmux.createWindow(window.windowName);
-        }
-
-        for (const [paneIndex, pane] of window.panes.entries()) {
-            if (paneIndex > 0) {
-                await tmux.createPane(sessionName, windowIndex);
+        worker.on('exit', (code) => {
+            cleanup();
+            if (code !== 0) {
+                reject(new Error(`Worker stopped with exit code ${code}`));
             }
-
-            await navigateToFolder(pane, paneIndex);
-
-            if (pane.currentCommand === "nvim") {
-                await nvim.loadNvimSession(fileName, sessionName, windowIndex, paneIndex);
-            }
-        }
-
-        await tmux.setLayout(sessionName, windowIndex, window.layout);
-        await tmux.selectPane(sessionName, windowIndex, 0);
-
-        const settings: Settings = await utils.loadSettings();
-        await handleWatchCommands(settings, window.windowName, sessionName, windowIndex);
-    }
-
-    await tmux.selectWindow(0);
-    await tmux.renameWindow(sessionName, 0, sessions[sessionName].windows[0].windowName);
-}
+        });
+    });
+};
 
 export async function loadSession(): Promise<void> {
     try {
-        process.on('SIGIO', () => {
-            deleteLockFile(LockFiles.LoadInProgress);
-        })
-
         await createLockFile(LockFiles.LoadInProgress);
-
         const savedData = await getSessionsFromSaved();
 
-        if (!savedData || Object.keys(savedData.sessions).length === 0) {
+        if (!savedData || !Object.keys(savedData.sessions).length) {
             console.error('No saved sessions found.');
             await deleteLockFile(LockFiles.LoadInProgress);
-
             return;
         }
 
-        const sessionsKeys = Object.keys(savedData.sessions);
+        const sessionKeys = Object.keys(savedData.sessions);
+        console.log(`Loading ${sessionKeys.length} sessions in parallel...`);
 
-        console.log('Loading in progress...');
+        // Fire all workers at once for maximum speed
+        const workerPromises = sessionKeys.map(sessionName =>
+            createWorkerPromise(sessionName, savedData)
+        );
 
-        for (let i = 0; i  < sessionsKeys.length; i ++) {
-            await createTmuxSession(sessionsKeys[i], savedData.sessions, savedData.fileName);
-        }
+        const results = await Promise.allSettled(workerPromises);
+
+        // Log results
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                console.log(`✅ Session ${sessionKeys[index]} created successfully`);
+            } else {
+                console.error(`❌ Session ${sessionKeys[index]} failed:`, result.reason);
+            }
+        });
 
         await tmux.sourceTmuxConfig();
         await deleteLockFile(LockFiles.LoadInProgress);
     } catch (error) {
-        console.error('Error in loadSession:', error);
-        try {
-            await deleteLockFile(LockFiles.LoadInProgress);
-        } catch (e) {
-            console.error('Error cleaning up lock file:', e);
-        }
+        console.log(error);
     }
-}
+};
 
 export async function handleSessionsIfServerIsRunning(): Promise<void> {
     const currentSessions = await getCurrentSessions();

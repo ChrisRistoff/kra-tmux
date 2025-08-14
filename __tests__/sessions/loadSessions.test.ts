@@ -84,7 +84,6 @@ describe('loadSession', () => {
             sessionsData.testSession.windows[0].windowName
         );
         expect(mockTmux.sourceTmuxConfig).toHaveBeenCalled();
-        expect(mockTmux.attachToSession).toHaveBeenCalledWith('testSession');
     });
 
     it('should log error and return if no file is selected', async () => {
