@@ -73,12 +73,14 @@ export async function loadSession(): Promise<void> {
             return;
         }
 
-        const sessionQueue = new PQueue({ concurrency: cpus().length });
+        const maxCpus = cpus().length
+
         const sessionNames = Object.keys(savedData.sessions);
+        const sessionQueue = new PQueue({ concurrency: Math.min(sessionNames.length, maxCpus) });
 
         const processSession = async (sessionName: string, serverName: string) => {
             const result = await createWorkerPromise(sessionName, savedData);
-            const windowQueue = new PQueue({ concurrency: 4 });
+            const windowQueue = new PQueue({ concurrency: Math.min(result.windows.length, maxCpus) });
 
             for (const [windowIndex, window] of result.windows.entries()) {
                 await windowQueue.add(() =>
