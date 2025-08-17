@@ -2,13 +2,12 @@ import * as fs from 'fs/promises';
 import * as utils from '@/utils/common';
 import * as generalUI from '@/UI/generalUI';
 import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
-import { TmuxSessions } from '@/types/sessionTypes';
+import { Window, SessionResult, TmuxSessions } from '@/types/sessionTypes';
 import { getCurrentSessions, getSavedSessionsNames } from '@/tmux/utils/sessionUtils';
 import { printSessions } from '@/tmux/commands/printSessions';
 import * as tmux from '@/tmux/core/tmux';
 import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
-import { createLockFile, deleteLockFile, LockFiles } from '@/../eventSystem/lockFiles'
-import { cpus } from 'os';
+import { createLockFile, LockFiles } from '@/../eventSystem/lockFiles'
 import * as bash from '@/utils/bashHelper';
 
 async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileName: string } | null> {
@@ -32,255 +31,145 @@ async function getSessionsFromSaved(): Promise<{ sessions: TmuxSessions; fileNam
     };
 }
 
-// Remove worker-related imports and interfaces
-interface Window {
-    windowName: string;
-    layout: string;
-    panes: any[];
+/**
+ * Creates base tmux sessions with minimal shell initialization
+ */
+async function createBaseSessions(sessionNames: string[]): Promise<SessionResult[]> {
+    const createCommands = sessionNames.map(sessionName =>
+        `tmux new-session -d -s "${sessionName}"`
+    );
+
+    // execute all session creations in parallel
+    const script = createCommands.join(' & ');
+    await bash.execCommand(`${script} & wait`);
+
+    return sessionNames.map(sessionName => ({
+        sessionName,
+        success: true,
+        windows: []
+    }));
 }
 
-interface SessionResult {
-    sessionName: string;
-    success: boolean;
-    windows: Window[];
-    error?: string;
-}
-
-// Direct session creation function (replaces loadSessionWorker)
-const createSession = async (
-    sessionName: string,
-    savedData: any
-): Promise<SessionResult> => {
-    try {
-        const sessionConfig = savedData.sessions[sessionName];
-
-        // Create base session with explicit shell
-        const shell = process.env.SHELL || '/bin/bash';
-        await bash.execCommand(`SHELL=${shell} tmux new-session -d -s ${sessionName} -c ~/`);
-
-        return {
-            sessionName,
-            success: true,
-            windows: sessionConfig.windows
-        };
-    } catch (error) {
-        return {
-            sessionName,
-            success: false,
-            windows: [],
-            error: error instanceof Error ? error.message : String(error)
-        };
-    }
-};
-
-// Direct window processing function (replaces windowWorker)
-const processWindow = async (
-    sessionName: string,
-    windowIndex: number,
-    window: Window,
-    serverName: string
-): Promise<{ success: boolean; error?: string }> => {
-    try {
-        const commands: string[] = [];
-
-        // Create window if not the first one
-        if (windowIndex > 0) {
-            commands.push(`tmux new-window -t ${sessionName} -n ${window.windowName} -c ~/`);
-        }
-
-        // Create panes
-        window.panes.forEach((_: any, paneIndex: number) => {
-            if (paneIndex > 0) {
-                commands.push(`tmux split-window -t ${sessionName}:${windowIndex} -c ~/`);
-            }
-        });
-
-        // Setup layout
-        commands.push(
-            `tmux select-layout -t ${sessionName}:${windowIndex} "${window.layout}" || tmux select-layout -t ${windowIndex} tiled`,
-            `tmux select-pane -t ${sessionName}:${windowIndex}.0`
-        );
-
-        // Configure panes
-        window.panes.forEach((pane: any, paneIndex: number) => {
-            const pathCmd = pane.currentPath.split('/').slice(3).join('/');
-            commands.push(
-                `tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} "cd ${pathCmd}" Enter`
-            );
-
-            if (pane.currentCommand === "nvim") {
-                const nvimFile = `${nvimSessionsPath}/${serverName}/${sessionName}_${windowIndex}_${paneIndex}.vim`;
-                commands.push(
-                    `tmux send-keys -t ${sessionName}:${windowIndex}.${paneIndex} ` +
-                    `'test -f "${nvimFile}" && nvim -S "${nvimFile}" || nvim' Enter`
-                );
-            }
-        });
-
-        // Execute all commands as a single batch script for maximum speed
-        const scriptContent = commands.join('\n');
-        const tempScript = `/tmp/tmux_window_${sessionName}_${windowIndex}.sh`;
-
-        // Write script to temp file and execute it
-        await bash.execCommand(`cat > ${tempScript} << 'TMUX_EOF'\n${scriptContent}\nTMUX_EOF`);
-        await bash.execCommand(`chmod +x ${tempScript} && ${tempScript} && rm ${tempScript}`);
-
-        return { success: true };
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error)
-        };
-    }
-};
-
-// Alternative ultra-fast approach using tmux source-file
-const createMegaScript = async (sessionResults: SessionResult[], savedData: any): Promise<void> => {
+/**
+ * Generates optimized tmux script using respawn-pane to bypass shell loading
+ */
+function generateRespawnScript(sessionResults: SessionResult[], savedData: any): string[] {
     const scriptLines: string[] = [];
 
-    // Add shell fix for tmux 3.5a
-    const shell = process.env.SHELL || '/bin/bash';
-    scriptLines.push(`set-environment -g SHELL ${shell}`);
-
     for (const result of sessionResults) {
-        if (!result.success) continue;
+        const sessionConfig = savedData.sessions[result.sessionName];
 
-        for (const [windowIndex, window] of result.windows.entries()) {
-            // Create window
+        if (!sessionConfig?.windows) {
+            continue;
+        }
+
+        sessionConfig.windows.forEach((window: Window, windowIndex: number) => {
+            const windowTarget = `${result.sessionName}:${windowIndex}`;
+
             if (windowIndex > 0) {
-                scriptLines.push(`new-window -t ${result.sessionName} -n ${window.windowName} -c ~/`);
+                // create new window with explicit index to ensure consistency
+                scriptLines.push(`new-window -t ${result.sessionName}:${windowIndex} -n "${window.windowName}" -c ~/`);
+            } else {
+                // for the first window (index 0 by default) just rename the existing default window
+                scriptLines.push(`rename-window -t ${result.sessionName}:0 "${window.windowName}"`);
             }
 
-            // Create panes
-            window.panes.forEach((_: any, paneIndex: number) => {
-                if (paneIndex > 0) {
-                    scriptLines.push(`split-window -t ${result.sessionName}:${windowIndex} -c ~/`);
-                }
+            // create additional panes
+            window.panes.slice(1).forEach(() => {
+                scriptLines.push(`split-window -t ${windowTarget} -c ~/`);
             });
 
-            // Setup layout
-            scriptLines.push(`select-layout -t ${result.sessionName}:${windowIndex} "${window.layout}"`);
-            scriptLines.push(`select-pane -t ${result.sessionName}:${windowIndex}.0`);
+            scriptLines.push(`select-layout -t ${windowTarget} "${window.layout}"`);
 
-            // Configure panes
-            window.panes.forEach((pane: any, paneIndex: number) => {
-                const pathCmd = pane.currentPath.split('/').slice(3).join('/');
-                scriptLines.push(
-                    `send-keys -t ${result.sessionName}:${windowIndex}.${paneIndex} "cd ${pathCmd}" Enter`
-                );
+            // configure each pane by killing and respawning with exact command
+            window.panes.forEach((pane, paneIndex) => {
+                const paneTarget = `${windowTarget}.${paneIndex}`;
+                const workingDir = pane.currentPath.split('/').slice(3).join('/') || '~';
 
                 if (pane.currentCommand === "nvim") {
-                    const nvimFile = `${nvimSessionsPath}/${savedData.fileName}/${result.sessionName}_${windowIndex}_${paneIndex}.vim`;
-                    scriptLines.push(
-                        `send-keys -t ${result.sessionName}:${windowIndex}.${paneIndex} 'test -f "${nvimFile}" && nvim -S "${nvimFile}" || nvim' Enter`
-                    );
+                    const nvimSessionFile = `${nvimSessionsPath}/${savedData.fileName}/${result.sessionName}_${windowIndex}_${paneIndex}.vim`;
+                    const shell = process.env.SHELL || '/bin/sh';
+
+                    // create a wrapper that returns to shell after nvim exits
+                    const nvimCommand = `${shell} -c 'cd "${workingDir}" && (if [ -f "${nvimSessionFile}" ]; then nvim -S "${nvimSessionFile}"; else nvim; fi); exec ${shell}'`;
+                    scriptLines.push(`respawn-pane -t ${paneTarget} -k "${nvimCommand}"`);
+                } else {
+                    // for shell panes, start bash first, then exec into the user's preferred shell
+                    // this bypasses .zshrc loading during the initial setup
+                    const shell = process.env.SHELL || '/bin/sh';
+                    const shellCommand = `bash -c 'cd "${workingDir}" && exec ${shell}'`;
+                    scriptLines.push(`respawn-pane -t ${paneTarget} -k "${shellCommand}"`);
                 }
             });
-        }
+
+            // select first pane
+            scriptLines.push(`select-pane -t ${windowTarget}.0`);
+        });
+
+        // Update result with windows data
+        result.windows = sessionConfig.windows;
     }
 
-    // Write and execute mega script
-    const megaScript = `/tmp/tmux_mega_script_${Date.now()}.tmux`;
-    await bash.execCommand(`cat > ${megaScript} << 'MEGA_EOF'\n${scriptLines.join('\n')}\nMEGA_EOF`);
-    await bash.execCommand(`tmux source-file ${megaScript} && rm ${megaScript}`);
-};
+    return scriptLines;
+}
 
-// Ultra-fast main function
-export async function loadSessionUltraFast(): Promise<void> {
+/**
+ * Executes tmux script with window indexing safeguards
+ */
+async function executeTmuxScript(scriptLines: string[]): Promise<void> {
+    const timestamp = Date.now();
+    const scriptPath = `/tmp/tmux_ultra_script_${timestamp}.tmux`;
+
+    // add commands to ensure consistent window indexing
+    const safeguardedScript = [
+        '# Ensure base-index is 0 for consistent window numbering',
+        'set-option -g base-index 0',
+        'set-option -g pane-base-index 0',
+        '# Disable automatic window renumbering during script execution',
+        'set-option -g renumber-windows off',
+        '',
+        ...scriptLines,
+        '',
+        '# Re-enable renumber-windows if it was previously enabled',
+        'set-option -g renumber-windows on'
+    ];
+
+    const scriptContent = safeguardedScript.join('\n');
+    await bash.execCommand(`cat > "${scriptPath}" << 'SCRIPT_EOF'
+${scriptContent}
+SCRIPT_EOF`);
+
     try {
-        await createLockFile(LockFiles.LoadInProgress);
-        const savedData = await getSessionsFromSaved();
-
-        if (!savedData?.sessions) {
-            console.error('No saved sessions found.');
-            await deleteLockFile(LockFiles.LoadInProgress);
-            return;
-        }
-
-        const sessionNames = Object.keys(savedData.sessions);
-
-        // Create all sessions in parallel (just the base sessions)
-        const sessionPromises = sessionNames.map(sessionName =>
-            createSession(sessionName, savedData)
-        );
-
-        const sessionResults = await Promise.all(sessionPromises);
-
-        // Use mega script approach for ultra speed
-        await createMegaScript(sessionResults, savedData);
-
-        await tmux.sourceTmuxConfig();
-        await deleteLockFile(LockFiles.LoadInProgress);
-
-    } catch (error) {
-        console.error('Load session error:', error);
-        await deleteLockFile(LockFiles.LoadInProgress);
+        await bash.execCommand(`tmux source-file "${scriptPath}"`);
+    } finally {
+        await fs.rm(scriptPath);
     }
 }
+
 export async function loadSession(): Promise<void> {
     try {
         await createLockFile(LockFiles.LoadInProgress);
-        const savedData = await getSessionsFromSaved();
 
+        const savedData = await getSessionsFromSaved();
         if (!savedData?.sessions) {
             console.error('No saved sessions found.');
-            await deleteLockFile(LockFiles.LoadInProgress);
             return;
         }
 
         const sessionNames = Object.keys(savedData.sessions);
-        const maxConcurrency = Math.min(sessionNames.length, cpus().length);
 
-        // Process sessions with limited concurrency
-        const sessionPromises = sessionNames.map(sessionName =>
-            createSession(sessionName, savedData)
-        );
-
-        // Process sessions in batches
-        const sessionResults: SessionResult[] = [];
-        for (let i = 0; i < sessionPromises.length; i += maxConcurrency) {
-            const batch = sessionPromises.slice(i, i + maxConcurrency);
-            const batchResults = await Promise.all(batch);
-            sessionResults.push(...batchResults);
-        }
-
-        // Process windows for all successful sessions
-        const windowPromises: Promise<any>[] = [];
-
-        for (const result of sessionResults) {
-            if (result.success) {
-                for (const [windowIndex, window] of result.windows.entries()) {
-                    windowPromises.push(
-                        processWindow(result.sessionName, windowIndex, window, savedData.fileName)
-                    );
-                }
-            } else {
-                console.error(`Failed to create session ${result.sessionName}:`, result.error);
-            }
-        }
-
-        // Process windows with limited concurrency
-        const windowMaxConcurrency = Math.min(windowPromises.length, cpus().length);
-        for (let i = 0; i < windowPromises.length; i += windowMaxConcurrency) {
-            const batch = windowPromises.slice(i, i + windowMaxConcurrency);
-            const results = await Promise.all(batch);
-
-            // Log any window processing errors
-            results.forEach((result) => {
-                if (!result.success) {
-                    console.error(`Window processing failed:`, result.error);
-                }
-            });
-        }
+        const sessionResults = await createBaseSessions(sessionNames);
+        const scriptLines = generateRespawnScript(sessionResults, savedData);
+        await executeTmuxScript(scriptLines);
 
         await tmux.sourceTmuxConfig();
-        await deleteLockFile(LockFiles.LoadInProgress);
+        console.log('Sessions loaded successfully');
 
     } catch (error) {
         console.error('Load session error:', error);
-        await deleteLockFile(LockFiles.LoadInProgress);
     }
 }
+
 export async function handleSessionsIfServerIsRunning(): Promise<void> {
     const currentSessions = await getCurrentSessions();
     let shouldSaveCurrentSessions = false;

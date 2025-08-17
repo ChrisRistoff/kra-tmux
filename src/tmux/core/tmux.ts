@@ -31,7 +31,7 @@ export async function killServer(): Promise<void> {
             await client.emit('interrupt');
         }
 
-        while(await lockFileExist(LockFiles.AutoSaveInProgress)) {
+        while (await lockFileExist(LockFiles.AutoSaveInProgress)) {
             console.log("Autosaving completing before exit");
 
             await utils.sleep(500);
@@ -49,30 +49,6 @@ export async function detachSession(): Promise<void> {
     } catch (_error) {
         console.log('failed to detach');
     }
-}
-
-export async function createSession(sessionName: string): Promise<void> {
-    await bash.execCommand(`tmux new-session -d -s ${sessionName}`);
-}
-
-export async function createWindow(windowName: string): Promise<void> {
-    await bash.execCommand(`tmux new-window -n ${windowName} -c ~/`);
-}
-
-export async function createPane(sessionName: string, windowIndex: number): Promise<void> {
-    await bash.execCommand(`tmux split-window -t ${sessionName}:${windowIndex} -c ~/`);
-}
-
-export async function setLayout(sessionName: string, windowIndex: number, layout: string): Promise<void> {
-    await bash.execCommand(`tmux select-layout -t ${sessionName}:${windowIndex} "${layout}"`);
-}
-
-export async function selectPane(sessionName: string, windowIndex: number, paneIndex: number): Promise<void> {
-    await bash.execCommand(`tmux select-pane -t ${sessionName}:${windowIndex}.${paneIndex}`);
-}
-
-export async function selectWindow(windowIndex: number): Promise<void> {
-    await bash.execCommand(`tmux select-window -t ${windowIndex}`);
 }
 
 export async function renameWindow(sessionName: string, windowIndex: number, windowName: string): Promise<void> {

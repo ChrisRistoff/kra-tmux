@@ -1,3 +1,10 @@
+export interface SessionResult {
+    sessionName: string;
+    success: boolean;
+    windows: Window[];
+    error?: string;
+}
+
 export type TmuxSessions = {
     [key: string]: {
         windows: Window[]
