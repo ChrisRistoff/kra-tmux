@@ -99,16 +99,16 @@ async function executeTmuxScript(scriptLines: string[]): Promise<void> {
 
     // add commands to ensure consistent window indexing
     const safeguardedScript = [
-        '# Ensure base-index is 0 for consistent window numbering',
+/*         '# Ensure base-index is 0 for consistent window numbering',
         'set-option -g base-index 0',
         'set-option -g pane-base-index 0',
         '# Disable automatic window renumbering during script execution',
-        'set-option -g renumber-windows off',
+        'set-option -g renumber-windows off', */
         '',
         ...scriptLines,
         '',
-        '# Re-enable renumber-windows if it was previously enabled',
-        'set-option -g renumber-windows on'
+/*         '# Re-enable renumber-windows if it was previously enabled',
+        'set-option -g renumber-windows on' */
     ];
 
     const scriptContent = safeguardedScript.join('\n');

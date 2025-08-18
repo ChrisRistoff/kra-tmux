@@ -1,6 +1,6 @@
 import 'module-alias/register';
 import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
-import { createIPCServer, IPCServer } from '../eventSystem/ipc';
+import { createIPCServer, IPCServer } from '../eventSystem/ipcServer';
 import { createLockFile, deleteLockFile, lockFileExist, LockFiles } from '../eventSystem/lockFiles';
 import * as nvim from 'neovim';
 import fs from 'fs/promises';

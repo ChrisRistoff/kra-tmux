@@ -2,10 +2,11 @@ import * as bash from '@/utils/bashHelper';
 import { createLockFile, lockFileExist, LockFiles } from '@/../eventSystem/lockFiles';
 import { createIPCClient } from '@/../eventSystem/ipc';
 import * as utils from '@/utils/common';
+import { execSync } from 'child_process';
 
-export async function checkSessionExists(sessionName: string): Promise<boolean> {
+export function checkSessionExists(sessionName: string): boolean {
     try {
-        await bash.execCommand(`tmux has-session -t ${sessionName}`);
+        execSync(`tmux has-session -t ${sessionName}`);
 
         return true;
     } catch (error) {

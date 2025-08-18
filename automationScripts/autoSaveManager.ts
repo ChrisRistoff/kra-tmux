@@ -1,8 +1,8 @@
 import 'module-alias/register';
-import { createIPCClient } from '../eventSystem/ipc';
 import os from 'os';
 import { lockFileExist, LockFiles, oneOfMultipleLocksExist } from '../eventSystem/lockFiles';
 import { loadSettings } from '@/utils/common';
+import { createIPCClient } from '../eventSystem/icpClient';
 
 async function main() {
     if (
@@ -24,8 +24,10 @@ async function main() {
     }
 
     await client.emit(event);
-
     process.exit(0);
 }
 
-main().then(_res => {});
+main().catch(err => {
+    console.log('Autosave controller error', err);
+    process.exit(1);
+})
