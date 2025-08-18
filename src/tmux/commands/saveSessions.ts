@@ -2,20 +2,19 @@ import * as fs from 'fs/promises';
 import * as bash from '@/utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
 import * as generalUI from '@/UI/generalUI';
-import { sessionFilesFolder } from '@/filePaths';
+import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
 import { getCurrentSessions, getDateString } from '@/tmux/utils/sessionUtils';
 import { TmuxSessions } from '@/types/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
+import { updateCurrentSession } from '@/tmux/core/tmux';
 
-export async function quickSave(): Promise<void> {
+export async function quickSave(fileName: string): Promise<void> {
     const currentSessions = await getCurrentSessions();
     const sessionString = JSON.stringify(currentSessions, null, 2);
 
     if (sessionString === '{}') {
         return;
     }
-
-    const fileName = 'auto-save-wtf'
 
     const filePath = `${sessionFilesFolder}/${fileName}`;
     await fs.writeFile(filePath, sessionString, 'utf-8');
@@ -36,7 +35,28 @@ export async function saveSessionsToFile(): Promise<void> {
 
     const filePath = `${sessionFilesFolder}/${fileName}`;
     await fs.writeFile(filePath, sessionString, 'utf-8');
+
+    cleanUpStaleNvimSaves(currentSessions);
+
+    await updateCurrentSession(fileName);
+
     console.log('Save Successful!');
+}
+
+function cleanUpStaleNvimSaves(sessions: TmuxSessions): void {
+    Object.keys(sessions).forEach((session) => {
+        sessions[session].windows.forEach((window, windowIndex) => {
+            window.panes.forEach(async (pane, paneIndex) => {
+                if (pane.currentCommand !== 'nvim') {
+                    const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}`
+                    try {
+                        await fs.rm(`${nvimSessionsPath}/${nvimSessionFileName}`);
+                    } catch (_err) {
+                    }
+                }
+            })
+        })
+    });
 }
 
 async function getFileNameFromUser(): Promise<string> {

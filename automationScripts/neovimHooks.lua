@@ -96,7 +96,8 @@ local function setup_autosave()
             our_socket_path = socket_path
         end
 
-        local session_id = table.concat({ "neovim", tmux_session, tmux_window, tmux_pane, event_name, our_socket_path }, ":")
+        local session_id = table.concat({ "neovim", tmux_session, tmux_window, tmux_pane, event_name, our_socket_path },
+            ":")
 
         -- check buffer type
         local buftype = vim.api.nvim_buf_get_option(0, 'buftype')

@@ -1,9 +1,15 @@
+import 'module-alias/register';
 import { createIPCClient } from '../eventSystem/ipc';
 import os from 'os';
-import { lockFileExist, LockFiles } from '../eventSystem/lockFiles';
+import { lockFileExist, LockFiles, oneOfMultipleLocksExist } from '../eventSystem/lockFiles';
+import { loadSettings } from '@/utils/common';
 
 async function main() {
-    if (!process.env.TMUX || await lockFileExist(LockFiles.LoadInProgress)) {
+    if (
+        !process.env.TMUX
+        || await oneOfMultipleLocksExist([LockFiles.LoadInProgress, LockFiles.ServerKillInProgress])
+        || await loadSettings().then(res => !res.autosave.active)
+    ) {
         process.exit(0);
     }
 
@@ -17,10 +23,9 @@ async function main() {
         await client.ensureServerRunning(script);
     }
 
-    await client.ensureConnected();
     await client.emit(event);
 
     process.exit(0);
 }
 
-main().then(() => console.log('Controller out'));
+main().then(_res => {});

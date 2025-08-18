@@ -30,7 +30,6 @@ describe('loadSession', () => {
     const mockGeneralUI = jest.mocked(generalUI);
     const mockFsReadFile = jest.mocked(fs.readFile);
     const mockTmux = jest.mocked(tmux);
-    const mockUtils = jest.mocked(utils);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -59,14 +58,6 @@ describe('loadSession', () => {
         mockGetSavedSessionsNames.mockResolvedValue([testFileName]);
         mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue(testFileName);
         mockFsReadFile.mockResolvedValue(Buffer.from(JSON.stringify(sessionsData)));
-
-        mockUtils.loadSettings.mockResolvedValue({
-            work: false,
-            workWindowNameForWatch: 'WORK',
-            workCommandForWatch: 'work-watch',
-            personalWindowNameForWatch: 'PERSONAL',
-            personalCommandForWatch: 'personal-watch'
-        });
 
         await loadSession();
 

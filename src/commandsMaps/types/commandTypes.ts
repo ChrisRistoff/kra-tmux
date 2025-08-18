@@ -12,7 +12,6 @@ type TmuxCommandName = {
     'list-sessions': Command,
     'delete-server': Command,
     'kill': Command,
-    'quicksave': Command,
 };
 
 export type GitCommandName = {

@@ -1,9 +1,22 @@
+type WatchOptions = {
+    active: boolean,
+    watch: {
+        windowName: string,
+        command: string,
+    }
+}
+
+type Autosave = {
+    active: boolean,
+    currentSession: string,
+    timeoutMs: number,
+}
+
 export type Settings = {
-    work: boolean,
+    watchCommands: {
+        work: WatchOptions,
+        personal: WatchOptions,
+    },
 
-    workWindowNameForWatch: string,
-    workCommandForWatch: string,
-
-    personalWindowNameForWatch: string,
-    personalCommandForWatch: string,
+    autosave: Autosave
 }

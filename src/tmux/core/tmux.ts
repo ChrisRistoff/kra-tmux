@@ -1,5 +1,5 @@
 import * as bash from '@/utils/bashHelper';
-import { lockFileExist, LockFiles } from '@/../eventSystem/lockFiles';
+import { createLockFile, lockFileExist, LockFiles } from '@/../eventSystem/lockFiles';
 import { createIPCClient } from '@/../eventSystem/ipc';
 import * as utils from '@/utils/common';
 
@@ -23,11 +23,13 @@ export async function sourceTmuxConfig(): Promise<void> {
 }
 
 export async function killServer(): Promise<void> {
+    await createLockFile(LockFiles.ServerKillInProgress);
+
     try {
         if (await lockFileExist(LockFiles.AutoSaveInProgress)) {
             const client = createIPCClient('/tmp/autosave.sock');
 
-            await client.ensureConnected();
+            // await client.ensureConnected();
             await client.emit('interrupt');
         }
 
@@ -51,6 +53,10 @@ export async function detachSession(): Promise<void> {
     }
 }
 
-export async function renameWindow(sessionName: string, windowIndex: number, windowName: string): Promise<void> {
-    await bash.execCommand(`tmux rename-window -t ${sessionName}:${windowIndex} ${windowName}`);
+export async function updateCurrentSession(sessionName: string) {
+    const settings = await utils.loadSettings();
+
+    settings.autosave.currentSession = sessionName;
+
+    await utils.saveSettings(settings);
 }

@@ -14,6 +14,9 @@ ai-files/chat-history/*
 system-files/scripts/*
 system-files/scripts/.gitkeep
 
+lock-files/*
+!lock-files/.gitkeep
+
 # Ignore sub-subfolders (and files) inside the subfolders
 node_modules/
 dest/

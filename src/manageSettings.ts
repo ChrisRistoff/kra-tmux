@@ -1,5 +1,5 @@
 import * as nvim from '@/utils/neovimHelper';
-import * as toml from 'toml';
+import * as toml from 'smol-toml';
 import * as fs from 'fs/promises';
 import { settingsFilePath } from "@/filePaths";
 

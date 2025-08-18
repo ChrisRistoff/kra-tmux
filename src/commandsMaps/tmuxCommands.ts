@@ -8,7 +8,6 @@ export const tmuxCommands: TmuxCommands = {
     'list-sessions': sessions.printCurrentSessions,
     'delete-server': sessions.deleteSession,
     'kill': sessions.killServer,
-    'quicksave': sessions.quickSave,
 };
 
 async function loadSession(): Promise<void> {

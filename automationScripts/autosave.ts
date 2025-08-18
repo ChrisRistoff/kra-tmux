@@ -1,21 +1,18 @@
-import * as bash from '../src/utils/bashHelper';
+import 'module-alias/register';
+import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
 import { createIPCServer, IPCServer } from '../eventSystem/ipc';
 import { createLockFile, deleteLockFile, lockFileExist, LockFiles } from '../eventSystem/lockFiles';
 import * as nvim from 'neovim';
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
+import fs from 'fs/promises';
+import { getSessionsFromSaved, quickSave } from '@/tmux';
+import { loadSettings } from '@/utils/common';
 
-const scheduledJobs = new Set<string>();
+const scheduledJobs: string[] = [];
+
 let saveTimer: NodeJS.Timeout | undefined;
-let neovim: nvim.Neovim | undefined;
 let server: IPCServer | undefined;
 
-const homeDir = os.homedir();
-const projectPath = 'programming/kra-tmux/'
-export const nvimSessionsPath = path.join(homeDir, projectPath, 'tmux-files/nvim-sessions');
-
-async function resetSaveTimer(timeout = 20000) {
+async function resetSaveTimer(timeout: number = undefined!) {
     if (!process.env.TMUX || await lockFileExist(LockFiles.LoadInProgress)) {
         await deleteLockFile(LockFiles.AutoSaveInProgress);
         process.exit(0);
@@ -25,27 +22,74 @@ async function resetSaveTimer(timeout = 20000) {
         clearTimeout(saveTimer)
     }
 
-    saveTimer = setTimeout(async () => {
-        if (scheduledJobs.size > 0) {
-            try {
-                if (scheduledJobs.has('tmux')) {
-                    await bash.execCommand('kra tmux quicksave');
-                }
+    const settings = await loadSettings();
 
-                scheduledJobs.forEach((job) => {
-                    if (job.startsWith('neovim') && neovim) {
+    saveTimer = setTimeout(async () => {
+        if (scheduledJobs.length > 0) {
+            const saveFileName = settings.autosave.currentSession;
+            let session;
+
+            try {
+                session = await getSessionsFromSaved(saveFileName);
+            } catch (error) {
+                console.log(error);
+            }
+
+            if (!session) {
+                return;
+            }
+
+            let sessionChanged = false;
+
+            try {
+                for (const job of scheduledJobs) {
+                    if (job.startsWith('neovim')) {
                         const splitJob = job.split(':');
-                        const folderName = 'auto-save-wtf';
-                        const nvimSessionFileName = `${splitJob[1]}_${splitJob[2]}_${splitJob[3]}.vim`
+                        const folderName = saveFileName;
+                        const sessionName = splitJob[1];
+                        const windowIndex = +splitJob[2];
+                        const paneIndex = +splitJob[3];
+
+                        const nvimSessionFileName = `${sessionName}_${windowIndex}_${paneIndex}.vim`
+
+                        const currentCommand = session[sessionName]?.windows[windowIndex]?.panes[paneIndex]?.currentCommand;
 
                         if (splitJob[splitJob.length - 2] === 'VimLeave') {
-                            fs.unlinkSync(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
-                        }
+                            console.log('job vim leave');
+                            await fs.unlink(`${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
 
-                        neovim.command(`mksession! ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
-                        neovim.command(`echo 'kra workflow autosaved : ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}'`);
+                            if (currentCommand && currentCommand === "nvim") {
+                                session[sessionName].windows[windowIndex].panes[paneIndex].currentCommand = "";
+                                sessionChanged = true;
+                            }
+                        } else {
+                            const socket = splitJob[splitJob.length - 1];
+
+                            const neovim = nvim.attach({ socket })
+                                .on('error', () => console.log('error'))
+                                .on('disconnect', () => console.log('neovim disconnected'));
+
+                            console.log(neovim);
+
+                            await neovim.command(`mksession! ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}`);
+                            await neovim.command(`echo 'kra workflow autosaved : ${nvimSessionsPath}/${folderName}/${nvimSessionFileName}'`);
+
+                            if (currentCommand && currentCommand !== "nvim") {
+                                session[sessionName].windows[windowIndex].panes[paneIndex].currentCommand = "nvim";
+                                sessionChanged = true;
+                            }
+                        }
                     }
-                })
+                }
+
+                if (scheduledJobs.includes('tmux')) {
+                    await quickSave(saveFileName);
+                    sessionChanged = false;
+                }
+
+                if (sessionChanged) {
+                    await fs.writeFile(`${sessionFilesFolder}/${saveFileName}`, JSON.stringify(session, null, 2));
+                }
             } catch (error) {
                 console.log(error);
             } finally {
@@ -54,7 +98,7 @@ async function resetSaveTimer(timeout = 20000) {
                 process.exit(0);
             }
         }
-    }, timeout);
+    }, timeout || settings.autosave.timeoutMs);
 }
 
 async function main(): Promise<void> {
@@ -68,18 +112,11 @@ async function main(): Promise<void> {
                 return;
             }
 
-            const splitEvent = event.split(':');
-
-            if (typeof event === 'string' && event.startsWith('neovim:') && !scheduledJobs.has(event)) {
-                const socket = splitEvent[splitEvent.length - 1];
-
-                if (splitEvent[splitEvent.length - 2] !== 'VimLeave') {
-                    neovim = nvim.attach({ socket })
-                        .on('error', () => console.log('error'));
-                }
+            console.log(event);
+            if (!scheduledJobs.includes(event)) {
+                scheduledJobs.push(event);
             }
-
-            scheduledJobs.add(event);
+            console.log(scheduledJobs);
             resetSaveTimer();
         });
 
