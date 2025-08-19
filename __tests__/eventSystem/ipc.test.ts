@@ -1,16 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import * as bash from '@/utils/bashHelper';
+import { spawn } from 'child_process';
 import { createIPCServer, createIPCClient, IPCServer, IPCClient } from '../../eventSystem/ipc';
 
 jest.mock('fs');
 jest.mock('path');
-jest.mock('@/utils/bashHelper');
+jest.mock('child_process');
 
 describe('IPC', () => {
     const mockFs = jest.mocked(fs);
     const mockPath = jest.mocked(path);
-    const mockBash = jest.mocked(bash);
+    const mockSpawn = jest.mocked(spawn);
 
     const mockSocketPath = '/tmp/test-socket';
     const mockSignalDir = '/tmp/test-socket-signals';
@@ -29,7 +29,14 @@ describe('IPC', () => {
         (mockFs.readdirSync as jest.Mock).mockReturnValue([]);
         mockFs.unlinkSync.mockImplementation(() => { });
         mockFs.rmdirSync.mockImplementation(() => { });
-        mockBash.runCommand.mockImplementation(() => new Promise(() => { }));
+
+        // mock spawn to return a child process-like object
+        const mockChildProcess = {
+            on: jest.fn(),
+            unref: jest.fn(),
+            pid: 99999
+        };
+        mockSpawn.mockReturnValue(mockChildProcess as any);
 
         // Mock process properties
         Object.defineProperty(process, 'pid', { value: 12345, configurable: true });
@@ -224,7 +231,7 @@ describe('IPC', () => {
 
             expect(mockFs.readFileSync).toHaveBeenCalledWith(mockPidFile, 'utf8');
             expect(processSpy).toHaveBeenCalledWith(54321, 0);
-            expect(mockBash.runCommand).not.toHaveBeenCalled();
+            expect(mockSpawn).not.toHaveBeenCalled();
 
             processSpy.mockRestore();
         });
@@ -245,10 +252,36 @@ describe('IPC', () => {
 
             await ensurePromise;
 
-            expect(mockBash.runCommand).toHaveBeenCalledWith('node', ['/path/to/server.js'], {
+            expect(mockSpawn).toHaveBeenCalledWith('node', ['/path/to/server.js'], {
                 detached: true,
                 stdio: 'ignore'
             });
+        });
+
+        it('should start server and call unref on child process', async () => {
+            mockFs.existsSync.mockReturnValue(false);
+
+            const mockChildProcess = {
+                on: jest.fn(),
+                unref: jest.fn(),
+                pid: 99999
+            };
+            mockSpawn.mockReturnValue(mockChildProcess as any);
+
+            const ensurePromise = client.ensureServerRunning('/path/to/server.js');
+
+            setTimeout(() => {
+                mockFs.existsSync.mockReturnValue(true);
+                mockFs.readFileSync.mockReturnValue('99999');
+                jest.spyOn(process, 'kill').mockImplementation(() => true);
+            }, 50);
+
+            jest.advanceTimersByTime(100);
+
+            await ensurePromise;
+
+            expect(mockChildProcess.unref).toHaveBeenCalled();
+            expect(mockChildProcess.on).toHaveBeenCalledWith('error', expect.any(Function));
         });
 
         it('should handle home directory replacement in server script', async () => {
@@ -266,7 +299,7 @@ describe('IPC', () => {
 
             await ensurePromise;
 
-            expect(mockBash.runCommand).toHaveBeenCalledWith('node', ['/home/user/scripts/server.js'], {
+            expect(mockSpawn).toHaveBeenCalledWith('node', ['/home/user/scripts/server.js'], {
                 detached: true,
                 stdio: 'ignore'
             });
@@ -293,14 +326,13 @@ describe('IPC', () => {
             await ensurePromise;
 
             expect(mockFs.unlinkSync).toHaveBeenCalledWith(mockPidFile);
-            expect(mockBash.runCommand).toHaveBeenCalled();
+            expect(mockSpawn).toHaveBeenCalled();
 
             processSpy.mockRestore();
         });
 
-        xit('should throw error if server fails to start within timeout', async () => {
-            // jest keeps timing out, so not sure what to do with this, will figure out at some point
-        });
+        // INFO: should throw error if server fails to start within timeout test here
+        // Can't crack the timeout, tests keep timing out, will handle later on.
 
         it('should handle PID file read errors during server check', async () => {
             mockFs.existsSync.mockReturnValue(true);
@@ -320,7 +352,7 @@ describe('IPC', () => {
 
             await ensurePromise;
 
-            expect(mockBash.runCommand).toHaveBeenCalled();
+            expect(mockSpawn).toHaveBeenCalled();
         });
 
         it('should handle cleanup errors silently during PID file cleanup', async () => {

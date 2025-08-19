@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import * as bash from '../src/utils/bashHelper';
+import { spawn } from 'child_process';
 
 export interface IPCServer {
     addListener: (handler: (event: string) => void) => Promise<void>;
@@ -135,9 +135,14 @@ export function createIPCClient(socketPath: string): IPCClient {
             return;
         }
 
-        bash.runCommand('node', [serverScript.replace('~', process.env.HOME || '')], {
+        const child = spawn('node', [serverScript.replace('~', process.env.HOME || '')], {
             detached: true,
             stdio: 'ignore'
+        });
+
+        child.unref();
+        child.on('error', (err) => {
+            throw new Error(`Failed to spawn server: ${err.message}`);
         });
 
         // wait for server to write PID file
@@ -148,7 +153,7 @@ export function createIPCClient(socketPath: string): IPCClient {
         }
 
         if (!isServerRunning()) {
-            throw new Error('Server failed to start');
+            throw new Error('Server failed to start within timeout period');
         }
     };
 
