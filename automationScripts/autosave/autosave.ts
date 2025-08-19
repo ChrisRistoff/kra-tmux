@@ -1,7 +1,7 @@
 import 'module-alias/register';
 import { nvimSessionsPath } from '@/filePaths';
-import { createIPCServer, IPCServer } from '../eventSystem/ipcServer';
-import { createLockFile, deleteLockFile, lockFileExist, LockFiles } from '../eventSystem/lockFiles';
+import { createIPCServer, IPCServer } from '../../eventSystem/ipc';
+import { createLockFile, deleteLockFile, lockFileExist, LockFiles } from '../../eventSystem/lockFiles';
 import * as nvim from 'neovim';
 import fs from 'fs/promises';
 import { loadSettings } from '@/utils/common';
@@ -37,7 +37,9 @@ async function resetSaveTimer(timeout: number = undefined!) {
                 const nvimSessionFileName = `${job}.vim`
 
                 if (neovimEvent.leave) {
-                    await fs.unlink(`${nvimSessionsPath}/${saveFileName}/${nvimSessionFileName}`);
+                    try {
+                        await fs.unlink(`${nvimSessionsPath}/${saveFileName}/${nvimSessionFileName}`)
+                    } catch { /* file might not exit if closed an unsaved neovim, so ignore error */ };
                 } else {
 
                     const socket = neovimEvent.socket;
@@ -87,6 +89,8 @@ async function main(): Promise<void> {
 
                 return;
             }
+
+            console.log(event);
 
             if (event.startsWith('neovim')) {
                 trackSession(event);

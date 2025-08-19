@@ -1,6 +1,6 @@
 local function setup_autosave()
     local home = vim.fn.expand("~")
-    local script_path = home .. "/programming/kra-tmux/dest/automationScripts/autoSaveManager.js"
+    local script_path = home .. "/programming/kra-tmux/dest/automationScripts/autosave/autoSaveManager.js"
 
     if vim.fn.filereadable(script_path) == 0 then
         print("Autosave: Script not found at " .. script_path)
@@ -13,38 +13,87 @@ local function setup_autosave()
     local server_address = nil
     local our_socket_path = nil
 
+    -- Expanded exclusion list for common plugins
     local excluded_filetypes = {
         "NvimTree", "TelescopePrompt", "packer", "cmp_menu", "which_key",
-        "gitcommit", "fugitive", "gh"
+        "gitcommit", "fugitive", "gh", "help", "qf", "quickfix", "loclist",
+        "fzf", "lazy", "mason", "lspinfo", "null-ls-info", "checkhealth",
+        "man", "oil", "neo-tree", "trouble", "noice", "notify", "alpha",
+        "dashboard", "startify", "aerial", "undotree", "diff", "fugitiveblame"
     }
 
-    local function is_real_buffer(buf)
-        local buftype = vim.api.nvim_buf_get_option(buf, "buftype")
-        if buftype ~= "" then return false end
-        local ft = vim.api.nvim_buf_get_option(buf, "filetype")
-        for _, ex in ipairs(excluded_filetypes) do
-            if ft == ex then return false end
+    -- More comprehensive buffer validation
+    local function is_real_file_buffer(buf)
+        -- Skip if buffer is invalid
+        if not vim.api.nvim_buf_is_valid(buf) then
+            return false
         end
-        return true
+
+        -- Check buffer type - only allow normal file buffers
+        local buftype = vim.api.nvim_buf_get_option(buf, "buftype")
+        if buftype ~= "" then
+            return false
+        end
+
+        -- Check if buffer is listed
+        if not vim.api.nvim_buf_get_option(buf, "buflisted") then
+            return false
+        end
+
+        -- Check filetype exclusions
+        local filetype = vim.api.nvim_buf_get_option(buf, "filetype")
+        for _, excluded in ipairs(excluded_filetypes) do
+            if filetype == excluded then
+                return false
+            end
+        end
+
+        -- Check if buffer has a real file path
+        local bufname = vim.api.nvim_buf_get_name(buf)
+        if bufname == "" then
+            return false
+        end
+
+        -- Exclude special schemes and temporary files
+        if bufname:match("^%w+://") or         -- URLs/schemes like oil://, fugitive://
+            bufname:match("^/tmp/") or         -- Temp files
+            bufname:match("^term://") or       -- Terminal buffers
+            bufname:match("%.git/") or         -- Git internals
+            bufname:match("COMMIT_EDITMSG") or -- Git commit messages
+            bufname:match("MERGE_MSG") then    -- Git merge messages
+            return false
+        end
+
+        -- Only proceed if it's an actual file that exists or is new
+        local file_readable = vim.fn.filereadable(bufname) == 1
+        local file_exists = vim.fn.filewritable(vim.fn.fnamemodify(bufname, ":h")) == 2
+
+        return file_readable or file_exists
     end
 
-    local visible_buffers = {}
+    local visible_file_buffers = {}
 
-    local function update_visible_buffers()
+    local function get_current_file_buffers()
         local current = {}
         for _, win in ipairs(vim.api.nvim_list_wins()) do
             local buf = vim.api.nvim_win_get_buf(win)
-            if is_real_buffer(buf) then
+            if is_real_file_buffer(buf) then
                 current[buf] = true
             end
         end
         return current
     end
 
-    local function buffers_removed(old, new)
+    local function buffers_changed(old, new)
+        -- Check if any buffers were added or removed
         for buf in pairs(old) do
             if not new[buf] then
-                return true
+                return true -- buffer removed
+            end
+        end
+        for buf in pairs(new) do
+            if not old[buf] then
+                return true -- buffer added
             end
         end
         return false
@@ -112,14 +161,6 @@ local function setup_autosave()
             return
         end
 
-        local buf = vim.api.nvim_get_current_buf()
-        local buftype = vim.api.nvim_buf_get_option(buf, 'buftype')
-        local filetype = vim.api.nvim_buf_get_option(buf, 'filetype')
-        if buftype ~= "" or filetype == "gitcommit" then
-            pending_execution = false
-            return
-        end
-
         local session_id = table.concat({ "neovim", tmux_session, tmux_window, tmux_pane, event_name, our_socket_path },
             ":")
 
@@ -142,8 +183,8 @@ local function setup_autosave()
         })
     end
 
-    -- Initial snapshot of buffers
-    visible_buffers = update_visible_buffers()
+    -- Initial snapshot of file buffers
+    visible_file_buffers = get_current_file_buffers()
 
     local function schedule_autosave(event_name)
         if debounce_timer and not debounce_timer:is_closing() then
@@ -152,12 +193,12 @@ local function setup_autosave()
         end
 
         debounce_timer = vim.loop.new_timer()
-        debounce_timer:start(100, 0, vim.schedule_wrap(function()
-            local new_buffers = update_visible_buffers()
-            if buffers_removed(visible_buffers, new_buffers) or event_name ~= "buffer_removed" then
+        debounce_timer:start(500, 0, vim.schedule_wrap(function()
+            local new_buffers = get_current_file_buffers()
+            if buffers_changed(visible_file_buffers, new_buffers) then
                 execute_script(event_name)
             end
-            visible_buffers = new_buffers
+            visible_file_buffers = new_buffers
 
             if debounce_timer and not debounce_timer:is_closing() then
                 debounce_timer:close()
@@ -166,13 +207,25 @@ local function setup_autosave()
         end))
     end
 
-    -- Track buffer/window events
-    local events = { "BufReadPost", "BufDelete", "WinClosed" }
+    -- Only track specific events that matter for file buffers
+    local events = {
+        "BufEnter",    -- When entering a buffer (covers switching)
+        "BufWinEnter", -- When buffer is displayed in window (covers splits)
+        "BufDelete",   -- When buffer is deleted
+        "WinClosed"    -- When window is closed
+    }
+
     for _, event in ipairs(events) do
         vim.api.nvim_create_autocmd(event, {
             pattern = "*",
-            callback = function()
-                schedule_autosave(event)
+            callback = function(args)
+                local buf = args.buf or vim.api.nvim_get_current_buf()
+
+                -- Only proceed if the event involves a real file buffer
+                -- or if we need to check for buffer changes (like WinClosed)
+                if event == "WinClosed" or is_real_file_buffer(buf) then
+                    schedule_autosave(event)
+                end
             end
         })
     end
@@ -180,6 +233,7 @@ local function setup_autosave()
     -- Cleanup on exit
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
+            execute_script("VimLeave")
             if server_address then
                 vim.fn.serverstop(server_address)
                 server_address = nil

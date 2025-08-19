@@ -1,5 +1,5 @@
 // Core exports
-export * from '@/tmux/core/tmux';
+export * from '@/tmux/utils/common';
 
 // Command exports
 export * from '@/tmux/commands/saveSessions';

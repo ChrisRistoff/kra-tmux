@@ -2,7 +2,7 @@ import * as bash from '@/utils/bashHelper';
 import { getCurrentBranch, getTopLevelPath, hardReset, getGitLog } from '@/git/core/gitBranch';
 import { GIT_COMMANDS } from '@/git/config/gitConstants';
 
-jest.mock('@utils/bashHelper');
+jest.mock('@/utils/bashHelper');
 
 describe('gitBranch', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);

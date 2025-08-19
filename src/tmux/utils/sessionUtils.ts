@@ -5,6 +5,11 @@ import { TmuxSessions, Window, Pane } from '@/types/sessionTypes';
 import { formatWindow, formatPane } from '@/tmux/utils/formatters';
 import { filterGitKeep } from '@/utils/common';
 
+/**
+ * Retrieves all current tmux sessions with their associated windows
+ * @returns Promise resolving to TmuxSessions object containing all active sessions
+ * and their window and panes configurations. Returns empty object on error.
+ */
 export async function getCurrentSessions(): Promise<TmuxSessions> {
     let output;
     const currentSessions: TmuxSessions = {};
@@ -25,6 +30,12 @@ export async function getCurrentSessions(): Promise<TmuxSessions> {
     return currentSessions;
 }
 
+/**
+ * Gets detailed window information for a specific tmux session
+ * @param session - Name of the tmux session to inspect
+ * @returns Promise resolving to array of Window objects containing window details,
+ *          including formatted layout and associated panes. Returns empty array on error.
+ */
 export async function getWindowsForSession(session: string): Promise<Window[]> {
     const windows = await bash.execCommand(
         `tmux list-windows -t ${session} -F "#{window_name}:#{pane_current_command}:#{pane_current_path}:#{window_layout}"`
@@ -42,6 +53,13 @@ export async function getWindowsForSession(session: string): Promise<Window[]> {
     return formattedWindows;
 }
 
+/**
+ * Retrieves pane information for a specific window in a tmux session
+ * @param session - Name of the tmux session containing the window
+ * @param windowIndex - Numeric index of the window to inspect
+ * @returns Promise resolving to array of Pane objects with process and position details.
+ *          Returns empty array if pane retrieval fails.
+ */
 export async function getPanesForWindow(session: string, windowIndex: number): Promise<Pane[]> {
     try {
         const panes = await bash.execCommand(
@@ -57,6 +75,11 @@ export async function getPanesForWindow(session: string, windowIndex: number): P
     }
 }
 
+/**
+ * Gets list of saved session names from persistent storage
+ * @returns Promise resolving to array of session names, excluding .gitkeep files.
+ *          Returns empty array if directory read fails.
+ */
 export async function getSavedSessionsNames(): Promise<string[]> {
     try {
         return filterGitKeep(await fs.readdir(sessionFilesFolder));
@@ -67,12 +90,21 @@ export async function getSavedSessionsNames(): Promise<string[]> {
     }
 }
 
+/**
+ * Loads saved tmux session configuration from a specific file
+ * @param filePath - Full path to the session configuration file
+ * @returns Promise resolving to TmuxSessions object parsed from JSON file
+ */
 export async function getSavedSessionsByFilePath(filePath: string): Promise<TmuxSessions> {
     const latestSessions = await fs.readFile(filePath);
 
     return JSON.parse(latestSessions.toString());
 }
 
+/**
+ * Generates standardized date string for file naming
+ * @returns String formatted as YYYY-MMM-DD-HHMM (e.g. "2023-Aug-25-1430")
+ */
 export function getDateString(): string {
     const dateArray = new Date().toString().split(' ');
     const timeArray = dateArray[4].split(':');

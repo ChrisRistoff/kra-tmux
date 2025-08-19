@@ -6,7 +6,7 @@ import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
 import { getCurrentSessions, getDateString } from '@/tmux/utils/sessionUtils';
 import { TmuxSessions } from '@/types/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
-import { updateCurrentSession } from '@/tmux/core/tmux';
+import { updateCurrentSession } from '@/tmux/utils/common';
 
 export async function quickSave(fileName: string): Promise<void> {
     const currentSessions = await getCurrentSessions();

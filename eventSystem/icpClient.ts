@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from "path";
-import * as bash from '../src/utils/bashHelper';
+import { spawn } from 'child_process';
 
 export interface IPCClient {
     emit: (event: string) => Promise<void>;
@@ -51,7 +51,7 @@ export function createIPCClient(socketPath: string): IPCClient {
     const ensureServerRunning = async (serverScript: string): Promise<void> => {
         if (isServerRunning()) return;
 
-        bash.runCommand('node', [serverScript.replace('~', process.env.HOME || '')], {
+        spawn('node', [serverScript.replace('~', process.env.HOME || '')], {
             detached: true,
             stdio: 'ignore',
         })

@@ -8,7 +8,7 @@ jest.mock('fs/promises', () => ({
   rmdir: jest.fn()
 }));
 
-jest.mock('@UI/generalUI', () => ({
+jest.mock('@/UI/generalUI', () => ({
   searchSelectAndReturnFromArray: jest.fn()
 }));
 

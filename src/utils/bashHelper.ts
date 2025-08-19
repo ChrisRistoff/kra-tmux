@@ -103,26 +103,6 @@ async function waitForTmuxMarker(options: SendKeysArguments, marker: string) {
     });
 }
 
-export const execBundledCommands = async (commands: string[]): Promise<void> => {
-    const bundledCommand = commands.join(' && ');
-    await execCommand(bundledCommand);
-};
-
-export const sendBundledKeysToTmuxTarget = async (
-    sessionName: string,
-    windowIndex: number,
-    paneIndex: number,
-    commands: string[]
-): Promise<void> => {
-    const bundledCommand = commands.join(' && ');
-    await sendKeysToTmuxTargetSession({
-        sessionName,
-        windowIndex,
-        paneIndex,
-        command: bundledCommand,
-    });
-};
-
 function getTmuxTarget({ sessionName, windowIndex, paneIndex }: SendKeysArguments): string {
     let target = '';
 

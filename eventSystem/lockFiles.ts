@@ -1,6 +1,5 @@
 import { lockFilesPath } from "../src/filePaths";
 import * as fs from 'fs/promises';
-// import * as utils from '../src/utils/common';
 
 export enum LockFiles {
     LoadInProgress = 'LoadInProgress',

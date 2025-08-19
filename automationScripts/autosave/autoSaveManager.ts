@@ -1,8 +1,8 @@
 import 'module-alias/register';
 import os from 'os';
-import { lockFileExist, LockFiles, oneOfMultipleLocksExist } from '../eventSystem/lockFiles';
+import { lockFileExist, LockFiles, oneOfMultipleLocksExist } from '../../eventSystem/lockFiles';
 import { loadSettings } from '@/utils/common';
-import { createIPCClient } from '../eventSystem/icpClient';
+import { createIPCClient } from '../../eventSystem/ipc';
 
 async function main() {
     if (
@@ -18,7 +18,7 @@ async function main() {
     const client = createIPCClient('/tmp/autosave.sock');
 
     if (!await lockFileExist(LockFiles.AutoSaveInProgress)) {
-        const script = `${'~/programming/kra-tmux/dest/automationScripts/autosave.js'.replace('~', os.homedir())}`;
+        const script = `${'~/programming/kra-tmux/dest/automationScripts/autosave/autosave.js'.replace('~', os.homedir())}`;
 
         await client.ensureServerRunning(script);
     }

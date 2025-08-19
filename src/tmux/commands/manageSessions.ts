@@ -4,6 +4,13 @@ import { sessionFilesFolder } from '@/filePaths';
 import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@/tmux/utils/sessionUtils';
 import { printSessions } from '@/tmux/commands/printSessions';
 
+/**
+ * Deletes a saved server session after user confirmation.
+ *
+ * Prompts the user to select a session from the list of saved servers,
+ * displays the selected sessions for verification, and requests confirmation
+ * before permanently deleting the session file.
+ */
 export async function deleteSession(): Promise<void> {
     const savedServers = await getSavedSessionsNames();
 

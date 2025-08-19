@@ -1,5 +1,5 @@
 #!/bin/bash
-UPDATE_SCRIPT="$HOME/programming/kra-tmux/dest/automationScripts/autoSaveManager.js"
+UPDATE_SCRIPT="$HOME/programming/kra-tmux/dest/automationScripts/autosave/autoSaveManager.js"
 
 # session hooks
 tmux set-hook -u session-created

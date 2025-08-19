@@ -26,7 +26,7 @@ function setupNeovimConfig() {
         fs.mkdirSync(nvimConfigDir, { recursive: true });
     }
 
-    fs.copyFileSync(`${__dirname}/../../automationScripts/neovimHooks.lua`, autosaveHookFile);
+    fs.copyFileSync(`${__dirname}/../../automationScripts/hooks/neovimHooks.lua`, autosaveHookFile);
 
     const requireLine = 'require("neovimHooks")';
 

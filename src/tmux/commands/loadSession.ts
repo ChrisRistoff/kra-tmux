@@ -5,11 +5,54 @@ import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
 import { Window, SessionResult, TmuxSessions } from '@/types/sessionTypes';
 import { getCurrentSessions, getSavedSessionsNames } from '@/tmux/utils/sessionUtils';
 import { printSessions } from '@/tmux/commands/printSessions';
-import * as tmux from '@/tmux/core/tmux';
+import * as tmux from '@/tmux/utils/common';
 import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
-import { createLockFile, LockFiles } from '@/../eventSystem/lockFiles'
+import { createLockFile, LockFiles } from '@/../eventSystem/lockFiles';
 import * as bash from '@/utils/bashHelper';
 
+/**
+ * Main session loading workflow
+ * Handles session selection, base session creation, script generation and execution
+ */
+export async function loadSession(): Promise<void> {
+    await createLockFile(LockFiles.LoadInProgress);
+
+    try {
+        const itemsArray = await getSavedSessionsNames();
+
+        const serverName = await generalUI.searchSelectAndReturnFromArray({
+            itemsArray,
+            prompt: "Select a session to load from the list:",
+        })
+
+        const savedSessionsData = await getSessionsFromSaved(serverName);
+
+        if (!savedSessionsData) {
+            console.error('No saved sessions found.');
+            return;
+        }
+
+        const sessionNames = Object.keys(savedSessionsData);
+
+        const sessionResults = await createBaseSessions(sessionNames);
+        const scriptLines = generateRespawnScript(sessionResults, savedSessionsData, serverName);
+        await executeTmuxScript(scriptLines);
+
+        await tmux.sourceTmuxConfig();
+
+        tmux.updateCurrentSession(serverName);
+
+        console.log('Sessions loaded successfully');
+    } catch (error) {
+        console.error('Load session error:', error);
+    }
+}
+
+/**
+ * Retrieves saved tmux sessions from a file for a specified server
+ * @param serverName - Name of the server to load sessions from
+ * @returns Parsed tmux session data or null if not found
+ */
 export async function getSessionsFromSaved(serverName: string): Promise<TmuxSessions | null> {
     const filePath = `${sessionFilesFolder}/${serverName}`;
     const sessionsObject = await fs.readFile(filePath);
@@ -18,7 +61,12 @@ export async function getSessionsFromSaved(serverName: string): Promise<TmuxSess
 }
 
 /**
- * Generates optimized tmux script using respawn-pane to bypass shell loading
+ * Generates performant tmux script using respawn-pane to bypass shell loading
+ * Creates window/pane structure and configures commands/working directories
+ * @param sessionResults - Session creation results from base session setup
+ * @param savedData - Saved tmux session configuration data
+ * @param serverName - Name of the server being restored
+ * @returns Array of tmux commands to execute for session restoration
  */
 function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxSessions, serverName: string): string[] {
     const scriptLines: string[] = [];
@@ -106,17 +154,19 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
 
 /**
  * Validates window configuration to ensure layout matches pane count
+ * @param window - Window configuration to validate
+ * @returns True if window configuration is valid, false otherwise
  */
 function validateWindowConfig(window: Window): boolean {
     const paneCount = window.panes?.length || 0;
 
-    // Must have at least one pane
-    if (paneCount === 0) {
+    // must have at least one pane
+    if (!paneCount) {
         console.warn(`Window ${window.windowName} has no panes`);
         return false;
     }
 
-    // If only one pane, any layout should work
+    // if one pane, any layout should work
     if (paneCount === 1) return true;
 
     // For multiple panes, layout should exist
@@ -129,7 +179,10 @@ function validateWindowConfig(window: Window): boolean {
 }
 
 /**
-* Creates base tmux sessions with minimal shell initialization
+ * Creates base tmux sessions with minimal shell initialization
+ * Kills existing sessions and creates fresh ones with basic configuration
+ * @param sessionNames - Array of session names to create
+ * @returns Array of session creation results with success status
  */
 async function createBaseSessions(sessionNames: string[]): Promise<SessionResult[]> {
     console.log(`Creating ${sessionNames.length} base sessions:`, sessionNames);
@@ -146,7 +199,7 @@ async function createBaseSessions(sessionNames: string[]): Promise<SessionResult
 
     const results: SessionResult[] = [];
 
-    // create sessions one by one for better error handling and verification
+    // create sessions one by one for better error handling, verification and consistency with saves
     for (const sessionName of sessionNames) {
         try {
             // hcreate new session
@@ -181,6 +234,8 @@ async function createBaseSessions(sessionNames: string[]): Promise<SessionResult
 
 /**
  * Executes tmux script with window indexing safeguards
+ * Creates temporary script file with base-index configuration and executes it
+ * @param scriptLines - Array of tmux commands to execute
  */
 async function executeTmuxScript(scriptLines: string[]): Promise<void> {
     const timestamp = Date.now();
@@ -212,40 +267,10 @@ SCRIPT_EOF`);
     }
 }
 
-export async function loadSession(): Promise<void> {
-    await createLockFile(LockFiles.LoadInProgress);
-
-    try {
-        const itemsArray = await getSavedSessionsNames();
-
-        const serverName = await generalUI.searchSelectAndReturnFromArray({
-            itemsArray,
-            prompt: "Select a session to load from the list:",
-        })
-
-        const savedSessionsData = await getSessionsFromSaved(serverName);
-
-        if (!savedSessionsData) {
-            console.error('No saved sessions found.');
-            return;
-        }
-
-        const sessionNames = Object.keys(savedSessionsData);
-
-        const sessionResults = await createBaseSessions(sessionNames);
-        const scriptLines = generateRespawnScript(sessionResults, savedSessionsData, serverName);
-        await executeTmuxScript(scriptLines);
-
-        await tmux.sourceTmuxConfig();
-
-        tmux.updateCurrentSession(serverName);
-
-        console.log('Sessions loaded successfully');
-    } catch (error) {
-        console.error('Load session error:', error);
-    }
-}
-
+/**
+ * Handles existing tmux server state
+ * Offers to save running sessions and kills them before load
+ */
 export async function handleSessionsIfServerIsRunning(): Promise<void> {
     const currentSessions = await getCurrentSessions();
     let shouldSaveCurrentSessions = false;

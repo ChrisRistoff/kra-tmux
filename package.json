@@ -14,7 +14,7 @@
         "src"
     ],
     "scripts": {
-        "postinstall": "tsc && node ./dest/automationScripts/auto.js",
+        "postinstall": "tsc && node ./dest/automationScripts/automate.js",
         "lint": "eslint --fix",
         "test": "jest"
     },
