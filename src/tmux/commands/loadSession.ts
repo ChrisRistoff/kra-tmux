@@ -18,25 +18,6 @@ export async function getSessionsFromSaved(serverName: string): Promise<TmuxSess
 }
 
 /**
- * Creates base tmux sessions with minimal shell initialization
- */
-async function createBaseSessions(sessionNames: string[]): Promise<SessionResult[]> {
-    const createCommands = sessionNames.map(sessionName =>
-        `tmux new-session -d -s "${sessionName}"`
-    );
-
-    // execute all session creations in parallel
-    const script = createCommands.join(' & ');
-    await bash.execCommand(`${script} & wait`);
-
-    return sessionNames.map(sessionName => ({
-        sessionName,
-        success: true,
-        windows: []
-    }));
-}
-
-/**
  * Generates optimized tmux script using respawn-pane to bypass shell loading
  */
 function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxSessions, serverName: string): string[] {
@@ -49,28 +30,59 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
             continue;
         }
 
-        sessionConfig.windows.forEach((window: Window, windowIndex: number) => {
-            const windowTarget = `${result.sessionName}:${windowIndex}`;
+        // sort windows by their saved index to ensure proper order
+        const sortedWindows = [...sessionConfig.windows].sort((a, b) => {
+            // if windows have an index property, use it; otherwise use array index
+            const aIndex = (a as any).windowIndex ?? sessionConfig.windows.indexOf(a);
+            const bIndex = (b as any).windowIndex ?? sessionConfig.windows.indexOf(b);
+            return aIndex - bIndex;
+        });
 
-            // create/rename window
-            if (windowIndex === 0) {
+        console.log(`Processing ${sortedWindows.length} windows for session ${result.sessionName}`);
+
+        sortedWindows.forEach((window: Window, arrayIndex: number) => {
+            // skip invalid window configurations
+            if (!validateWindowConfig(window)) {
+                console.warn(`Skipping invalid window config: ${window.windowName}`);
+                return;
+            }
+
+            // use the array index for tmux window targeting (0, 1, 2, 3, 4...)
+            const tmuxWindowIndex = arrayIndex;
+            const windowTarget = `${result.sessionName}:${tmuxWindowIndex}`;
+
+            console.log(`Creating window ${tmuxWindowIndex}: ${window.windowName} with ${window.panes.length} panes`);
+
+            // handle window creation/renaming
+            if (tmuxWindowIndex === 0) {
+                // Window 0 should already exist from session creation
+                scriptLines.push(`select-window -t ${result.sessionName}:0`);
                 scriptLines.push(`rename-window -t ${result.sessionName}:0 "${window.windowName}"`);
             } else {
-                scriptLines.push(`new-window -t ${result.sessionName}:${windowIndex} -n "${window.windowName}" -c ~/`);
+                // create new windows with explicit index
+                scriptLines.push(`new-window -t ${result.sessionName}:${tmuxWindowIndex} -n "${window.windowName}" -c ~/`);
             }
-            // create additional panes
-            window.panes.slice(1).forEach(() => {
-                scriptLines.push(`split-window -t ${windowTarget} -c ~/`);
-            });
 
-            scriptLines.push(`select-layout -t ${windowTarget} "${window.layout}"`);
+            // only create additional panes if we have more than 1 pane
+            if (window.panes.length > 1) {
+                // Create additional panes (starting from index 1 since pane 0 already exists)
+                for (let i = 1; i < window.panes.length; i++) {
+                    scriptLines.push(`split-window -t ${windowTarget} -c ~/`);
+                }
 
+                // Only apply layout if we have multiple panes AND layout exists
+                if (window.layout) {
+                    scriptLines.push(`select-layout -t ${windowTarget} "${window.layout}"`);
+                }
+            }
+
+            // setup each pane with its command and working directory
             window.panes.forEach((pane, paneIndex) => {
                 const paneTarget = `${windowTarget}.${paneIndex}`;
-                const workingDir = pane.currentPath.split('/').slice(3).join('/') || '~';
+                const workingDir = pane.currentPath?.split('/').slice(3).join('/') || '~';
 
                 if (pane.currentCommand === "nvim") {
-                    const nvimSessionFile = `${nvimSessionsPath}/${serverName}/${result.sessionName}_${windowIndex}_${paneIndex}.vim`;
+                    const nvimSessionFile = `${nvimSessionsPath}/${serverName}/${result.sessionName}_${tmuxWindowIndex}_${paneIndex}.vim`;
                     const shell = process.env.SHELL || '/bin/bash';
                     const nvimCommand = `${shell} -c 'cd "${workingDir}" && (if [ -f "${nvimSessionFile}" ]; then nvim -S "${nvimSessionFile}"; else nvim; fi); exec ${shell}'`;
                     scriptLines.push(`respawn-pane -t ${paneTarget} -k "${nvimCommand}"`);
@@ -81,13 +93,90 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
                 }
             });
 
+            // select the first pane in the window
             scriptLines.push(`select-pane -t ${windowTarget}.0`);
         });
 
-        result.windows = sessionConfig.windows;
+        // update result with the processed windows
+        result.windows = sortedWindows;
     }
 
     return scriptLines;
+}
+
+/**
+ * Validates window configuration to ensure layout matches pane count
+ */
+function validateWindowConfig(window: Window): boolean {
+    const paneCount = window.panes?.length || 0;
+
+    // Must have at least one pane
+    if (paneCount === 0) {
+        console.warn(`Window ${window.windowName} has no panes`);
+        return false;
+    }
+
+    // If only one pane, any layout should work
+    if (paneCount === 1) return true;
+
+    // For multiple panes, layout should exist
+    if (!window.layout) {
+        console.warn(`Window ${window.windowName} has ${paneCount} panes but no layout`);
+        return false;
+    }
+
+    return true;
+}
+
+/**
+* Creates base tmux sessions with minimal shell initialization
+ */
+async function createBaseSessions(sessionNames: string[]): Promise<SessionResult[]> {
+    console.log(`Creating ${sessionNames.length} base sessions:`, sessionNames);
+
+    // kill any existing sessions
+    for (const sessionName of sessionNames) {
+        try {
+            await bash.execCommand(`tmux kill-session -t "${sessionName}" 2>/dev/null || true`);
+            console.log(`Cleaned up existing session: ${sessionName}`);
+        } catch (error) {
+            // ignore
+        }
+    }
+
+    const results: SessionResult[] = [];
+
+    // create sessions one by one for better error handling and verification
+    for (const sessionName of sessionNames) {
+        try {
+            // hcreate new session
+            await bash.execCommand(`tmux new-session -d -s "${sessionName}" -c ~/`);
+
+            // verify session was created
+            await bash.execCommand(`tmux has-session -t "${sessionName}"`);
+
+            // list windows to verify structure
+            const windowList = await bash.execCommand(`tmux list-windows -t "${sessionName}" -F "#{window_index}:#{window_name}"`);
+            console.log(`Session ${sessionName} created with windows:`, windowList.stdout.trim());
+
+            results.push({
+                sessionName,
+                success: true,
+                windows: []
+            });
+
+        } catch (error) {
+            console.error(`Failed to create session ${sessionName}:`, error);
+            results.push({
+                sessionName,
+                success: false,
+                windows: []
+            });
+        }
+    }
+
+    console.log(`Successfully created ${results.filter(r => r.success).length}/${sessionNames.length} sessions`);
+    return results;
 }
 
 /**
@@ -99,16 +188,16 @@ async function executeTmuxScript(scriptLines: string[]): Promise<void> {
 
     // add commands to ensure consistent window indexing
     const safeguardedScript = [
-/*         '# Ensure base-index is 0 for consistent window numbering',
+        '# Ensure base-index is 0 for consistent window numbering',
         'set-option -g base-index 0',
         'set-option -g pane-base-index 0',
         '# Disable automatic window renumbering during script execution',
-        'set-option -g renumber-windows off', */
+        'set-option -g renumber-windows off',
         '',
         ...scriptLines,
         '',
-/*         '# Re-enable renumber-windows if it was previously enabled',
-        'set-option -g renumber-windows on' */
+        '# Re-enable renumber-windows if it was previously enabled',
+        'set-option -g renumber-windows on'
     ];
 
     const scriptContent = safeguardedScript.join('\n');

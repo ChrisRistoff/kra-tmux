@@ -45,7 +45,7 @@ export async function getWindowsForSession(session: string): Promise<Window[]> {
 export async function getPanesForWindow(session: string, windowIndex: number): Promise<Pane[]> {
     try {
         const panes = await bash.execCommand(
-            `tmux list-panes -t ${session}:${windowIndex} -F "#{pane_current_command}:#{pane_current_path}:#{pane_left}x#{pane_top}"`
+            `tmux list-panes -t ${session}:${windowIndex} -F "#{pane_pid}:#{pane_current_path}:#{pane_left}x#{pane_top}"`
         );
         const panesArray = panes.stdout.toString().trim().split('\n');
 

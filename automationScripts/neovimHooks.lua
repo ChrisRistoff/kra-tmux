@@ -1,59 +1,200 @@
 local function setup_autosave()
-  local uv = vim.loop
-  local pid = vim.fn.getpid()
-  local socket_path = "/tmp/nvim_" .. pid .. ".sock"
-  local timer = nil
-  local script_path = vim.fn.expand("~/programming/kra-tmux/dest/automationScripts/autoSaveManager.js")
+    local home = vim.fn.expand("~")
+    local script_path = home .. "/programming/kra-tmux/dest/automationScripts/autoSaveManager.js"
 
-  -- start one server per nvim instance
-  if vim.fn.filereadable(script_path) == 0 then
-    vim.notify("Autosave: Script not found", vim.log.levels.ERROR)
-    return
-  end
-  vim.fn.serverstart(socket_path)
-
-  -- clean up on exit
-  vim.api.nvim_create_autocmd("VimLeavePre", {
-    callback = function()
-      vim.fn.serverstop(socket_path)
-      if vim.fn.filereadable(socket_path) == 1 then
-        vim.fn.delete(socket_path)
-      end
-    end,
-  })
-
-  -- helper: debounce + run script
-  local function trigger(event)
-    if timer then
-      timer:stop()
-      timer:close()
+    if vim.fn.filereadable(script_path) == 0 then
+        print("Autosave: Script not found at " .. script_path)
+        return
     end
-    timer = uv.new_timer()
-    timer:start(3000, 0, vim.schedule_wrap(function()
-      local session = vim.fn.system("tmux display-message -p '#S'"):gsub("%s+", "")
-      local window  = vim.fn.system("tmux display-message -p '#I'"):gsub("%s+", "")
-      local pane    = vim.fn.system("tmux display-message -p '#P'"):gsub("%s+", "")
-      local session_id = table.concat({
-        "neovim", session, window, pane, event, socket_path
-      }, ":")
 
-      vim.fn.jobstart({ "node", script_path, session_id }, { detach = true })
-      timer:close()
-      timer = nil
-    end))
-  end
+    local pending_execution = false
+    local debounce_timer = nil
+    local socket_lifetime_timer = nil
+    local server_address = nil
+    local our_socket_path = nil
 
-  -- set up autocmds
-  local events = { "BufReadPost", "BufDelete", "VimLeave", "WinClosed" }
-  for _, ev in ipairs(events) do
-    vim.api.nvim_create_autocmd(ev, {
-      callback = function()
-        if ev == "VimLeave" then
-          trigger(ev)
-        else
-          trigger(ev) -- debounced
+    local excluded_filetypes = {
+        "NvimTree", "TelescopePrompt", "packer", "cmp_menu", "which_key",
+        "gitcommit", "fugitive", "gh"
+    }
+
+    local function is_real_buffer(buf)
+        local buftype = vim.api.nvim_buf_get_option(buf, "buftype")
+        if buftype ~= "" then return false end
+        local ft = vim.api.nvim_buf_get_option(buf, "filetype")
+        for _, ex in ipairs(excluded_filetypes) do
+            if ft == ex then return false end
         end
-      end,
+        return true
+    end
+
+    local visible_buffers = {}
+
+    local function update_visible_buffers()
+        local current = {}
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            if is_real_buffer(buf) then
+                current[buf] = true
+            end
+        end
+        return current
+    end
+
+    local function buffers_removed(old, new)
+        for buf in pairs(old) do
+            if not new[buf] then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function get_unique_socket_path()
+        local pid = vim.fn.getpid()
+        local timestamp = vim.fn.localtime()
+        local random = math.random(1000, 9999)
+        return "/tmp/nvim_" .. pid .. "_" .. timestamp .. "_" .. random .. ".sock"
+    end
+
+    local function ensure_server_running()
+        if server_address and vim.fn.serverlist()[server_address] then
+            return true
+        end
+
+        local socket_path = get_unique_socket_path()
+        vim.fn.mkdir(vim.fn.fnamemodify(socket_path, ":h"), "p")
+        local server_result = vim.fn.serverstart(socket_path)
+
+        if server_result ~= "" then
+            server_address = server_result
+            our_socket_path = socket_path
+
+            if socket_lifetime_timer then
+                socket_lifetime_timer:stop()
+                socket_lifetime_timer:close()
+            end
+            socket_lifetime_timer = vim.loop.new_timer()
+            socket_lifetime_timer:start(600000, 0, vim.schedule_wrap(function()
+                if server_address then
+                    vim.fn.serverstop(server_address)
+                    server_address = nil
+                end
+                if our_socket_path then
+                    vim.fn.delete(our_socket_path)
+                    our_socket_path = nil
+                end
+                socket_lifetime_timer:close()
+                socket_lifetime_timer = nil
+            end))
+
+            return true
+        end
+
+        print("Autosave: Failed to start server")
+        return false
+    end
+
+    local function execute_script(event_name)
+        if pending_execution then return end
+        pending_execution = true
+
+        local tmux_session = vim.fn.system("tmux display-message -p '#S'"):gsub("%s+", "")
+        if vim.v.shell_error ~= 0 then
+            pending_execution = false
+            return
+        end
+        local tmux_window = vim.fn.system("tmux display-message -p '#I'"):gsub("%s+", "")
+        local tmux_pane = vim.fn.system("tmux display-message -p '#P'"):gsub("%s+", "")
+
+        if not ensure_server_running() then
+            pending_execution = false
+            return
+        end
+
+        local buf = vim.api.nvim_get_current_buf()
+        local buftype = vim.api.nvim_buf_get_option(buf, 'buftype')
+        local filetype = vim.api.nvim_buf_get_option(buf, 'filetype')
+        if buftype ~= "" or filetype == "gitcommit" then
+            pending_execution = false
+            return
+        end
+
+        local session_id = table.concat({ "neovim", tmux_session, tmux_window, tmux_pane, event_name, our_socket_path },
+            ":")
+
+        vim.fn.jobstart({ "node", script_path, session_id }, {
+            detach = true,
+            on_exit = function(_, exit_code)
+                pending_execution = false
+                if exit_code ~= 0 and exit_code ~= 130 then
+                    print("Autosave: Script exited with code " .. exit_code)
+                end
+            end,
+            on_stderr = function(_, data)
+                local filtered_data = vim.tbl_filter(function(s) return s and s:match("%S") end, data)
+                if #filtered_data > 0 then print("Autosave error: " .. table.concat(filtered_data, "\n")) end
+            end,
+            on_stdout = function(_, data)
+                local filtered_data = vim.tbl_filter(function(s) return s and s:match("%S") end, data)
+                if #filtered_data > 0 then print("Autosave: " .. table.concat(filtered_data, "\n")) end
+            end
+        })
+    end
+
+    -- Initial snapshot of buffers
+    visible_buffers = update_visible_buffers()
+
+    local function schedule_autosave(event_name)
+        if debounce_timer and not debounce_timer:is_closing() then
+            debounce_timer:stop()
+            debounce_timer:close()
+        end
+
+        debounce_timer = vim.loop.new_timer()
+        debounce_timer:start(100, 0, vim.schedule_wrap(function()
+            local new_buffers = update_visible_buffers()
+            if buffers_removed(visible_buffers, new_buffers) or event_name ~= "buffer_removed" then
+                execute_script(event_name)
+            end
+            visible_buffers = new_buffers
+
+            if debounce_timer and not debounce_timer:is_closing() then
+                debounce_timer:close()
+            end
+            debounce_timer = nil
+        end))
+    end
+
+    -- Track buffer/window events
+    local events = { "BufReadPost", "BufDelete", "WinClosed" }
+    for _, event in ipairs(events) do
+        vim.api.nvim_create_autocmd(event, {
+            pattern = "*",
+            callback = function()
+                schedule_autosave(event)
+            end
+        })
+    end
+
+    -- Cleanup on exit
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        callback = function()
+            if server_address then
+                vim.fn.serverstop(server_address)
+                server_address = nil
+            end
+            if our_socket_path then
+                vim.fn.delete(our_socket_path)
+                our_socket_path = nil
+            end
+            if socket_lifetime_timer then
+                socket_lifetime_timer:stop()
+                socket_lifetime_timer:close()
+                socket_lifetime_timer = nil
+            end
+        end
     })
-  end
 end
+
+setup_autosave()
