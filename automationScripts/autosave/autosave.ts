@@ -1,6 +1,6 @@
 import 'module-alias/register';
 import { nvimSessionsPath } from '@/filePaths';
-import { createIPCServer, IPCServer } from '../../eventSystem/ipc';
+import { createIPCServer, IPCEvents, IPCServer, IPCsockets } from '../../eventSystem/ipc';
 import { createLockFile, deleteLockFile, lockFileExist, LockFiles } from '../../eventSystem/lockFiles';
 import * as nvim from 'neovim';
 import fs from 'fs/promises';
@@ -81,11 +81,11 @@ function trackSession(event: string): void {
 
 async function main(): Promise<void> {
     try {
-        const server = createIPCServer('/tmp/autosave.sock');
+        const server = createIPCServer(IPCsockets.AutosaveSocket);
 
         await server.addListener(async (event) => {
-            if (event === 'flush-autosave') {
-                resetSaveTimer(0);
+            if (event === IPCEvents.FlushAutosave) {
+                resetSaveTimer(1);
 
                 return;
             }

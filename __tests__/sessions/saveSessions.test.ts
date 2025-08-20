@@ -368,7 +368,7 @@ describe('saveSessions', () => {
 
             await saveSessionsToFile();
 
-            // The cleanup happens asynchronously, so we need to wait a bit
+            // cleanup happens asynchronously, so we need to wait a bit
             await new Promise(resolve => setTimeout(resolve, 10));
 
             expect(mockFs.rm).toHaveBeenCalledWith('/mock/nvim/sessions/cleanup-session_0_0');

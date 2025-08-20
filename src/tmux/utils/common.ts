@@ -1,6 +1,6 @@
 import * as bash from '@/utils/bashHelper';
 import { createLockFile, lockFileExist, LockFiles } from '@/../eventSystem/lockFiles';
-import { createIPCClient } from '@/../eventSystem/ipc';
+import { createIPCClient, IPCEvents, IPCsockets } from '@/../eventSystem/ipc';
 import * as utils from '@/utils/common';
 import { execSync } from 'child_process';
 
@@ -49,9 +49,9 @@ export async function killServer(): Promise<void> {
 
     try {
         if (await lockFileExist(LockFiles.AutoSaveInProgress)) {
-            const client = createIPCClient('/tmp/autosave.sock');
+            const client = createIPCClient(IPCsockets.AutosaveSocket);
 
-            await client.emit('flush-autosave');
+            await client.emit(IPCEvents.FlushAutosave);
         }
 
         while (await lockFileExist(LockFiles.AutoSaveInProgress)) {

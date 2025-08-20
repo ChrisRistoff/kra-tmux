@@ -40,14 +40,13 @@ describe('loadSession', () => {
         jest.clearAllMocks();
         process.env.SHELL = '/bin/zsh';
 
-        // Default mock implementations
         mockCreateLockFile.mockResolvedValue();
         mockTmux.sourceTmuxConfig.mockResolvedValue();
-        mockTmux.updateCurrentSession.mockImplementation(() => new Promise(()=> {}));
+        mockTmux.updateCurrentSession.mockImplementation(() => new Promise(() => { }));
         mockTmux.killServer.mockResolvedValue();
         mockUtils.sleep.mockResolvedValue();
         mockSaveSessionsToFile.mockResolvedValue();
-        mockPrintSessions.mockImplementation(() => {});
+        mockPrintSessions.mockImplementation(() => { });
         mockFs.rm.mockResolvedValue();
     });
 
@@ -81,7 +80,7 @@ describe('loadSession', () => {
             mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue('server1');
             mockFs.readFile.mockResolvedValue(Buffer.from(JSON.stringify(mockSavedData)));
 
-            // Mock session creation
+            // session creation
             mockBash.execCommand
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // kill existing session
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // create new session
@@ -277,7 +276,7 @@ describe('loadSession', () => {
             mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue('server1');
             mockFs.readFile.mockResolvedValue(Buffer.from(JSON.stringify(mockSavedData)));
 
-            // Mock session creation failure
+            // session creation failure
             mockBash.execCommand
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // kill existing session
                 .mockRejectedValueOnce(new Error('Failed to create session')); // create session fails
@@ -343,7 +342,7 @@ describe('loadSession', () => {
             mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue('server1');
             mockFs.readFile.mockResolvedValue(Buffer.from(JSON.stringify(mockSavedData)));
 
-            // Mock successful session creation
+            // successful session creation
             mockBash.execCommand
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // kill existing session
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // create new session
@@ -390,7 +389,7 @@ describe('loadSession', () => {
             mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue('server1');
             mockFs.readFile.mockResolvedValue(Buffer.from(JSON.stringify(mockSavedData)));
 
-            // Mock successful session creation but script execution failure
+            // successful session creation but script execution failure
             mockBash.execCommand
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // kill existing session
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // create new session
@@ -404,7 +403,7 @@ describe('loadSession', () => {
             await loadSession();
 
             expect(consoleSpy).toHaveBeenCalledWith('Load session error:', expect.any(Error));
-            expect(mockFs.rm).toHaveBeenCalled(); // Should still clean up
+            expect(mockFs.rm).toHaveBeenCalled(); // should still clean up
 
             consoleSpy.mockRestore();
         });

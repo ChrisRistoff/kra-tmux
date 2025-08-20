@@ -20,7 +20,6 @@ describe('IPC', () => {
         jest.clearAllMocks();
         jest.useFakeTimers();
 
-        // Setup default mocks
         mockPath.join.mockImplementation((...parts) => parts.join('/'));
         mockFs.existsSync.mockReturnValue(false);
         mockFs.mkdirSync.mockImplementation(() => '');
@@ -30,7 +29,6 @@ describe('IPC', () => {
         mockFs.unlinkSync.mockImplementation(() => { });
         mockFs.rmdirSync.mockImplementation(() => { });
 
-        // mock spawn to return a child process-like object
         const mockChildProcess = {
             on: jest.fn(),
             unref: jest.fn(),
@@ -38,7 +36,6 @@ describe('IPC', () => {
         };
         mockSpawn.mockReturnValue(mockChildProcess as any);
 
-        // Mock process properties
         Object.defineProperty(process, 'pid', { value: 12345, configurable: true });
         process.env.HOME = '/home/user';
     });
@@ -58,7 +55,7 @@ describe('IPC', () => {
         it('should create server and setup signal directory', async () => {
             const handler = jest.fn();
 
-            // Mock that signal dir doesn't exist initially
+            // signal dir doesn't exist initially
             mockFs.existsSync.mockReturnValueOnce(false);
 
             const listenerPromise = server.addListener(handler);
@@ -72,7 +69,7 @@ describe('IPC', () => {
         it('should process event files when they exist', async () => {
             const handler = jest.fn();
 
-            // Setup initial state
+            // initial state
             mockFs.existsSync.mockReturnValue(true);
             (mockFs.readdirSync as jest.Mock)
                 .mockReturnValueOnce(['event-123456789'])
@@ -81,7 +78,7 @@ describe('IPC', () => {
 
             const listenerPromise = server.addListener(handler);
 
-            // Advance timer to trigger polling
+            // timer to trigger polling
             jest.advanceTimersByTime(100);
 
             await listenerPromise;
@@ -123,7 +120,7 @@ describe('IPC', () => {
 
             await listenerPromise;
 
-            // Should not throw and continue polling
+            // should not throw
             expect(handler).not.toHaveBeenCalled();
         });
 
@@ -241,7 +238,7 @@ describe('IPC', () => {
 
             const ensurePromise = client.ensureServerRunning('/path/to/server.js');
 
-            // Mock server starting up
+            // server starting up
             setTimeout(() => {
                 mockFs.existsSync.mockReturnValue(true);
                 mockFs.readFileSync.mockReturnValue('99999');
@@ -377,7 +374,7 @@ describe('IPC', () => {
 
             jest.advanceTimersByTime(100);
 
-            // Should not throw despite cleanup error
+            // should not throw despite cleanup error
             await expect(ensurePromise).resolves.not.toThrow();
 
             processSpy.mockRestore();

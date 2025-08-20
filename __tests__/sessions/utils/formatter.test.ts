@@ -14,13 +14,11 @@ describe('formatters', () => {
         it('should format pane with git repo and foreground command', async () => {
             const paneString = '1234:/home/user/project:10x20';
 
-            // Mock git repo call
             mockExecCommand.mockResolvedValueOnce({
                 stdout: 'git@github.com:user/repo.git\n',
                 stderr: ''
             });
 
-            // Mock foreground command calls
             mockExecCommand.mockResolvedValueOnce({
                 stdout: '5678\n9999\n',
                 stderr: ''
@@ -48,10 +46,8 @@ describe('formatters', () => {
         it('should format pane without git repo', async () => {
             const paneString = '2345:/tmp:0x0';
 
-            // Mock git repo call failure
             mockExecCommand.mockRejectedValueOnce(new Error('Not a git repo'));
 
-            // Mock foreground command calls
             mockExecCommand.mockResolvedValueOnce({
                 stdout: '6789\n',
                 stderr: ''
@@ -75,13 +71,11 @@ describe('formatters', () => {
         it('should handle pane with no foreground command', async () => {
             const paneString = '3456:/home/user:5x15';
 
-            // Mock git repo call
             mockExecCommand.mockResolvedValueOnce({
                 stdout: 'https://github.com/user/project.git\n',
                 stderr: ''
             });
 
-            // Mock no child processes
             mockExecCommand.mockResolvedValueOnce({
                 stdout: '\n',
                 stderr: ''
@@ -101,13 +95,11 @@ describe('formatters', () => {
         it('should handle errors in foreground command detection', async () => {
             const paneString = '4567:/var/log:100x200';
 
-            // Mock git repo call
             mockExecCommand.mockResolvedValueOnce({
                 stdout: 'git@gitlab.com:org/repo.git\n',
                 stderr: ''
             });
 
-            // Mock pgrep failure
             mockExecCommand.mockRejectedValueOnce(new Error('Process not found'));
 
             const result = await formatPane(paneString);
@@ -124,13 +116,11 @@ describe('formatters', () => {
         it('should handle ps command failure', async () => {
             const paneString = '5678:/opt/app:25x50';
 
-            // Mock git repo call
             mockExecCommand.mockResolvedValueOnce({
                 stdout: 'ssh://git@example.com/repo.git\n',
                 stderr: ''
             });
 
-            // Mock pgrep success but ps failure
             mockExecCommand.mockResolvedValueOnce({
                 stdout: '1111\n2222\n',
                 stderr: ''

@@ -47,12 +47,10 @@ describe('Git Untracked Operations', () => {
             const files = ['test1.txt', 'test2.txt'];
             const topLevel = '/project';
 
-            // Mock the file operations
             mockFs.existsSync.mockReturnValue(false);
             mockFs.mkdirSync.mockImplementation(() => undefined);
             mockFs.writeFileSync.mockImplementation(() => undefined);
 
-            // Mock the commands
             mockExecCommand
                 .mockResolvedValueOnce({ stdout: files.join('\n'), stderr: '' }) // getUntrackedFiles
                 .mockResolvedValueOnce({ stdout: topLevel, stderr: '' }); // getTopLevelPath
@@ -61,7 +59,7 @@ describe('Git Untracked Operations', () => {
 
             await saveUntracked();
 
-            // Verify mv commands for each file
+            // mv commands for each file
             files.forEach(file => {
                 expect(mockExecCommand).toHaveBeenCalledWith(
                     expect.stringContaining(`mv ${path.join(topLevel, file)}`)
@@ -95,25 +93,21 @@ describe('Git Untracked Operations', () => {
             };
             const branchName = 'main';
 
-            // Mock branch name
             mockGetCurrentBranch.mockResolvedValue(branchName);
 
-            // Mock directory reading
             mockFs.readdirSync.mockReturnValue([
                 { name: 'test1.txt', isFile: () => true },
                 { name: 'test2.txt', isFile: () => true },
                 { name: 'pathInfo', isFile: () => true }
             ] as unknown as fs.Dirent[]);
 
-            // Mock path info file reading
             mockFs.readFileSync.mockReturnValue(Buffer.from(JSON.stringify(pathInfoObject)));
 
-            // Mock user selection
             mockSearchSelect.mockResolvedValue(allFiles);
 
             await loadUntracked();
 
-            // Verify mv commands
+            // mv commands
             expect(mockExecCommand).toHaveBeenCalledTimes(2);
             files.forEach(file => {
                 const sourcePath = path.join(gitFilesFolder, UNTRACKED_CONFIG.untrackedFilesFolderName, branchName, file);
@@ -123,7 +117,7 @@ describe('Git Untracked Operations', () => {
         });
 
         it('should throw error when path info is missing for a file', async () => {
-            const pathInfoObject = {}; // Empty path info
+            const pathInfoObject = {}; // empty path info
             const branchName = 'main';
 
             mockGetCurrentBranch.mockResolvedValue(branchName);

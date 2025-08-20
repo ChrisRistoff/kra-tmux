@@ -18,12 +18,10 @@ describe('lockFiles', () => {
     beforeEach(() => {
         jest.clearAllMocks();
 
-        // Default mock implementations
         mockFs.rm.mockResolvedValue();
         mockFs.readFile.mockResolvedValue('');
         mockFs.writeFile.mockResolvedValue();
 
-        // Mock Date.now to return consistent timestamp
         jest.spyOn(Date, 'now').mockReturnValue(1640995200000); // 2022-01-01 00:00:00
     });
 
@@ -226,7 +224,7 @@ describe('lockFiles', () => {
         it('should handle file read error during cleanup', async () => {
             const currentTime = 1640995200000;
             const staleLockData = JSON.stringify({
-                timestamp: currentTime - 15000 // Stale lock
+                timestamp: currentTime - 15000 // stale lock
             });
 
             mockFs.readFile.mockResolvedValue(staleLockData);

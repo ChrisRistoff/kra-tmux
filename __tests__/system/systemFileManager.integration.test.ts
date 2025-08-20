@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { removeFile, removeDirectory } from '@/system/commands/systemFileManager';
 
-// Mock the UI and bash helper modules
 jest.mock('@/UI/generalUI', () => ({
     askUserForInput: jest.fn(),
     promptUserYesOrNo: jest.fn(),
@@ -13,7 +12,7 @@ jest.mock('@/utils/bashHelper', () => ({
     execCommand: jest.fn()
 }));
 
-// Import after mocking
+// import after mocking
 import * as ui from '@/UI/generalUI';
 import * as bash from '@/utils/bashHelper';
 
@@ -34,7 +33,7 @@ describe('SystemFileManager Integration Tests', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        // Clear the test directory before each test
+        // clear the test directory before each test
         fs.readdirSync(TEST_DIR).forEach(file => {
             const filePath = path.join(TEST_DIR, file);
             fs.rmSync(filePath, { recursive: true, force: true });
@@ -43,20 +42,17 @@ describe('SystemFileManager Integration Tests', () => {
 
     describe('removeFile', () => {
         it('should remove a file when user confirms', async () => {
-            // Create test file
+            // create test file
             const testFile = path.join(TEST_DIR, 'test.txt');
             fs.writeFileSync(testFile, 'test content');
 
-            // Mock responses
             (ui.askUserForInput as jest.Mock).mockResolvedValue('test');
             (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(true);
             (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue(testFile);
             (bash.execCommand as jest.Mock).mockResolvedValueOnce({ stdout: testFile, stderr: '' });
 
-            // Execute
             await removeFile();
 
-            // Verify bash command was called correctly
             expect(bash.execCommand as jest.Mock).toHaveBeenCalledWith(`rm "${testFile}"`);
         });
 
@@ -78,7 +74,7 @@ describe('SystemFileManager Integration Tests', () => {
 
     describe('removeDirectory', () => {
         it('should remove a directory when user confirms', async () => {
-            // Create test directory
+            // create test directory
             const testDir = path.join(TEST_DIR, 'testdir');
             fs.mkdirSync(testDir);
 

@@ -2,6 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 
+export enum IPCsockets {
+    AutosaveSocket = '/tmp/autosave.sock',
+}
+
+export enum IPCEvents {
+    FlushAutosave = 'flush-autosave',
+}
+
 export interface IPCServer {
     addListener: (handler: (event: string) => void) => Promise<void>;
     close: () => void;
