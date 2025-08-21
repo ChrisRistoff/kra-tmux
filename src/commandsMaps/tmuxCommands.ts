@@ -1,5 +1,5 @@
-import * as sessions from '@tmux/index'
-import { TmuxCommands } from './types/commandTypes';
+import * as sessions from '@/tmux/index';
+import { TmuxCommands } from '@/commandsMaps/types/commandTypes';
 import { tmuxAscii } from '@/tmux/data/tmux-ascii';
 
 export const tmuxCommands: TmuxCommands = {
@@ -12,7 +12,7 @@ export const tmuxCommands: TmuxCommands = {
 
 async function loadSession(): Promise<void> {
     await sessions.handleSessionsIfServerIsRunning();
-    await sessions.loadLatestSession();
+    await sessions.loadSession();
 }
 
 export function handleTmuxCommandNotExist(commandName: string): void {

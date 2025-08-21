@@ -1,7 +1,7 @@
-import * as bash from "@utils/bashHelper";
-import * as ui from '@UI/generalUI';
+import * as bash from "@/utils/bashHelper";
+import * as ui from '@/UI/generalUI';
 import { platform } from 'os';
-import { getModifiedFiles, getUntrackedFiles } from "../utils/gitFileUtils";
+import { getModifiedFiles, getUntrackedFiles } from "@/git/utils/gitFileUtils";
 
 export async function checkoutBranch() {
     const days = Number(await ui.askUserForInput('How many days ago'));

@@ -1,16 +1,16 @@
-import * as bash from '@utils/bashHelper';
-import * as ui from '@UI/generalUI';
-import * as vim from '@utils/neovimHelper';
-import { handleConflicts } from '@git/commands/gitConflicts';
-import { restoreFile } from '@git/commands/gitRestore';
-import { applyOrDropStash, dropMultipleStashes } from '@git/commands/gitStash';
-import { GIT_COMMANDS } from '@git/config/gitConstants';
-import { allFiles } from '@/git/utils/gitFileUtils';
+import * as bash from '@/utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import * as vim from '@/utils/neovimHelper';
+import { handleConflicts } from '@/git/commands/gitConflicts';
+import { restoreFile } from '@/git/commands/gitRestore';
+import { applyOrDropStash, dropMultipleStashes } from '@/git/commands/gitStash';
+import { GIT_COMMANDS } from '@/git/config/gitConstants';
+import { allFiles } from '@//git/utils/gitFileUtils';
 
 // Mock dependencies
-jest.mock('@utils/bashHelper');
-jest.mock('@UI/generalUI');
-jest.mock('@utils/neovimHelper');
+jest.mock('@/utils/bashHelper');
+jest.mock('@/UI/generalUI');
+jest.mock('@/utils/neovimHelper');
 
 describe('Git Commands', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);

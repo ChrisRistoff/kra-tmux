@@ -1,4 +1,4 @@
-import { AiRoles } from "../types/aiTypes";
+import { AiRoles } from "@/AIchat/types/aiTypes";
 
 export const aiRoles: AiRoles = {
     none: '',

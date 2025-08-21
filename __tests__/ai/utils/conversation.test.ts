@@ -1,19 +1,19 @@
 import * as fs from 'fs/promises';
 import * as neovim from 'neovim';
-import * as bash from '@utils/bashHelper';
-import { converse } from '@AIchat/utils/conversation';
-import { promptModel } from '@AIchat/utils/promptModel';
-import { saveChat } from '@AIchat/utils/saveChat';
+import * as bash from '@/utils/bashHelper';
+import { converse } from '@/AIchat/utils/conversation';
+import { promptModel } from '@/AIchat/utils/promptModel';
+import { saveChat } from '@/AIchat/utils/saveChat';
 import { openVim } from '@/utils/neovimHelper';
-import { aiRoles } from '@AIchat/data/roles';
-import { formatChatEntry } from '@AIchat/utils/aiUtils';
+import { aiRoles } from '@/AIchat/data/roles';
+import { formatChatEntry } from '@/AIchat/utils/aiUtils';
 
 jest.mock('fs/promises');
-jest.mock('@utils/bashHelper');
+jest.mock('@/utils/bashHelper');
 jest.mock('@/utils/neovimHelper');
-jest.mock('@AIchat/utils/promptModel');
-jest.mock('@AIchat/utils/saveChat');
-jest.mock('@AIchat/utils/aiUtils');
+jest.mock('@/AIchat/utils/promptModel');
+jest.mock('@/AIchat/utils/saveChat');
+jest.mock('@/AIchat/utils/aiUtils');
 
 describe('converse', () => {
     const chatFile = 'chat.md';

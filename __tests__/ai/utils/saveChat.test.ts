@@ -1,18 +1,18 @@
 import * as fs from 'fs/promises';
-import * as bash from '@utils/bashHelper';
+import * as bash from '@/utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
-import * as ui from '@UI/generalUI';
-import { saveChat } from '@AIchat/utils/saveChat';
-import { promptModel } from '@AIchat/utils/promptModel';
+import * as ui from '@/UI/generalUI';
+import { saveChat } from '@/AIchat/utils/saveChat';
+import { promptModel } from '@/AIchat/utils/promptModel';
 import { aiHistoryPath } from '@/filePaths';
 import { ChatHistory, Role } from '@/AIchat/types/aiTypes';
 
-jest.mock('@utils/bashHelper');
-jest.mock('@utils/neovimHelper');
-jest.mock('@UI/generalUI');
+jest.mock('@/utils/bashHelper');
+jest.mock('@/utils/neovimHelper');
+jest.mock('@/UI/generalUI');
 jest.mock('fs/promises');
-jest.mock('@AIchat/utils/promptModel');
-jest.mock('@AIchat/utils/aiUtils', () => ({
+jest.mock('@/AIchat/utils/promptModel');
+jest.mock('@/AIchat/utils/aiUtils', () => ({
     formatChatEntry: jest.fn((title, text, _flag) => `Formatted: ${title}: ${text}`)
 }));
 

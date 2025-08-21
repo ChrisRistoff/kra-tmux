@@ -1,8 +1,8 @@
-import { systemScriptsPath } from '@/filePaths';
-import * as ui from '@UI/generalUI';
-import * as bash from '@utils/bashHelper';
-import * as utils from '@system/utils/fileUtils'
 import fs from 'fs/promises';
+import { systemScriptsPath } from '@/filePaths';
+import * as ui from '@/UI/generalUI';
+import * as bash from '@/utils/bashHelper';
+import * as utils from '@/system/utils/fileUtils'
 import { filterGitKeep } from '@/utils/common';
 
 export async function executeScript(): Promise<void> {

@@ -1,6 +1,6 @@
+import * as ai from "@/AIchat";
 import { aiAscii } from "@/AIchat/data/ai-ascii";
-import * as ai from "../AIchat";
-import { AiCommands } from "./types/commandTypes";
+import { AiCommands } from "@/commandsMaps/types/commandTypes"
 
 export const aiCommands : AiCommands = {
     'chat': ai.startNewChat,

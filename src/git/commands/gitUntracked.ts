@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from "path";
-import * as bash from '@utils/bashHelper';
-import * as ui from "@UI/generalUI";
-import { gitFilesFolder } from "@filePaths";
-import { getCurrentBranch, getTopLevelPath } from "@git/core/gitBranch";
-import { allFiles, getUntrackedFiles } from "@git/utils/gitFileUtils";
-import { UNTRACKED_CONFIG } from "@git/config/gitConstants";
-import { PathInfoObject } from '@customTypes/gitTypes';
+import * as bash from '@/utils/bashHelper';
+import * as ui from "@/UI/generalUI";
+import { gitFilesFolder } from "@/filePaths";
+import { getCurrentBranch, getTopLevelPath } from "@/git/core/gitBranch";
+import { allFiles, getUntrackedFiles } from "@/git/utils/gitFileUtils";
+import { UNTRACKED_CONFIG } from "@/git/config/gitConstants";
+import { PathInfoObject } from '@/types/gitTypes';
 
 export async function saveUntracked(): Promise<void> {
     const fileToSavePath = await getFileToMoveFromUser();

@@ -1,15 +1,15 @@
 import * as fs from 'fs/promises';
-import * as bash from '@utils/bashHelper';
+import { ChatData, ChatHistory } from '@/AIchat/types/aiTypes';
+import { providers } from '@/AIchat/data/models';
+import { summaryPrompt } from '@/AIchat/data/prompts';
+import { formatChatEntry } from '@/AIchat/utils/aiUtils';
+import { aiRoles } from '@/AIchat/data/roles';
+import { promptModel } from '@/AIchat/utils/promptModel';
+import * as bash from '@/utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
-import * as ui from '@UI/generalUI'
+import * as ui from '@/UI/generalUI'
 import { aiHistoryPath } from '@/filePaths';
-import { aiRoles } from '@AIchat/data/roles';
-import { promptModel } from './promptModel';
-import { formatChatEntry } from './aiUtils';
-import { summaryPrompt } from '../data/prompts';
 import { filterGitKeep } from '@/utils/common';
-import { providers } from '../data/models';
-import { ChatData, ChatHistory } from '../types/aiTypes';
 
 export async function saveChat(
     chatFile: string,

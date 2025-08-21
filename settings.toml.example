@@ -1,7 +1,18 @@
-work = true
+[watchCommands.work]
+active = false
 
-workWindowNameForWatch=''
-workCommandForWatch=''
+[watchCommands.work.watch]
+windowName = ""
+command = ""
 
-personalWindowNameForWatch=''
-personalCommandForWatch=''
+[watchCommands.personal]
+active = true
+
+[watchCommands.personal.watch]
+windowName = ""
+command = ""
+
+[autosave]
+active = true
+currentSession = "this will update automatically on load/save session"
+timeoutMs = 20000

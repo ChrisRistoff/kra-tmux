@@ -1,5 +1,5 @@
-import * as bash from "@utils/bashHelper";
-import { GIT_COMMANDS } from "@git/config/gitConstants";
+import * as bash from "@/utils/bashHelper";
+import { GIT_COMMANDS } from "@/git/config/gitConstants";
 
 export const allFiles = 'All';
 

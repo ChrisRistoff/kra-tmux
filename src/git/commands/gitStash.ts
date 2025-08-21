@@ -1,6 +1,6 @@
-import * as bash from "@utils/bashHelper";
-import * as ui from '@UI/generalUI';
-import { getStashes } from "@git/utils/gitFileUtils";
+import * as bash from "@/utils/bashHelper";
+import * as ui from '@/UI/generalUI';
+import { getStashes } from "@/git/utils/gitFileUtils";
 
 export async function applyOrDropStash(): Promise<void> {
     const stashList = await getStashes();

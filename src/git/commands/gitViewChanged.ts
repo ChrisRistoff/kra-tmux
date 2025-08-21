@@ -1,6 +1,6 @@
-import * as gitFiles from '@git/utils/gitFileUtils';
-import * as ui from '@UI/generalUI';
-import * as nvim from '@utils/neovimHelper';
+import * as gitFiles from '@/git/utils/gitFileUtils';
+import * as ui from '@/UI/generalUI';
+import * as nvim from '@/utils/neovimHelper';
 
 export async function handleViewChanged(): Promise<void> {
     const changedFiles = new Set([...await gitFiles.getModifiedFiles(), ...await gitFiles.getUntrackedFiles()]);

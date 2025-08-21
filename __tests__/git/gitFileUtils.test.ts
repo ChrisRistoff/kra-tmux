@@ -1,14 +1,14 @@
-import * as bash from '@utils/bashHelper';
+import * as bash from '@/utils/bashHelper';
 import {
     getFileList,
     getModifiedFiles,
     getUntrackedFiles,
     getConflictedFiles,
     getStashes
-} from '@git/utils/gitFileUtils';
-import { GIT_COMMANDS } from '@git/config/gitConstants';
+} from '@/git/utils/gitFileUtils';
+import { GIT_COMMANDS } from '@/git/config/gitConstants';
 
-jest.mock('@utils/bashHelper');
+jest.mock('@/utils/bashHelper');
 
 describe('Git File Utils', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);
@@ -60,14 +60,14 @@ describe('Git File Utils', () => {
         });
 
         it('should propagate errors from bash.execCommand', async () => {
-            // When bash.execCommand rejects, getFileList should return the error
+            // bash.execCommand rejects, getFileList should return the error
             mockExecCommand.mockRejectedValue(new Error('Git command failed'));
 
             await expect(getFileList('test-command')).rejects.toThrow('Git command failed');
         });
 
         it('should return files even when stderr has messages', async () => {
-            // Even if stderr contains warnings, we still use stdout to return our file list
+            // stderr contains warnings, we still use stdout to return our file list
             mockExecCommand.mockResolvedValue({
                 stdout: 'file1.ts\nfile2.ts',
                 stderr: 'warning: some git warning'

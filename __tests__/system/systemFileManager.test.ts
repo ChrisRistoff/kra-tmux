@@ -1,10 +1,10 @@
-import * as bash from '@utils/bashHelper';
-import * as ui from '@UI/generalUI';
-import { removeFile, removeDirectory } from '@system/commands/systemFileManager';
+import * as bash from '@/utils/bashHelper';
+import * as ui from '@/UI/generalUI';
+import { removeFile, removeDirectory } from '@/system/commands/systemFileManager';
 
 
-jest.mock('@utils/bashHelper');
-jest.mock('@UI/generalUI');
+jest.mock('@/utils/bashHelper');
+jest.mock('@/UI/generalUI');
 
 describe('SystemFileManager', () => {
 
@@ -111,7 +111,7 @@ describe('SystemFileManager', () => {
 
             await removeFile();
 
-            // The command should contain the sanitized version of the input
+            // command should contain the sanitized version of the input
             expect(mockExecCommand).toHaveBeenCalledWith(
                 'find . -type f -iname "*test;rm -rf /;*"'
             );

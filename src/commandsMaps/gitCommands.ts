@@ -1,5 +1,5 @@
-import * as git from "@git/index";
-import { GitCommands } from "./types/commandTypes";
+import * as git from "@/git/index";
+import { GitCommands } from "@/commandsMaps/types/commandTypes";
 import { gitAscii } from "@/git/data/git-ascii";
 
 export const gitCommands: GitCommands = {
