@@ -24,7 +24,7 @@ graph TB
     end
 
     subgraph "Core System"
-        CONVERSE[🎯 converse()]
+        CONVERSE[🎯 converse function]
         EVENTS[⚡ Event Handlers]
         SOCKET[🔌 Socket RPC]
         STREAM[📡 Stream Controller]
@@ -39,7 +39,7 @@ graph TB
     end
 
     subgraph "AI Pipeline"
-        PROMPT[🤖 promptModel()]
+        PROMPT[🤖 promptModel function]
         PROVIDER[🏢 AI Provider]
         RESPONSE[📡 Streaming Response]
     end
@@ -47,7 +47,7 @@ graph TB
     subgraph "Persistence"
         CHAT[💬 Chat File]
         HISTORY[📚 Chat History]
-        SAVE[💾 saveChat()]
+        SAVE[💾 saveChat function]
     end
 
     USER --> NVIM
