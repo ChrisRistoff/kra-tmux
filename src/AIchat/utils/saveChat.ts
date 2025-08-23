@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import { ChatData, ChatHistory } from '@/AIchat/types/aiTypes';
+import { ChatData, ChatHistory, SavedFileContext } from '@/AIchat/types/aiTypes';
 import { providers } from '@/AIchat/data/models';
 import { summaryPrompt } from '@/AIchat/data/prompts';
 import { formatChatEntry } from '@/AIchat/utils/aiUtils';
@@ -83,7 +83,8 @@ function createChatData(
     model: string,
     role: string,
     temperature: number,
-    chatHistory: ChatHistory[]
+    chatHistory: ChatHistory[],
+    fileContexts?: SavedFileContext[]
 ): string {
     const chatData: ChatData = {
         title,
@@ -92,7 +93,8 @@ function createChatData(
         model,
         role,
         temperature,
-        chatHistory
+        chatHistory,
+        fileContexts,
     }
 
     return JSON.stringify(chatData, null, 2)

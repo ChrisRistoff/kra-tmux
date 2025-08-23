@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as bash from '@/utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
 import * as ui from '@/UI/generalUI';
-import * as conversation from '@/AIchat/utils/conversation';
+import * as conversation from '@/AIchat/main/conversation';
 import { loadChat } from '@/AIchat/commands/loadChat';
 import { aiHistoryPath } from '@/filePaths';
 import { pickProviderAndModel } from '@/AIchat/utils/aiUtils';
@@ -13,7 +13,7 @@ jest.mock('fs/promises');
 jest.mock('@/utils/bashHelper');
 jest.mock('@/utils/neovimHelper');
 jest.mock('@/UI/generalUI');
-jest.mock('@/AIchat/utils/conversation');
+jest.mock('@/AIchat/main/conversation');
 jest.mock('@/AIchat/utils/aiUtils');
 jest.mock('@/utils/common', () => ({
     filterGitKeep: jest.fn((chats) => chats)
@@ -42,7 +42,7 @@ describe('loadChat', () => {
     };
 
     beforeAll(() => {
-        providers['providerA'] = { key: 'model1' };
+        providers['providerA'] = { model: 'model1' };
     });
 
     beforeEach(() => {

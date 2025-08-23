@@ -3,6 +3,19 @@ export enum Role {
     AI = 'AI',
 }
 
+export interface StreamController {
+    abort: () => void;
+    isAborted: boolean;
+}
+
+export interface FileContext {
+    filePath: string;
+    isPartial: boolean;
+    startLine?: number | undefined;
+    endLine?: number | undefined;
+    summary: string;
+}
+
 export interface AiRoles {
     [key: string]: string,
 }
@@ -26,6 +39,13 @@ export interface ChatHistory {
     timestamp: string,
 }
 
+export interface SavedFileContext {
+    filePath: string;
+    isPartial: boolean;
+    startLine?: number;
+    endLine?: number;
+}
+
 export interface ChatData {
     title?: string,
     summary?: string,
@@ -33,5 +53,6 @@ export interface ChatData {
     model: string,
     role: string,
     temperature: number,
-    chatHistory: ChatHistory[]
+    chatHistory: ChatHistory[],
+    fileContexts?: SavedFileContext[] | undefined
 }

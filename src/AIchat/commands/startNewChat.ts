@@ -1,4 +1,4 @@
-import * as conversation from '@/AIchat/utils/conversation';
+import * as conversation from '@/AIchat/main/conversation';
 import * as utils from '@/AIchat/utils/aiUtils';
 import { aiRoles } from '@/AIchat/data/roles';
 import * as ui from '@/UI/generalUI';

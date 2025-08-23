@@ -1,6 +1,8 @@
 import { Models, Providers } from "@/AIchat/types/aiTypes";
 
 const deepInfraModels: Models = {
+    'qwent3-coder': 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    'GLM-4.5': 'zai-org/GLM-4.5',
     'deepSeekR1-turbo': 'deepseek-ai/DeepSeek-R1-Turbo',
     'deepSeekR1': 'deepseek-ai/DeepSeek-R1',
     'deepSeek70B': 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
