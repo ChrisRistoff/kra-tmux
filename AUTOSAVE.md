@@ -270,24 +270,21 @@ const isServerRunning = (): boolean => {
 ### Automated Installation
 The autosave module installs automatically as part of the Kra Workflow setup:
 
-```bash
-# Installs Neovim hooks, shell integration, and tmux hooks
-node ~/programming/kra-tmux/dest/setup/configSetup.js
-```
-
 ### Manual Setup (if needed)
 ```bash
 # Install Neovim integration
-cp automationScripts/hooks/neovimHooks.lua ~/.config/nvim/lua/
+cp ~programming/kra-tmux/automationScripts/hooks/neovimHooks.lua ~/.config/nvim/lua/
 echo 'require("neovimHooks")' >> ~/.config/nvim/init.lua
 
 # Install shell hooks
 source ~/programming/kra-tmux/automationScripts/source-all.sh
 
 # Reload shell configuration
-source ~/.bashrc && source ~/.zshrc
-```
+source ~/.bashrc
+# or
+source ~/.zshrc
 
+```
 ### Configuration
 ```yaml
 # settings.yaml
@@ -322,10 +319,10 @@ kra settings
 **Server not starting:**
 ```bash
 # Check for stale locks
-ls /programming/kra-tmux/lock-files
+ls ~/programming/kra-tmux/lock-files
 
 # Manual cleanup if needed - very unlikely
-rm -f /programming/kra-tmux/lock-files
+rm -f ~/programming/kra-tmux/lock-files
 ```
 
 **Neovim integration not working:**

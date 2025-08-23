@@ -1,10 +1,10 @@
 import { startNewChat } from '@/AIchat/commands/startNewChat';
-import * as conversation from '@/AIchat/utils/conversation';
+import * as conversation from '@/AIchat/main/conversation';
 import * as utils from '@/AIchat/utils/aiUtils';
 import * as ui from '@/UI/generalUI';
 import { aiRoles } from '@/AIchat/data/roles';
 
-jest.mock('@/AIchat/utils/conversation');
+jest.mock('@/AIchat/main/conversation');
 jest.mock('@/UI/generalUI');
 jest.mock('@/AIchat/utils/aiUtils');
 

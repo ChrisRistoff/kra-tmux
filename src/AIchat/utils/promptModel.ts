@@ -1,10 +1,18 @@
 import * as keys from '@/AIchat/data/keys';
+import { StreamController } from '@/AIchat/types/aiTypes';
 import { Mistral } from '@mistralai/mistralai';
 import OpenAI from "openai";
 
 const formattingRules = '\nRespond without adding chat entries, we format that on our end.';
 
-export async function promptModel(provider: string, model: string, prompt: string, temperature: number, system: string): Promise<AsyncIterable<string>> {
+export async function promptModel(
+    provider: string,
+    model: string,
+    prompt: string,
+    temperature: number,
+    system: string,
+    controller?: StreamController
+): Promise<AsyncIterable<string>> {
     let apiKey;
     let baseURL;
 
@@ -33,7 +41,7 @@ export async function promptModel(provider: string, model: string, prompt: strin
     let openai;
 
     if (provider === 'mistral') {
-        return createMistralStream(prompt, system, model);
+        return createMistralStream(prompt, system, model, controller);
     }
 
     if (provider === 'gemini') {
@@ -68,7 +76,7 @@ export async function promptModel(provider: string, model: string, prompt: strin
         openai = new OpenAI();
     }
 
-    return createOpenAIStream(openai, model, system, prompt, temperature);
+    return createOpenAIStream(openai, model, system, prompt, temperature, controller);
 }
 
 async function createOpenAIStream(
@@ -76,47 +84,98 @@ async function createOpenAIStream(
     llmModel: string,
     system: string,
     prompt: string,
-    temperature: number
+    temperature: number,
+    controller?: StreamController
 ): Promise<AsyncIterable<string>> {
-    const completion = await openai.chat.completions.create({
-        messages: [
-            { role: "system", content: system },
-            { role: "user", content: prompt + formattingRules},
-        ],
-        model: llmModel,
-        temperature: temperature,
-        stream: true,
-    });
-
-    async function* streamResponse() {
-        for await (const chunk of completion) {
-            const text = chunk.choices[0]?.delta?.content || '';
-            yield text;
-        }
-    }
-
-    return streamResponse();
-}
-
-async function createMistralStream(prompt: string, system: string, model: string): Promise<AsyncIterable<string>> {
-    const client = new Mistral({apiKey: keys.getMistralKey()});
-
-    async function* streamResponse() {
-        const stream = await client.chat.stream({
-            model,
+    try {
+        const completion = await openai.chat.completions.create({
             messages: [
-                { role: 'system', content: system },
-                { role: 'user', content: prompt + formattingRules },
+                { role: "system", content: system },
+                { role: "user", content: prompt + formattingRules },
             ],
+            model: llmModel,
+            temperature: temperature,
             stream: true,
         });
 
-        for await (const chunk of stream) {
-            const content = chunk.data?.choices[0]?.delta?.content;
-            const text = typeof content === 'string' ? content : content?.join('');
-            yield text ?? '';
-        }
-    }
+        async function* streamResponse() {
+            try {
+                for await (const chunk of completion) {
+                    if (controller?.isAborted) {
+                        break;
+                    }
 
-    return streamResponse();
+                    const text = chunk.choices[0]?.delta?.content || '';
+                    yield text; // yield even if empty
+                }
+            } catch (error: unknown) {
+                if (controller?.isAborted) {
+                    return;
+                }
+                throw error;
+            }
+        }
+
+        return streamResponse();
+    } catch (error: unknown) {
+        if (controller?.isAborted) {
+            throw new Error('Request aborted by user');
+        }
+        throw error;
+    }
+}
+
+async function createMistralStream(
+    prompt: string,
+    system: string,
+    model: string,
+    controller?: StreamController
+): Promise<AsyncIterable<string>> {
+    try {
+        const client = new Mistral({
+            apiKey: keys.getMistralKey(),
+        });
+
+        async function* streamResponse() {
+            try {
+                const stream = await client.chat.stream({
+                    model,
+                    messages: [
+                        { role: 'system', content: system },
+                        { role: 'user', content: prompt + formattingRules },
+                    ],
+                    stream: true,
+                });
+
+                for await (const chunk of stream) {
+                    if (controller?.isAborted) {
+                        break;
+                    }
+
+                    const content = chunk.data?.choices[0]?.delta?.content;
+                    let text = '';
+                    if (typeof content === 'string') {
+                        text = content;
+                    } else if (Array.isArray(content)) {
+                        text = content.join('');
+                    }
+                    // null/undefined content - text remains empty string
+
+                    yield text; // yield even if empty
+                }
+            } catch (error: unknown) {
+                if (controller?.isAborted) {
+                    return;
+                }
+                throw error;
+            }
+        }
+
+        return streamResponse();
+    } catch (error: unknown) {
+        if (controller?.isAborted) {
+            throw new Error('Request aborted by user');
+        }
+        throw error;
+    }
 }

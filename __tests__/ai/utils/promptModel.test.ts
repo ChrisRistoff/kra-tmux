@@ -47,6 +47,7 @@ describe('AI Chat Model Operations', () => {
                     apiKey: 'deep-infra-key',
                     baseURL: 'https://api.deepinfra.com/v1/openai'
                 });
+
                 expect(mockGetDeepInfraKey).toHaveBeenCalled();
             });
 

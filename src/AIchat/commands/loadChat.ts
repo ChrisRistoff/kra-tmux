@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as conversation from '@/AIchat/utils/conversation';
-import { ChatData, Role } from '@/AIchat/types/aiTypes'
+import * as conversation from '@/AIchat/main/conversation';
+import { ChatData, Role, SavedFileContext } from '@/AIchat/types/aiTypes'
 import { providers } from '@/AIchat/data/models';
 import { formatChatEntry, pickProviderAndModel } from '@/AIchat/utils/aiUtils';
 import * as ui from '@/UI/generalUI';
@@ -9,6 +9,7 @@ import * as nvim from '@/utils/neovimHelper';
 import * as bash from '@/utils/bashHelper';
 import { filterGitKeep } from '@/utils/common';
 import { aiHistoryPath } from '@/filePaths';
+import { getFileExtension } from '@/AIchat/utils/conversationUtils/fileContexts';
 
 export async function loadChat(): Promise<void> {
     try {
@@ -69,6 +70,10 @@ export async function loadChat(): Promise<void> {
             chatData.model = model;
         }
 
+        if (chatData.fileContexts && chatData.fileContexts.length > 0) {
+            await restoreFileContexts(chatFile, chatData.fileContexts);
+        }
+
         const chatFileLoaded = true;
         await conversation.converse(
             chatFile,
@@ -110,4 +115,36 @@ async function openSummaryAndPromptUserYesOrNo(chatSummaryPath: string): Promise
     }
 
     return await ui.promptUserYesOrNo('Do you want to open this chat?');
+}
+
+async function restoreFileContexts(chatFile: string, savedContexts: SavedFileContext[]): Promise<void> {
+    for (const context of savedContexts) {
+        try {
+            const content = await fs.readFile(context.filePath, 'utf-8');
+            const fileName = context.filePath.split('/').pop() || context.filePath;
+            const ext = getFileExtension(fileName);
+
+            let contextSummary = '';
+
+            if (context.isPartial && context.startLine !== undefined && context.endLine !== undefined) {
+                // Handle partial file context
+                const lines = content.split('\n');
+                const selectedLines = lines.slice(context.startLine - 1, context.endLine);
+                const selectedText = selectedLines.join('\n');
+                const lineRange = context.startLine === context.endLine
+                    ? `line ${context.startLine}`
+                    : `lines ${context.startLine}-${context.endLine}`;
+
+                contextSummary = `📁 ${fileName} (${lineRange})\n\n\`\`\`${ext}\n// Selected from: ${context.filePath} (${lineRange})\n${selectedText}\n\`\`\`\n\n`;
+            } else {
+                // Handle full file context
+                const lineCount = content.split('\n').length;
+                contextSummary = `📁 ${fileName} (${lineCount} lines, ${Math.round(content.length / 1024)}KB)\n\n\`\`\`${ext}\n// Full file content loaded: ${context.filePath}\n// Use this file context in your responses\n// File contains ${lineCount} lines of ${ext} code\n\`\`\`\n\n`;
+            }
+
+            await fs.appendFile(chatFile, contextSummary);
+        } catch (error) {
+            console.error(`Error restoring context for ${context.filePath}:`, error);
+        }
+    }
 }

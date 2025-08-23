@@ -1,12 +1,13 @@
 import * as fs from 'fs/promises';
 import * as neovim from 'neovim';
 import * as bash from '@/utils/bashHelper';
-import { converse } from '@/AIchat/utils/conversation';
+import { converse } from '@/AIchat/main/conversation';
 import { promptModel } from '@/AIchat/utils/promptModel';
 import { saveChat } from '@/AIchat/utils/saveChat';
 import { openVim } from '@/utils/neovimHelper';
 import { aiRoles } from '@/AIchat/data/roles';
 import { formatChatEntry } from '@/AIchat/utils/aiUtils';
+import { neovimConfig } from '@/filePaths';
 
 jest.mock('fs/promises');
 jest.mock('@/utils/bashHelper');
@@ -14,6 +15,9 @@ jest.mock('@/utils/neovimHelper');
 jest.mock('@/AIchat/utils/promptModel');
 jest.mock('@/AIchat/utils/saveChat');
 jest.mock('@/AIchat/utils/aiUtils');
+jest.mock('@/filePaths', () => ({
+    neovimConfig: '/home/krasen/programming/kra-tmux/ai-files/init.lua'
+}));
 
 describe('converse', () => {
     const chatFile = 'chat.md';
@@ -80,7 +84,7 @@ describe('converse', () => {
         expect(openVim).toHaveBeenCalled();
         const openVimCall = (openVim as jest.Mock).mock.calls[0];
         expect(openVimCall[0]).toBe(chatFile);
-        expect(openVimCall[1]).toBe('--listen');
+        expect(openVimCall[1]).toBe(`-u ${neovimConfig} --listen`);
 
         const socketPath = openVimCall[2];
         expect(socketPath).toMatch(/nvim-.*\.sock/);
@@ -96,7 +100,11 @@ describe('converse', () => {
             model,
             expect.stringContaining('USER message'),
             temperature,
-            aiRoles[role]
+            aiRoles[role],
+            expect.objectContaining({
+                abort: expect.any(Function),
+                isAborted: expect.any(Boolean)
+            })
         );
 
         if (nvimEvents.disconnect) {
@@ -133,6 +141,18 @@ describe('converse', () => {
             throw new Error('Notification event handler not registered');
         }
 
+        expect(promptModel).toHaveBeenCalledWith(
+            provider,
+            model,
+            expect.stringContaining('USER message'),
+            temperature,
+            aiRoles[role],
+            expect.objectContaining({
+                abort: expect.any(Function),
+                isAborted: expect.any(Boolean)
+            })
+        );
+
         if (nvimEvents.disconnect) {
             await nvimEvents.disconnect();
         } else {
@@ -163,7 +183,11 @@ describe('converse', () => {
             model,
             expect.stringContaining('USER message'),
             temperature,
-            aiRoles[role]
+            aiRoles[role],
+            expect.objectContaining({
+                abort: expect.any(Function),
+                isAborted: expect.any(Boolean)
+            })
         );
 
         if (nvimEvents.disconnect) {
@@ -175,3 +199,4 @@ describe('converse', () => {
         expect(fs.appendFile).toHaveBeenCalled();
     });
 });
+

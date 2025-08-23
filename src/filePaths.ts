@@ -18,6 +18,7 @@ export const nvimSessionsPath = path.join(homeDir, projectPath, 'tmux-files/nvim
 
 // ai
 export const aiHistoryPath = path.join(homeDir, projectPath, 'ai-files/chat-history');
+export const neovimConfig = path.join(homeDir, projectPath, 'ai-files/init.lua');
 
 // system
 export const systemFilesPath = path.join(homeDir, projectPath, 'system-files');
