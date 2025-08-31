@@ -150,7 +150,7 @@ client.end();
 ```typescript
 const timeouts = {
     LoadInProgress: 10000,        // 10s - Loading operations
-    AutoSaveInProgress: 300000,   // 5min - Save operations
+    AutoSaveInProgress: await loadSettings().then((set) => set.autosave.timeoutMs) + 10000, // autosave timeout + 10 sec buffer
     ServerKillInProgress: 5000    // 5s - Kill operations
 };
 
