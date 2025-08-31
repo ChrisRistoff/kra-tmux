@@ -161,7 +161,6 @@ kra ai
 - Prompt to save on chat exit with Y/N confirmation
 - **Gemini-powered summarization** utilizing large context window
 - **Editable summaries** - Review and modify before final save
-- **Structured storage** with metadata and searchable content
 
 ![save chat](docs-assets/chat/ai-save-chat.gif)
 </details>
@@ -345,7 +344,7 @@ Comprehensive branch creation workflow with base branch selection, sync verifica
 <details>
 <summary>⏳ <strong>kra git checkout</strong> - Smart branch switching</summary>
 
-Date-filtered branch selection with automatic stash handling and conflict detection.
+Date-filtered branch selection with automatic stash handling, conflict detection. Branches can be filtered by commit titles.
 
 ![checkout](docs-assets/git/git-checkout.gif)
 </details>
@@ -409,11 +408,10 @@ git clone <repository-url>
 cd kra-workflow
 
 # Install dependencies and configure integrations
-npm install
-node setup/configSetup.js
+npm install -g
 
 # Verify installation
-kra --help
+kra
 ```
 
 ### 📚 **Detailed Setup**
