@@ -111,7 +111,7 @@ Intelligently displays server structure with sessions, windows, and panes count,
 
 **Revolutionary AI conversation system** with **Neovim-native interface**, **advanced file context management**, and **intelligent conversation persistence**.
 
-> 🎯 **[Complete AI Chat System Documentation →](ai-chat-system.md)**
+> 🎯 **[Complete AI Chat System Documentation →](AI-CHAT-BOT.md)**
 
 ![AI Chat Bot Demo](docs-assets/chat/ai-chat-bot.png)
 
@@ -191,7 +191,7 @@ Searchable deletion interface with **confirmation prompts** and **permanent remo
 
 **Enterprise-grade automated workspace persistence** with **Unix domain socket IPC** and **intelligent event coordination** across your entire development environment.
 
-> 🎯 **[Complete Autosave System Documentation →](autosave-system.md)**
+> 🎯 **[Complete Autosave System Documentation →](AUTOSAVE.md)**
 
 ### 🚀 **Core Architecture**
 - **⚡ Unix Domain Socket IPC** - Kernel-level inter-process communication with zero polling overhead
