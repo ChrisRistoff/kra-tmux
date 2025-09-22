@@ -61,3 +61,13 @@ export function getMistralKey(): string {
 
     return apiKey;
 }
+
+export function getCopilotKey(): string {
+    const apiKey = process.env.GITHUB_API;
+
+    if (!apiKey) {
+        throw new Error('MISTRAL environment variable is not set');
+    }
+
+    return apiKey;
+}

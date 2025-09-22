@@ -46,7 +46,7 @@ describe('Git Commands', () => {
 
             await handleConflicts();
 
-            expect(mockOpenVim).toHaveBeenCalledWith(conflictedFile, ':Gvdiffsplit!');
+            expect(mockOpenVim).toHaveBeenCalledWith(conflictedFile, '-c', 'Gvdiffsplit!');
             expect(mockExecCommand).toHaveBeenCalledWith(GIT_COMMANDS.GET_CONFLICTS);
         });
     });

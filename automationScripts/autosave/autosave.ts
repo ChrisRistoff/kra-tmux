@@ -43,7 +43,6 @@ async function resetSaveTimer(timeout: number = undefined!) {
                         await fs.unlink(`${nvimSessionsPath}/${saveFileName}/${nvimSessionFileName}`)
                     } catch { /* file might not exit if closed an unsaved neovim, so ignore error */ };
                 } else {
-
                     const socket = neovimEvent.socket;
 
                     const neovim = nvim.attach({ socket })
@@ -78,7 +77,6 @@ function trackSession(event: string): void {
         socket,
         leave: neovimEvent === "VimLeave",
     }
-
 }
 
 async function main(): Promise<void> {

@@ -31,6 +31,12 @@ export async function saveSessionsToFile(): Promise<void> {
     }
 
     const fileName = await getFileNameFromUser();
+
+    if (!fileName) {
+        console.log('Save cancelled.');
+        return;
+    }
+
     await saveNeovimSessions(currentSessions, fileName);
 
     const filePath = `${sessionFilesFolder}/${fileName}`;

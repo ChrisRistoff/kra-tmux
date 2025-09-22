@@ -11,7 +11,7 @@ export async function handleViewChanged(): Promise<void> {
             prompt: "Pick a file to view: "
         })
 
-        await nvim.openVim(file, ':Gvdiffsplit');
+        await nvim.openVim(file, '-c' ,'Gvdiffsplit');
 
         changedFiles.delete(file);
     }

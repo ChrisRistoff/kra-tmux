@@ -2,7 +2,6 @@ import * as generalUI from '@/UI/generalUI';
 import * as fs from 'fs/promises';
 import { sessionFilesFolder } from '@/filePaths';
 import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@/tmux/utils/sessionUtils';
-import { printSessions } from '@/tmux/commands/printSessions';
 
 /**
  * Deletes a saved server session after user confirmation.
@@ -26,10 +25,25 @@ export async function deleteSession(): Promise<void> {
     const filePath = `${sessionFilesFolder}/${fileName}`;
     const sessions = await getSavedSessionsByFilePath(filePath);
 
-    printSessions(sessions);
+    let sessionDetails = '';
+    for (const sess in sessions) {
+        const currentSession = sessions[sess];
+        let panesCount = 0;
+        let path = '';
+
+        for (const window of currentSession.windows) {
+            path = path || window.currentPath;
+            panesCount += window.panes.length;
+        }
+        sessionDetails += `  - Name: ${sess}, Path: ${path}, Windows: ${currentSession.windows.length}, Panes: ${panesCount}\n`;
+    }
+
+    if (sessionDetails === '') {
+        sessionDetails = '  No sessions in this save.';
+    }
 
     const willDelete = await generalUI.promptUserYesOrNo(
-        `Are you sure you want to delete save ${fileName}`
+        `Are you sure you want to delete save ${fileName}?\n\nSessions in this save:\n${sessionDetails}`
     );
 
     if (willDelete) {

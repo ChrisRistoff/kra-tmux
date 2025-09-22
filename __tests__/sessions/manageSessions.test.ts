@@ -1,20 +1,17 @@
 import { deleteSession } from '@/tmux/commands/manageSessions';
 import { getSavedSessionsNames, getSavedSessionsByFilePath } from '@/tmux/utils/sessionUtils';
-import { printSessions } from '@/tmux/commands/printSessions';
 import * as fs from 'fs/promises';
 import * as generalUI from '@/UI/generalUI';
 import { TmuxSessions } from '@/types/sessionTypes';
 import { sessionFilesFolder } from '@/filePaths';
 
 jest.mock('@/tmux/utils/sessionUtils');
-jest.mock('@/tmux/commands/printSessions');
 jest.mock('fs/promises');
 jest.mock('@/UI/generalUI');
 
 describe('Session Management', () => {
     const mockGetSavedSessionsNames = jest.mocked(getSavedSessionsNames);
     const mockGetSavedSessionsByFilePath = jest.mocked(getSavedSessionsByFilePath);
-    const mockPrintSessions = jest.mocked(printSessions);
     const mockFsRm = jest.mocked(fs.rm);
     const mockGeneralUI = jest.mocked(generalUI);
 
@@ -25,27 +22,32 @@ describe('Session Management', () => {
     describe('deleteSession', () => {
         it('should delete a session file when confirmed', async () => {
             const testFileName = 'test-session';
-            const testSessions = { [testFileName]: {} } as unknown as TmuxSessions;
+            const testSessions = {
+                [testFileName]: {
+                    windows: [{ windowName: 'test-window', panes: [], layout: '', currentPath: '' }]
+                }
+            } as unknown as TmuxSessions;
 
             mockGetSavedSessionsNames.mockResolvedValue([testFileName]);
             mockGetSavedSessionsByFilePath.mockResolvedValue(testSessions);
-            mockPrintSessions.mockImplementation(() => {});
             mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue(testFileName);
             mockGeneralUI.promptUserYesOrNo.mockResolvedValue(true);
 
             await deleteSession();
 
             expect(mockFsRm).toHaveBeenCalledWith(`${sessionFilesFolder}/${testFileName}`);
-            expect(mockPrintSessions).toHaveBeenCalledWith(testSessions);
         });
 
         it('should not delete session when not confirmed', async () => {
             const testFileName = 'test-session';
-            const testSessions = { [testFileName]: {} } as unknown as TmuxSessions;
+            const testSessions = {
+                [testFileName]: {
+                    windows: [{ windowName: 'test-window', panes: [], layout: '', currentPath: '' }]
+                }
+            } as unknown as TmuxSessions;
 
             mockGetSavedSessionsNames.mockResolvedValue([testFileName]);
             mockGetSavedSessionsByFilePath.mockResolvedValue(testSessions);
-            mockPrintSessions.mockImplementation(() => {});
             mockGeneralUI.searchSelectAndReturnFromArray.mockResolvedValue(testFileName);
             mockGeneralUI.promptUserYesOrNo.mockResolvedValue(false);
 

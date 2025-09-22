@@ -84,9 +84,11 @@ describe('converse', () => {
         expect(openVim).toHaveBeenCalled();
         const openVimCall = (openVim as jest.Mock).mock.calls[0];
         expect(openVimCall[0]).toBe(chatFile);
-        expect(openVimCall[1]).toBe(`-u ${neovimConfig} --listen`);
+        expect(openVimCall[1]).toBe('-u');
+        expect(openVimCall[2]).toBe(neovimConfig);
+        expect(openVimCall[3]).toBe('--listen');
 
-        const socketPath = openVimCall[2];
+        const socketPath = openVimCall[4];
         expect(socketPath).toMatch(/nvim-.*\.sock/);
 
         if (nvimEvents.notification) {

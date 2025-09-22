@@ -2,6 +2,7 @@ import { Models, Providers } from "@/AIchat/types/aiTypes";
 
 const deepInfraModels: Models = {
     'qwent3-coder': 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    'openai/gpt-oss-20b': 'openai/gpt-oss-20b',
     'GLM-4.5': 'zai-org/GLM-4.5',
     'deepSeekR1-turbo': 'deepseek-ai/DeepSeek-R1-Turbo',
     'deepSeekR1': 'deepseek-ai/DeepSeek-R1',
@@ -12,10 +13,8 @@ const deepInfraModels: Models = {
 }
 
 const geminiModels: Models = {
-    'gemini-2.5': 'gemini-2.5-pro-exp-03-25',
-    'gemini-thinking': 'gemini-2.0-flash-thinking-exp',
-    'gemini-pro': 'gemini-2.0-pro-exp',
-    'gemini-flash': 'models/gemini-2.0-flash-001',
+    'gemini-3.0-pro': 'gemini-3-pro-preview',
+    'gemini-3.0-flash': 'gemini-3-flash-preview',
 }
 
 const openAiModels: Models = {
@@ -40,6 +39,10 @@ const mistralModels: Models = {
     'large': 'mistral-large-2411',
 }
 
+const copilotModels: Models = {
+    'gpt-5-mini': 'openai/gpt-5-mini',
+}
+
 export const providers: Providers = {
     'open-router': openRouterModels,
     'deep-infra': deepInfraModels,
@@ -47,4 +50,5 @@ export const providers: Providers = {
     'open-ai': openAiModels,
     'deep-seek': deepSeekModels,
     'mistral': mistralModels,
+    'copilot': copilotModels,
 }

@@ -36,19 +36,20 @@ export async function loadNvimSession(folderName: string, session: string, windo
 }
 
 export async function openVim(filePath: string, ...args: string[]): Promise<void> {
+    const colonArgs = args.filter(arg => arg.startsWith(':'));
+    const otherArgs = args.filter(arg => !arg.startsWith(':'));
+
+    if (colonArgs.length > 0) {
+        for (const arg of colonArgs) {
+            await bash.execCommand(`tmux send-keys ${arg} C-m`);
+        }
+    }
+
     return new Promise((resolve, reject) => {
-        const vimProcess = spawn('nvim', [filePath, ...args], {
+        const vimProcess = spawn('nvim', [filePath, ...otherArgs], {
             stdio: 'inherit',
             shell: false,
         });
-
-        if (args.length) {
-            args.forEach(async (arg) => {
-                if (arg.startsWith(':')) {
-                    await bash.execCommand(`tmux send-keys ${arg} C-m`)
-                }
-            })
-        }
 
         vimProcess.on('close', (code: number) => {
             if (code === 0) {

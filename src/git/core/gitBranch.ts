@@ -1,5 +1,6 @@
 import * as bash from "@/utils/bashHelper";
 import { GIT_COMMANDS } from "@/git/config/gitConstants";
+import { openVim } from "@/utils/neovimHelper";
 
 export async function getCurrentBranch(): Promise<string> {
     const response = await bash.execCommand(GIT_COMMANDS.GET_BRANCH);
@@ -51,9 +52,13 @@ export async function getGitLog(): Promise<void> {
 
     try {
         await bash.execCommand(command);
-        await bash.sendKeysToTmuxTargetSession({
-            command: `nvim -c 'set filetype=git' ${tmpfile}`,
-        });
+        if (process.env.TMUX) {
+            await bash.sendKeysToTmuxTargetSession({
+                command: `nvim -c 'set filetype=git' ${tmpfile}`,
+            });
+        } else {
+            openVim(tmpfile, '-c', 'set filetype=git');
+        }
     } catch (error) {
         console.error('Failed to run git log or open nvim:', error);
     }

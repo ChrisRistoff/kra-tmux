@@ -322,14 +322,14 @@ describe('saveSessions', () => {
 
         it('should handle empty search and select result', async () => {
             mockGeneralUI.searchAndSelect.mockResolvedValue('');
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
             await saveSessionsToFile();
 
-            expect(mockFs.writeFile).toHaveBeenCalledWith(
-                '/mock/session/files/',
-                JSON.stringify(mockSessions, null, 2),
-                'utf-8'
-            );
+            expect(consoleSpy).toHaveBeenCalledWith('Save cancelled.');
+            expect(mockFs.writeFile).not.toHaveBeenCalled();
+
+            consoleSpy.mockRestore();
         });
 
         it('should clean up stale nvim sessions', async () => {

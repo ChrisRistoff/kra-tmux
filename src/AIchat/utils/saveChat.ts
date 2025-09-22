@@ -22,7 +22,7 @@ export async function saveChat(
     const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
 
     if (!saveFile) {
-        return;
+        process.exit(0);
     }
 
     const saves = filterGitKeep(await fs.readdir(aiHistoryPath));
@@ -45,7 +45,7 @@ export async function saveChat(
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
     console.log('Preparing summary...')
-    const summary = await promptModel('gemini', providers['gemini']['gemini-thinking'], finalSummaryPrompt, temperature, aiRoles[role]);
+    const summary = await promptModel('gemini', providers['gemini']['gemini-3.0-flash'], finalSummaryPrompt, temperature, aiRoles[role]);
 
     let fullResponse = '';
     for await (const chunk of summary) {

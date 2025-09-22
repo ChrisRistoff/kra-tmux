@@ -20,7 +20,7 @@ export async function handleConflicts(): Promise<void> {
             prompt: 'Pick a file to resolve: '
         });
 
-        await vim.openVim(fileName, ':Gvdiffsplit!');
+        await vim.openVim(fileName, '-c', 'Gvdiffsplit!');
 
         const conflicts = await bash.grepFileForString(fileName, `<<<<<<<|=======|>>>>>>>`);
 
