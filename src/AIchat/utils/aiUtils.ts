@@ -1,4 +1,3 @@
-import inquirer from 'inquirer';
 import * as ui from '@/UI/generalUI';
 import { ChatModelDetails } from '@/AIchat/types/aiTypes';
 import { providers } from '@/AIchat/data/models';
@@ -11,29 +10,18 @@ export async function promptUserForTemperature(model: string) {
         optionsArray.push(i.toString());
     }
 
-    const { selectedOption } = await inquirer.prompt([
-        {
-            type: 'autocomplete',
-            name: 'selectedOption',
-            message: 'Choose temperatur 1-10(0.1 - 1.0)',
-            source: (_answersSoFar: string[], input: string) => {
-                if (!input) {
-                  return optionsArray
-                }
+    const temperature = await ui.searchAndSelect({
+        prompt: 'Select temperature',
+        itemsArray: optionsArray,
+    });
 
-                return optionsArray.filter(option =>
-                    option.includes(input)
-                );
-            },
-        },
-    ]);
-
-    return +selectedOption / 10;
+    return +temperature / 10;
 }
 
 export function formatChatEntry(role: string, content: string, topLevel = false): string {
     const timestamp = new Date().toISOString();
     let header = `---\n### ${role} (${timestamp})\n\n`;
+
     if (topLevel) {
         header = `### ${role} (${timestamp})\n\n`;
     }

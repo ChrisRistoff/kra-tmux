@@ -1,11 +1,10 @@
-import inquirer from 'inquirer';
 import { promptUserForTemperature, formatChatEntry, pickProviderAndModel } from '@/AIchat/utils/aiUtils';
 import * as ui from '@/UI/generalUI';
 import { providers } from '@/AIchat/data/models';
 
-jest.mock('inquirer');
 jest.mock('@/UI/generalUI', () => ({
-    searchSelectAndReturnFromArray: jest.fn()
+    searchSelectAndReturnFromArray: jest.fn(),
+    searchAndSelect: jest.fn(),
 }));
 
 describe('promptUserForTemperature', () => {
@@ -14,15 +13,17 @@ describe('promptUserForTemperature', () => {
     });
 
     it('should return 0.5 when selected option is "5" for a non-gemini model', async () => {
-        (inquirer.prompt as unknown as jest.Mock).mockResolvedValue({ selectedOption: '5' });
+        (ui.searchAndSelect as unknown as jest.Mock).mockResolvedValue('5');
         const result = await promptUserForTemperature('otherModel');
         expect(result).toBe(0.5);
+        expect(ui.searchAndSelect).toHaveBeenCalled();
     });
 
     it('should return 2.0 when selected option is "20" for a gemini model', async () => {
-        (inquirer.prompt as unknown as jest.Mock).mockResolvedValue({ selectedOption: '20' });
+        (ui.searchAndSelect as unknown as jest.Mock).mockResolvedValue('20');
         const result = await promptUserForTemperature('gemini-sample');
         expect(result).toBe(2.0);
+        expect(ui.searchAndSelect).toHaveBeenCalled();
     });
 });
 
@@ -61,7 +62,7 @@ describe('pickProviderAndModel', () => {
     });
 
     it('should pick provider and model correctly', async () => {
-        (ui.searchSelectAndReturnFromArray as jest.Mock)
+        (ui.searchSelectAndReturnFromArray as unknown as jest.Mock)
             .mockResolvedValueOnce('providerA')
             .mockResolvedValueOnce('modelA');
 

@@ -191,22 +191,6 @@ describe('AI Chat Model Operations', () => {
 
                 expect(mockOpenAI).toHaveBeenCalledWith();
             });
-
-            it('should use default provider when unknown provider is given', async () => {
-                const mockStream = createMockOpenAIStream();
-                const mockOpenAIInstance = {
-                    chat: {
-                        completions: {
-                            create: jest.fn().mockResolvedValue(mockStream)
-                        }
-                    }
-                };
-                mockOpenAI.mockImplementation(() => mockOpenAIInstance as any);
-
-                await promptModel('unknown-provider', 'gpt-4', 'test prompt', 0.7, 'test system');
-
-                expect(mockOpenAI).toHaveBeenCalledWith();
-            });
         });
     });
 

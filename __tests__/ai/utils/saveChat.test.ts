@@ -29,15 +29,27 @@ describe('saveChat', () => {
         { role: Role.AI, message: 'test response', timestamp: 'date'},
     ]
 
+    const exit = jest.spyOn(process, 'exit').mockImplementation((() => { throw new Error('process.exit called'); }) as any);
+
     beforeEach(() => {
         jest.clearAllMocks();
         delete process.env.TMUX;
     });
 
+    afterEach(() => {
+        exit.mockRestore();
+    });
+
     it('should not save chat if user declines', async () => {
         (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(false);
+        (fs.readdir as jest.Mock).mockResolvedValue([]);
+        (promptModel as jest.Mock).mockImplementation(async function* () {});
 
-        await saveChat(chatFile, provider, model, role, temperature, chatHistory);
+        try {
+            await saveChat(chatFile, provider, model, role, temperature, chatHistory);
+        } catch (e) {
+            expect((e as Error).message).toBe('process.exit called');
+        }
 
         expect(ui.promptUserYesOrNo).toHaveBeenCalledWith('Do you want to save the chat history?');
         expect(ui.searchAndSelect).not.toHaveBeenCalled();

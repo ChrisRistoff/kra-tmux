@@ -33,6 +33,10 @@ export async function promptModel(
             apiKey = keys.getGeminiKey();
             baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
             break;
+        case 'copilot':
+            apiKey = keys.getCopilotKey();
+            baseURL = 'https://models.github.ai/inference';
+            break;
         case 'open-ai':
         default:
             break;
@@ -42,38 +46,13 @@ export async function promptModel(
 
     if (provider === 'mistral') {
         return createMistralStream(prompt, system, model, controller);
-    }
-
-    if (provider === 'gemini') {
-        openai = new OpenAI({
-            apiKey,
-            baseURL,
-        })
-    }
-
-    if (provider === 'deep-infra') {
-        openai = new OpenAI({
-            apiKey,
-            baseURL,
-        });
-    }
-
-    if (provider === 'deep-seek') {
-        openai = new OpenAI({
-            baseURL,
-            apiKey,
-        });
-    }
-
-    if (provider === 'open-router') {
-        openai = new OpenAI({
-            baseURL,
-            apiKey,
-        })
-    }
-
-    if (!openai) {
+    } else if (provider === 'open-ai') {
         openai = new OpenAI();
+    } else {
+        openai = new OpenAI({
+            apiKey,
+            baseURL,
+        });
     }
 
     return createOpenAIStream(openai, model, system, prompt, temperature, controller);

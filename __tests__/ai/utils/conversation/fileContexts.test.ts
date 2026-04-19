@@ -5,6 +5,8 @@ import {
     getFileContextsForPrompt,
     rebuildFileContextsFromChat,
     showFileContextsPopup,
+    clearAllFileContexts,
+    showFileContexts,
 } from '@/AIchat/utils/conversationUtils/fileContexts';
 import { FileContext } from '@/AIchat/types/aiTypes';
 import { NeovimClient } from 'neovim';
@@ -48,6 +50,52 @@ describe('fileContexts', () => {
 
             clearFileContexts();
             expect(fileContexts).toHaveLength(0);
+        });
+    });
+
+    describe('clearAllFileContexts', () => {
+        it('should clear all file contexts and show count', async () => {
+            fileContexts.push({ filePath: testFilePath, isPartial: false } as FileContext);
+            expect(fileContexts).toHaveLength(1);
+
+            await clearAllFileContexts(mockNvimClient);
+            expect(fileContexts).toHaveLength(0);
+            expect(mockNvimClient.command).toHaveBeenCalledWith('echohl MoreMsg | echo "Cleared 1 file context(s)" | echohl None');
+        });
+    });
+
+    describe('showFileContexts', () => {
+        it('should show warning when no contexts exist', async () => {
+            await showFileContexts(mockNvimClient);
+            expect(mockNvimClient.command).toHaveBeenCalledWith(
+                'echohl WarningMsg | echo "No file contexts currently loaded" | echohl None'
+            );
+        });
+
+        it('should show full file context', async () => {
+            fileContexts.push({
+                filePath: testFilePath,
+                isPartial: false
+            } as FileContext);
+
+            await showFileContexts(mockNvimClient);
+            expect(mockNvimClient.command).toHaveBeenCalledWith(
+                expect.stringContaining('Loaded contexts: file.ts (full file)')
+            );
+        });
+
+        it('should show partial file context', async () => {
+            fileContexts.push({
+                filePath: testFilePath,
+                isPartial: true,
+                startLine: 1,
+                endLine: 3
+            } as FileContext);
+
+            await showFileContexts(mockNvimClient);
+            expect(mockNvimClient.command).toHaveBeenCalledWith(
+                expect.stringContaining('Loaded contexts: file.ts (lines 1-3)')
+            );
         });
     });
 

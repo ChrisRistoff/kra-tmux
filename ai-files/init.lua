@@ -490,26 +490,26 @@ local function setup_markdown_colors()
     -- Balanced color palette with good contrast and differentiation
     local colors = {
         -- Subtle but visible backgrounds
-        bg_h1 = "#2a3441",      -- Distinct blue-gray background
-        bg_h2 = "#2d2a3f",      -- Purple-gray background
-        bg_h3 = "#2a2d35",      -- Neutral gray background
-        bg_code = "#1f2937",    -- Clear dark background for code
+        bg_h1 = "#2a3441",   -- Distinct blue-gray background
+        bg_h2 = "#2d2a3f",   -- Purple-gray background
+        bg_h3 = "#2a2d35",   -- Neutral gray background
+        bg_code = "#1f2937", -- Clear dark background for code
 
         -- Well-contrasted text colors
-        heading1 = "#60a5fa",   -- Bright blue for H1
-        heading2 = "#a78bfa",   -- Purple for H2
-        heading3 = "#34d399",   -- Green for H3
-        heading = "#e2e8f0",    -- Light gray for H4-H6
-        code = "#fbbf24",       -- Amber for code - very readable
-        quote = "#a855f7",      -- Purple for quotes
-        bullet = "#10b981",     -- Green for bullets
-        link = "#06b6d4",       -- Cyan for links
+        heading1 = "#60a5fa", -- Bright blue for H1
+        heading2 = "#a78bfa", -- Purple for H2
+        heading3 = "#34d399", -- Green for H3
+        heading = "#e2e8f0",  -- Light gray for H4-H6
+        code = "#fbbf24",     -- Amber for code - very readable
+        quote = "#a855f7",    -- Purple for quotes
+        bullet = "#10b981",   -- Green for bullets
+        link = "#06b6d4",     -- Cyan for links
 
         -- Clear accent colors
-        success = "#10b981",    -- Green
-        warning = "#f59e0b",    -- Orange
-        error = "#ef4444",      -- Red
-        info = "#3b82f6",       -- Blue
+        success = "#10b981", -- Green
+        warning = "#f59e0b", -- Orange
+        error = "#ef4444",   -- Red
+        info = "#3b82f6",    -- Blue
     }
 
     -- Apply the colors with better differentiation
@@ -565,3 +565,8 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 
 -- Apply colors immediately
 setup_markdown_colors()
+
+-- Add the project directory to Lua package path
+local project_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":p:h")
+package.path = project_root .. "/?.lua;" .. package.path
+package.path = project_root .. "/lua/?.lua;" .. package.path

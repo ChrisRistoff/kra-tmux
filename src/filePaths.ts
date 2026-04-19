@@ -2,30 +2,30 @@ import os from 'os';
 import path from 'path';
 
 const homeDir = os.homedir();
-const projectPath = 'programming/kra-tmux/'
+const projectRoot = path.join(homeDir, 'programming', 'kra-tmux');
 
 //settings
-export const settingsFilePath = path.join(homeDir, projectPath,'settings.toml');
+export const settingsFilePath = path.join(projectRoot, 'settings.toml');
 
 // git
-export const gitFilesFolder = path.join(homeDir, projectPath, 'git-files');
+export const gitFilesFolder = path.join(projectRoot, 'git-files');
 
 // tmux
-export const sessionFilesFolder = path.join(homeDir, projectPath, 'tmux-files/sessions');
+export const sessionFilesFolder = path.join(projectRoot, 'tmux-files/sessions');
 
 // nvim
-export const nvimSessionsPath = path.join(homeDir, projectPath, 'tmux-files/nvim-sessions');
+export const nvimSessionsPath = path.join(projectRoot, 'tmux-files/nvim-sessions');
 
 // ai
-export const aiHistoryPath = path.join(homeDir, projectPath, 'ai-files/chat-history');
-export const neovimConfig = path.join(homeDir, projectPath, 'ai-files/init.lua');
+export const aiHistoryPath = path.join(projectRoot, 'ai-files/chat-history');
+export const neovimConfig = path.join(projectRoot, 'ai-files/init.lua');
 
 // system
-export const systemFilesPath = path.join(homeDir, projectPath, 'system-files');
-export const systemScriptsPath = path.join(homeDir, projectPath, 'system-files', 'scripts');
+export const systemFilesPath = path.join(projectRoot, 'system-files');
+export const systemScriptsPath = path.join(projectRoot, 'system-files', 'scripts');
 
 // lock
-export const lockFilesPath = path.join(homeDir, projectPath, 'lock-files');
+export const lockFilesPath = path.join(projectRoot, 'lock-files');
 
-// lock
-export const loadSessionWorkerPath = path.join(homeDir, projectPath, 'src/tmux/workers/loadSessionWorker.js');
+// worker
+export const loadSessionWorkerPath = path.join(projectRoot, 'src/tmux/workers/loadSessionWorker.js');

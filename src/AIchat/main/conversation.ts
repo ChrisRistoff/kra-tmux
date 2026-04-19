@@ -40,7 +40,7 @@ export async function converse(
 
             bash.execCommand(tmuxCommand);
         } else {
-            openVim(chatFile, `-u ${neovimConfig} --listen`, socketPath);
+            openVim(chatFile, '-u', neovimConfig, '--listen', socketPath);
         }
 
         await aiNeovimHelper.waitForSocket(socketPath);

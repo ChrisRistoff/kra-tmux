@@ -51,12 +51,11 @@ const main = async (): Promise<void> => {
     try {
         await command();
     } catch (error) {
-        throw new Error('Command not found');
+        throw error;
     }
-
 }
 
-main().then(async (_res) => {
-    console.log('Done.')
-    // process.exit();
-}).catch((err) => console.log(err));
+main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});

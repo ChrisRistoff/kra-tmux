@@ -137,10 +137,10 @@ describe('Nvim Session Operations', () => {
             process.nextTick(() => {
                 fakeProcess.emit('close', 0);
             });
+            await promise;
 
-            await expect(promise).resolves.toBeUndefined();
             expect(mockedExecCommand).toHaveBeenCalledWith(`tmux send-keys ${argWithColon} C-m`);
-            expect(spawnMock).toHaveBeenCalledWith('nvim', [filePath, argWithColon, 'anotherArg'], {
+            expect(spawnMock).toHaveBeenCalledWith('nvim', [filePath, 'anotherArg'], {
                 stdio: 'inherit',
                 shell: false,
             });

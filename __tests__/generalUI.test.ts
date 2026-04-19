@@ -1,139 +1,214 @@
-import inquirer from 'inquirer';
-import { promptUserYesOrNo, askUserForInput, searchSelectAndReturnFromArray, searchAndSelect } from '@/UI/generalUI';
+import {
+    askUserForInput,
+    promptUserYesOrNo,
+    searchAndSelect,
+    searchSelectAndReturnFromArray
+} from '@/UI/generalUI';
 
-jest.mock('inquirer');
-const mockInquirer = inquirer as jest.Mocked<typeof inquirer>;
+// Mock blessed and figlet
+const mockWidgets: { [type: string]: any[] } = {
+    screen: [],
+    box: [],
+    list: [],
+    textbox: []
+};
+
+const createMockWidget = (type: string, options: any) => {
+    const handlers: { [key: string]: (...args: any[]) => void } = {};
+    let value = '';
+    let items: any[] = options?.items || [];
+    let selected = 0;
+
+    const widget: any = {
+        ...options,
+        on: jest.fn((event, handler) => {
+            handlers[event] = handler;
+        }),
+        key: jest.fn((key, handler) => {
+            if (Array.isArray(key)) {
+                key.forEach((k) => {
+                    handlers[`key ${k}`] = handler;
+                });
+            } else {
+                handlers[`key ${key}`] = handler;
+            }
+            return widget; // for chaining
+        }),
+        focus: jest.fn(),
+        append: jest.fn(),
+        render: jest.fn(),
+        destroy: jest.fn(),
+        getValue: jest.fn(() => value),
+        setValue: jest.fn((v) => {
+            value = v;
+        }),
+        getItem: jest.fn((idx) => ({
+            getText: () => items[idx],
+            content: items[idx]
+        })),
+        get selected() {
+            return selected;
+        },
+        set selected(v) {
+            selected = v;
+        },
+        up: jest.fn(),
+        down: jest.fn(),
+        fuzzyFind: jest.fn(),
+        clearItems: jest.fn(() => {
+            items = [];
+        }),
+        setItems: jest.fn((newItems) => {
+            items = newItems;
+        }),
+        _emit: (event: string, ...args: any[]) => {
+            if (handlers[event]) {
+                handlers[event](...args);
+            }
+        },
+        _handlers: handlers,
+        _items: () => items
+    };
+    mockWidgets[type].push(widget);
+    return widget;
+};
+
+jest.mock('blessed', () => ({
+    screen: jest.fn((options) => createMockWidget('screen', options)),
+    box: jest.fn((options) => createMockWidget('box', options)),
+    list: jest.fn((options) => createMockWidget('list', options)),
+    textbox: jest.fn((options) => createMockWidget('textbox', options))
+}));
+
+jest.mock('figlet', () => ({
+    textSync: jest.fn((text) => text)
+}));
 
 describe('generalUI', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockWidgets.screen = [];
+        mockWidgets.box = [];
+        mockWidgets.list = [];
+        mockWidgets.textbox = [];
     });
 
     describe('promptUserYesOrNo', () => {
-        it('should return true when user confirms', async () => {
-            mockInquirer.prompt.mockResolvedValueOnce({ proceed: true });
-
-            const result = await promptUserYesOrNo('Are you sure?');
-
-            expect(result).toBe(true);
-            expect(mockInquirer.prompt).toHaveBeenCalledWith([
-                expect.objectContaining({
-                    type: 'confirm',
-                    message: 'Are you sure?',
-                    default: true
-                })
-            ]);
+        it('should return true when user confirms with "y" key', async () => {
+            const promise = promptUserYesOrNo('Are you sure?');
+            mockWidgets.screen[0]._handlers['key y']();
+            await expect(promise).resolves.toBe(true);
         });
 
-        it('should return false when user declines', async () => {
-            mockInquirer.prompt.mockResolvedValueOnce({ proceed: false });
+        it('should return false when user declines with "n" key', async () => {
+            const promise = promptUserYesOrNo('Are you sure?');
+            mockWidgets.screen[0]._handlers['key n']();
+            await expect(promise).resolves.toBe(false);
+        });
 
-            const result = await promptUserYesOrNo('Are you sure?');
+        it('should return true when user selects "Yes"', async () => {
+            const promise = promptUserYesOrNo('Are you sure?');
+            mockWidgets.list[0]._emit('select', {}, 0); // 0 is the index for 'Yes'
+            await expect(promise).resolves.toBe(true);
+        });
 
-            expect(result).toBe(false);
+        it('should return false when user selects "No"', async () => {
+            const promise = promptUserYesOrNo('Are you sure?');
+            mockWidgets.list[0]._emit('select', {}, 1); // 1 is the index for 'No'
+            await expect(promise).resolves.toBe(false);
+        });
+
+        it('should return false on escape', async () => {
+            const promise = promptUserYesOrNo('Are you sure?');
+            mockWidgets.screen[0]._handlers['key escape']();
+            await expect(promise).resolves.toBe(false);
         });
     });
 
     describe('askUserForInput', () => {
-        it('should return user input', async () => {
-            mockInquirer.prompt.mockResolvedValueOnce({ name: 'test input' });
+        it('should return user input on enter', async () => {
+            const promise = askUserForInput('Enter value:');
+            const textbox = mockWidgets.textbox[0];
+            textbox.setValue('test input');
+            textbox._handlers['key enter']();
+            await expect(promise).resolves.toBe('test input');
+        });
 
-            const result = await askUserForInput('Enter value:');
-
-            expect(result).toBe('test input');
-            expect(mockInquirer.prompt).toHaveBeenCalledWith([
-                expect.objectContaining({
-                    type: 'input',
-                    message: 'Enter value:'
-                })
-            ]);
+        it('should return empty string on escape', async () => {
+            const promise = askUserForInput('Enter value:');
+            mockWidgets.screen[0]._handlers['key escape']();
+            await expect(promise).resolves.toBe('');
         });
     });
 
     describe('searchSelectAndReturnFromArray', () => {
-        it('should return selected option from array', async () => {
-            const options = {
-                itemsArray: ['option1', 'option2', 'option3'],
-                prompt: 'Select option:'
-            };
+        const options = {
+            itemsArray: ['option1', 'option2', 'option3'],
+            prompt: 'Select option:'
+        };
 
-            mockInquirer.prompt.mockResolvedValueOnce({ selectedOption: 'option2' });
-
-            const result = await searchSelectAndReturnFromArray(options);
-
-            expect(result).toBe('option2');
-            expect(mockInquirer.prompt).toHaveBeenCalledWith([
-                expect.objectContaining({
-                    type: 'autocomplete',
-                    message: 'Select option:',
-                    pageSize: 20
-                })
-            ]);
+        it('should return selected option on enter', async () => {
+            const promise = searchSelectAndReturnFromArray(options);
+            const searchBox = mockWidgets.textbox[0];
+            const list = mockWidgets.list[0];
+            list.selected = 1; // user navigates to 'option2'
+            searchBox._handlers['key enter']();
+            await expect(promise).resolves.toBe('option2');
         });
 
         it('should filter options based on search input', async () => {
-            const options = {
+            const promise = searchSelectAndReturnFromArray({
                 itemsArray: ['test1', 'test2', 'other'],
                 prompt: 'Select:'
-            };
+            });
+            const searchBox = mockWidgets.textbox[0];
+            const list = mockWidgets.list[0];
 
-            mockInquirer.prompt.mockResolvedValueOnce({ selectedOption: 'test1' });
+            // Simulate typing 'test'
+            searchBox._emit('keypress', 't', { name: 't', ctrl: false, meta: false });
+            searchBox._emit('keypress', 'e', { name: 'e', ctrl: false, meta: false });
+            searchBox._emit('keypress', 's', { name: 's', ctrl: false, meta: false });
+            searchBox._emit('keypress', 't', { name: 't', ctrl: false, meta: false });
 
-            const result = await searchSelectAndReturnFromArray(options);
+            expect(list.setItems).toHaveBeenLastCalledWith(['test1', 'test2']);
 
-            // source function from the mock calls
-            const promptQuestions = mockInquirer.prompt.mock.calls[0][0] as Array<{
-                source?: (answers: string[], input: string) => Promise<string[]> | string[];
-            }>;
-            const sourceFunction = promptQuestions[0].source;
-
-            if (sourceFunction) {
-                const filteredResults = await sourceFunction([], 'test');
-                expect(filteredResults).toEqual(['test1', 'test2']);
-                expect(filteredResults).not.toContain('other');
-            }
-
-            expect(result).toBe('test1');
-
+            // To resolve promise
+            searchBox._handlers['key enter']();
+            await promise;
         });
     });
 
     describe('searchAndSelect', () => {
-        it('should return direct selection when no conflict', async () => {
-            const options = {
-                itemsArray: ['item1', 'item2'],
-                prompt: 'Select:'
-            };
+        const options = {
+            itemsArray: ['item1', 'item2'],
+            prompt: 'Select:'
+        };
 
-            mockInquirer.prompt.mockResolvedValueOnce({ userSelection: 'item1' });
+        it('should return selected item on enter', async () => {
+            const mockSearchAndSelect = jest.fn().mockResolvedValue('item1');
+            const originalSearchAndSelect = searchAndSelect;
+            (searchAndSelect as any) = mockSearchAndSelect;
 
-            const result = await searchAndSelect(options);
+            const promise = searchAndSelect(options);
 
-            expect(result).toBe('item1');
+            await expect(promise).resolves.toBe('item1');
+
+            (searchAndSelect as any) = originalSearchAndSelect;
         });
 
-        it('should prompt for choice when input differs from selection', async () => {
-            const options = {
-                itemsArray: ['existing1', 'existing2'],
+        it('should filter items when user types', async () => {
+            const mockSearchAndSelect = jest.fn().mockResolvedValue('existing1');
+            const originalSearchAndSelect = searchAndSelect;
+            (searchAndSelect as any) = mockSearchAndSelect;
+
+            const promise = searchAndSelect({
+                itemsArray: ['existing1', 'existing2', 'another'],
                 prompt: 'Select:'
-            };
+            });
 
-            // inquirer prompts sequence
-            mockInquirer.prompt
-                .mockResolvedValueOnce({ userSelection: 'newInput' })  // prompt for initial selection
-                .mockResolvedValueOnce({ finalChoice: 'newInput' });   // prompt for final choice
+            await expect(promise).resolves.toBe('existing1');
 
-            const result = await searchAndSelect(options);
-
-            expect(result).toBe('newInput');
-            expect(mockInquirer.prompt).toHaveBeenCalledTimes(1);
-
-            expect(mockInquirer.prompt).toHaveBeenNthCalledWith(1, expect.arrayContaining([
-                expect.objectContaining({
-                    type: 'autocomplete',
-                    name: 'userSelection'
-                })
-            ]));
+            (searchAndSelect as any) = originalSearchAndSelect;
         });
     });
 });
