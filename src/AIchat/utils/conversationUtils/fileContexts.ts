@@ -5,25 +5,38 @@ import fs from 'fs/promises';
 
 export const fileContexts: FileContext[] = [];
 
-/**
- * Main handler for adding file context - prompts user for file and type selection
-**/
-export async function handleAddFileContext(nvim: NeovimClient, chatFile: string): Promise<void> {
+export async function handleAddFileContext(nvim: NeovimClient, chatFile: string, options?: { agentMode?: boolean }): Promise<void> {
     try {
-        await nvim.command('echohl MoreMsg | echo "Opening file selector..." | echohl None');
-        const selectedFile = await selectFileWithFzf(nvim);
-        if (!selectedFile) {
-            await nvim.command('echohl WarningMsg | echo "No file selected" | echohl None');
+        await nvim.command('echohl MoreMsg | echo "Opening context selector..." | echohl None');
+
+        const selection = await selectFileOrFolder(nvim);
+        if (!selection) {
+            await nvim.command('echohl WarningMsg | echo "Cancelled" | echohl None');
             return;
         }
 
-        const choice = await promptUserChoice(nvim);
-        if (choice === 'entire') {
-            await addEntireFileContext(nvim, chatFile, selectedFile);
-        } else if (choice === 'part') {
-            await addPartialFileContext(nvim, chatFile, selectedFile);
+        const shareMode = await promptShareMode(nvim);
+        if (!shareMode) {
+            await nvim.command('echohl WarningMsg | echo "Cancelled" | echohl None');
+            return;
+        }
+
+        const { path, isDir } = selection;
+        const agentMode = options?.agentMode;
+
+        if (isDir && shareMode === 'entire') {
+            await addFolderContext(nvim, chatFile, path.replace(/\/$/, ''), agentMode);
+        } else if (isDir && shareMode === 'snippet') {
+            const fileInFolder = await selectFileFromFolder(nvim, path);
+            if (!fileInFolder) {
+                await nvim.command('echohl WarningMsg | echo "No file selected" | echohl None');
+                return;
+            }
+            await addPartialFileContext(nvim, chatFile, fileInFolder, agentMode);
+        } else if (!isDir && shareMode === 'entire') {
+            await addEntireFileContext(nvim, chatFile, path, agentMode);
         } else {
-            await nvim.command('echohl WarningMsg | echo "No choice made" | echohl None');
+            await addPartialFileContext(nvim, chatFile, path, agentMode);
         }
     } catch (error: unknown) {
         console.error('Error adding file context:', error);
@@ -321,89 +334,276 @@ async function selectContextToRemove(nvim: NeovimClient): Promise<number | null>
     });
 }
 
-/**
- * Prompt user to choose between entire file or partial selection
-**/
-async function promptUserChoice(nvim: NeovimClient): Promise<'entire' | 'part' | null> {
-    const varName = `user_choice_${Date.now()}`;
-    await nvim.setVar(varName, '');
-
-    const luaCode = `
-        local actions = require('telescope.actions')
-        local action_state = require('telescope.actions.state')
-
-        require('telescope.pickers').new({}, {
-            prompt_title = 'Send File As:',
-            finder = require('telescope.finders').new_table({ 'entire', 'part' }),
-            sorter = require('telescope.sorters').get_generic_fuzzy_sorter(),
-            attach_mappings = function(prompt_bufnr, map)
-                map('i', '<CR>', function()
-                    local selection = action_state.get_selected_entry()
-                    if selection then
-                        actions.close(prompt_bufnr)
-                        vim.g.${varName} = selection[1]
-                    end
-                end)
-                return true
-            end
-        }):find()
-    `;
-
-    await nvim.executeLua(luaCode, []);
-
-    return new Promise((resolve) => {
-        const check = async () => {
-            try {
-                const result = (await nvim.getVar(varName)) as string;
-                if (result === 'entire' || result === 'part') resolve(result);
-                else if (result === '') setTimeout(check, 100);
-                else resolve(null);
-            } catch {
-                resolve(null);
-            }
-        };
-        check();
-    });
-}
-
-/**
- * File selection using Telescope
-**/
-async function selectFileWithFzf(nvim: NeovimClient): Promise<string | null> {
+async function selectFileOrFolder(nvim: NeovimClient): Promise<{ path: string; isDir: boolean } | null> {
     const channelId = await nvim.channelId;
 
     return new Promise((resolve) => {
         const handler = (method: string, args: any[]) => {
-            if (method === 'telescope_selection') {
+            if (method === 'unified_selection') {
+                nvim.removeListener('notification', handler);
+                const path: string = args[0];
+                const isDir: boolean = args[1] === true;
+                resolve(path ? { path, isDir } : null);
+            }
+        };
+        nvim.on('notification', handler);
+
+        const luaCode = `
+            local ok, err = pcall(function()
+                local actions = require('telescope.actions')
+                local action_state = require('telescope.actions.state')
+                local pickers = require('telescope.pickers')
+                local finders = require('telescope.finders')
+                local conf = require('telescope.config').values
+                local make_entry = require('telescope.make_entry')
+
+                local find_cmd
+                if vim.fn.executable('fd') == 1 then
+                    find_cmd = { 'fd', '--hidden', '--follow',
+                                 '--exclude', '.git', '--exclude', 'node_modules' }
+                else
+                    find_cmd = { 'find', '.',
+                                 '-not', '-path', '*/.git/*',
+                                 '-not', '-path', '*/node_modules/*' }
+                end
+
+                pickers.new({}, {
+                    prompt_title = 'Select File or Folder',
+                    finder = finders.new_oneshot_job(find_cmd, {
+                        entry_maker = make_entry.gen_from_file({}),
+                    }),
+                    sorter = conf.file_sorter({}),
+                    previewer = conf.file_previewer({}),
+                    attach_mappings = function(prompt_bufnr, _)
+                        actions.select_default:replace(function()
+                            local selection = action_state.get_selected_entry()
+                            actions.close(prompt_bufnr)
+                            if not selection then
+                                vim.fn.rpcnotify(${channelId}, 'unified_selection', nil, false)
+                                return
+                            end
+                            local path = vim.fn.fnamemodify(selection.value or '', ':p')
+                            local is_dir = vim.fn.isdirectory(path) == 1
+                            vim.fn.rpcnotify(${channelId}, 'unified_selection', path, is_dir)
+                        end)
+                        return true
+                    end,
+                }):find()
+            end)
+            if not ok then
+                vim.notify('File/folder picker error: ' .. tostring(err), vim.log.levels.ERROR)
+                vim.fn.rpcnotify(${channelId}, 'unified_selection', nil, false)
+            end
+        `;
+
+        nvim.executeLua(luaCode, []).catch(() => {
+            nvim.removeListener('notification', handler);
+            resolve(null);
+        });
+    });
+}
+
+async function promptShareMode(nvim: NeovimClient): Promise<'entire' | 'snippet' | null> {
+    const channelId = await nvim.channelId;
+
+    return new Promise((resolve) => {
+        const handler = (method: string, args: any[]) => {
+            if (method === 'share_mode_selected') {
+                nvim.removeListener('notification', handler);
+                resolve((args[0] as 'entire' | 'snippet') || null);
+            }
+        };
+        nvim.on('notification', handler);
+
+        const luaCode = `
+            local items = { 'Entire', 'Snippet' }
+            local values = { 'entire', 'snippet' }
+            local actions = require('telescope.actions')
+            local action_state = require('telescope.actions.state')
+            require('telescope.pickers').new({}, {
+                prompt_title = 'Add to Context:',
+                finder = require('telescope.finders').new_table({ results = items }),
+                sorter = require('telescope.sorters').get_generic_fuzzy_sorter(),
+                attach_mappings = function(prompt_bufnr, map)
+                    actions.select_default:replace(function()
+                        local selection = action_state.get_selected_entry()
+                        actions.close(prompt_bufnr)
+                        if not selection then
+                            vim.fn.rpcnotify(${channelId}, 'share_mode_selected', nil)
+                            return
+                        end
+                        for i, item in ipairs(items) do
+                            if item == selection[1] then
+                                vim.fn.rpcnotify(${channelId}, 'share_mode_selected', values[i])
+                                return
+                            end
+                        end
+                        vim.fn.rpcnotify(${channelId}, 'share_mode_selected', nil)
+                    end)
+                    map('i', '<Esc>', function()
+                        actions.close(prompt_bufnr)
+                        vim.fn.rpcnotify(${channelId}, 'share_mode_selected', nil)
+                    end)
+                    return true
+                end,
+            }):find()
+        `;
+
+        nvim.executeLua(luaCode, []).catch(() => {
+            nvim.removeListener('notification', handler);
+            resolve(null);
+        });
+    });
+}
+
+async function selectFileFromFolder(nvim: NeovimClient, folderPath: string): Promise<string | null> {
+    const channelId = await nvim.channelId;
+
+    return new Promise((resolve) => {
+        const handler = (method: string, args: any[]) => {
+            if (method === 'folder_file_selected') {
                 nvim.removeListener('notification', handler);
                 resolve(args[0] || null);
             }
         };
-
         nvim.on('notification', handler);
 
-        nvim.command(`lua require('telescope.builtin').find_files({
-            prompt_title = 'Select File to Add Context',
-            attach_mappings = function(prompt_bufnr, map)
+        const luaCode = `
+            local ok, err = pcall(function()
                 local actions = require('telescope.actions')
                 local action_state = require('telescope.actions.state')
-                map('i', '<CR>', function()
-                    local selection = action_state.get_selected_entry()
-                    if selection then
-                        actions.close(prompt_bufnr)
-                        vim.fn.rpcnotify(${channelId}, 'telescope_selection', selection.path or vim.fn.fnamemodify(selection.value, ':p'))
-                    end
-                end)
-                return true
+                local pickers = require('telescope.pickers')
+                local finders = require('telescope.finders')
+                local conf = require('telescope.config').values
+                local make_entry = require('telescope.make_entry')
+
+                local folder = ${JSON.stringify(folderPath)}
+                local find_cmd
+                if vim.fn.executable('fd') == 1 then
+                    find_cmd = { 'fd', '.', '--type', 'f', '--hidden', folder }
+                else
+                    find_cmd = { 'find', folder, '-type', 'f' }
+                end
+
+                pickers.new({}, {
+                    prompt_title = 'Select File from Folder',
+                    cwd = folder,
+                    finder = finders.new_oneshot_job(find_cmd, {
+                        entry_maker = make_entry.gen_from_file({}),
+                    }),
+                    sorter = conf.file_sorter({}),
+                    previewer = conf.file_previewer({}),
+                    attach_mappings = function(prompt_bufnr, _)
+                        actions.select_default:replace(function()
+                            local selection = action_state.get_selected_entry()
+                            actions.close(prompt_bufnr)
+                            if not selection then
+                                vim.fn.rpcnotify(${channelId}, 'folder_file_selected', nil)
+                                return
+                            end
+                            local path = vim.fn.fnamemodify(selection.value or '', ':p')
+                            vim.fn.rpcnotify(${channelId}, 'folder_file_selected', path)
+                        end)
+                        return true
+                    end,
+                }):find()
+            end)
+            if not ok then
+                vim.notify('Folder file picker error: ' .. tostring(err), vim.log.levels.ERROR)
+                vim.fn.rpcnotify(${channelId}, 'folder_file_selected', nil)
             end
-        })`);
+        `;
+
+        nvim.executeLua(luaCode, []).catch(() => {
+            nvim.removeListener('notification', handler);
+            resolve(null);
+        });
     });
+}
+
+/**
+ * Recursively collect all files inside a folder (skips hidden dirs and node_modules)
+**/
+async function getAllFilesInFolder(folderPath: string): Promise<string[]> {
+    const files: string[] = [];
+
+    async function walk(dir: string): Promise<void> {
+        try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+                const fullPath = `${dir}/${entry.name}`;
+                if (entry.isDirectory()) {
+                    await walk(fullPath);
+                } else if (entry.isFile()) {
+                    files.push(fullPath);
+                }
+            }
+        } catch {
+            // skip unreadable directories
+        }
+    }
+
+    await walk(folderPath);
+    return files;
+}
+
+/**
+ * Add all files in a folder to context (skips files > 300 KB)
+**/
+async function addFolderContext(nvim: NeovimClient, chatFile: string, folderPath: string, agentMode?: boolean): Promise<void> {
+    try {
+        const allFiles = await getAllFilesInFolder(folderPath);
+
+        if (allFiles.length === 0) {
+            await nvim.command('echohl WarningMsg | echo "No files found in folder" | echohl None');
+            return;
+        }
+
+        let addedCount = 0;
+        let totalLines = 0;
+
+        for (const filePath of allFiles) {
+            try {
+                const content = await fs.readFile(filePath, 'utf-8');
+                if (content.length > 300_000) continue;
+
+                const fileName = filePath.split('/').pop() || filePath;
+                const ext = getFileExtension(fileName);
+                const lineCount = content.split('\n').length;
+                totalLines += lineCount;
+
+                const ctx: FileContext = { filePath, isPartial: false, summary: `Full file: ${fileName} (${lineCount} lines)` };
+                const existingIndex = fileContexts.findIndex(c => c.filePath === filePath);
+                if (existingIndex >= 0) fileContexts[existingIndex] = ctx;
+                else fileContexts.push(ctx);
+
+                const contextSummary = agentMode
+                    ? `# 📎 ${filePath} (${lineCount} lines, ${ext}) attached\n`
+                    : `📁 ${fileName} (${lineCount} lines, ${Math.round(content.length / 1024)}KB)\n\n\`\`\`${ext}\n// Full file content loaded: ${filePath}\n// File contains ${lineCount} lines of ${ext} code\n\`\`\`\n\n`;
+
+                await fs.appendFile(chatFile, contextSummary);
+                addedCount++;
+            } catch {
+                // skip unreadable files
+            }
+        }
+
+        const folderName = folderPath.split('/').pop() || folderPath;
+        await nvim.command('edit!');
+        await nvim.command('redraw!');
+        await nvim.command('normal! G');
+        await nvim.command(`echohl MoreMsg | echo "Added ${addedCount} files from '${folderName}' (${totalLines} total lines)" | echohl None`);
+    } catch (error) {
+        console.error('addFolderContext error:', error);
+        await nvim.command('echohl ErrorMsg | echo "Error reading folder" | echohl None');
+    }
 }
 
 /**
  * Add entire file content to context
 **/
-async function addEntireFileContext(nvim: NeovimClient, chatFile: string, filePath: string): Promise<void> {
+async function addEntireFileContext(nvim: NeovimClient, chatFile: string, filePath: string, agentMode?: boolean): Promise<void> {
     try {
         const content = await fs.readFile(filePath, 'utf-8');
         const fileName = filePath.split('/').pop() || filePath;
@@ -416,7 +616,10 @@ async function addEntireFileContext(nvim: NeovimClient, chatFile: string, filePa
         if (existingIndex >= 0) fileContexts[existingIndex] = fileContext;
         else fileContexts.push(fileContext);
 
-        const contextSummary = `📁 ${fileName} (${lineCount} lines, ${Math.round(content.length / 1024)}KB)\n\n\`\`\`${ext}\n// Full file content loaded: ${filePath}\n// Use this file context in your responses\n// File contains ${lineCount} lines of ${ext} code\n\`\`\`\n\n`;
+        // In agent mode, only write a short reference — the SDK attachment delivers the actual content
+        const contextSummary = agentMode
+            ? `# 📎 ${filePath} (${lineCount} lines, ${ext}) attached\n`
+            : `📁 ${fileName} (${lineCount} lines, ${Math.round(content.length / 1024)}KB)\n\n\`\`\`${ext}\n// Full file content loaded: ${filePath}\n// Use this file context in your responses\n// File contains ${lineCount} lines of ${ext} code\n\`\`\`\n\n`;
 
         await fs.appendFile(chatFile, contextSummary);
         await nvim.command('edit!');
@@ -432,7 +635,7 @@ async function addEntireFileContext(nvim: NeovimClient, chatFile: string, filePa
 /**
  * Add partial file content to context via visual selection
 **/
-async function addPartialFileContext(nvim: NeovimClient, chatFile: string, filePath: string): Promise<void> {
+async function addPartialFileContext(nvim: NeovimClient, chatFile: string, filePath: string, agentMode?: boolean): Promise<void> {
     try {
         await nvim.command(`vs ${filePath.replace(/ /g, '\\ ')}`);
         await nvim.command('setlocal cursorline');
@@ -499,7 +702,9 @@ async function addPartialFileContext(nvim: NeovimClient, chatFile: string, fileP
                         else fileContexts.push(fileContext);
 
                         const ext = getFileExtension(fileName);
-                        const contextEntry = `📁 ${fileName} (${lineRange})\n\n\`\`\`${ext}\n// Selected from: ${currentFile} (${lineRange})\n${selectedText}\n\`\`\`\n\n`;
+                        const contextEntry = agentMode
+                            ? `# 📎 ${currentFile} (${lineRange}) attached\n`
+                            : `📁 ${fileName} (${lineRange})\n\n\`\`\`${ext}\n// Selected from: ${currentFile} (${lineRange})\n${selectedText}\n\`\`\`\n\n`;
 
                         try {
                             const winCount = await nvim.call('winnr', '$') as number;

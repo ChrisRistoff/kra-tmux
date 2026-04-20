@@ -4,8 +4,10 @@ import { AiCommands } from "@/commandsMaps/types/commandTypes"
 
 export const aiCommands : AiCommands = {
     'chat': ai.startNewChat,
+    'agent': ai.startAgentChat,
     'load': ai.loadChat,
     'delete': ai.deleteChats,
+    'quota-agent': ai.showQuota,
 };
 
 export function handleAiCommandNotExist(commandName: string): void {

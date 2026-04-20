@@ -18,6 +18,13 @@
 - **💾 Smart conversation persistence** with AI-generated summaries
 - **🔄 Multi-provider support** (OpenAI, Anthropic, Gemini, etc.)
 
+### 🧠 [**Copilot SDK Agent Mode**](COPILOT-AGENT.md)
+*Full agentic workflow with review-before-apply proposal workspace*
+- **🔍 Proposal workspace** — agent edits a git worktree; you review the diff before it lands
+- **🛡️ Tool approval** — approve each tool call, allow by family, or go YOLO
+- **🔌 MCP server support** — extend the agent with custom tools via `settings.toml`
+- **📊 Quota monitoring** — live monthly usage + cached weekly/session limits
+
 ---
 
 ## 🎯 **Core Philosophy**
@@ -124,6 +131,7 @@ kra ai
 | Command    | Description                                                                                                                                                                                                                       |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, and **socket-based communication**. Press `Enter` in normal mode to send prompts. |
+| **agent** 🧠 | Launch a **GitHub Copilot SDK** agent session in Neovim with **project-local MCP servers**, a **proposal workspace**, and a **review/apply gate** before repository changes are written. |
 | **load** 📂   | Browse saved conversations with **AI-generated summaries**. Preview summaries before loading full chat sessions.                                                                                                              |
 | **delete** 🧽 | Manage saved chats with **searchable deletion interface** and confirmation prompts.                                                                                                        |
 
@@ -131,6 +139,9 @@ kra ai
 - ⚡ **Real-time streaming responses** with user-controlled abort capability
 - 📁 **Advanced file context system** - Add entire files or visual selections as context
 - 🧠 **Multi-provider AI support** - OpenAI, Anthropic, Gemini, and custom providers
+- 🤖 **Copilot SDK agent mode** - Agentic tool use, MCP support, and interactive ask-user requests inside Neovim
+- 🔍 **Pre-apply diff review** - Review the proposed `git diff`, edit proposal files, then explicitly apply or reject
+- 🔌 **Project-local MCP registry** - Configure MCP servers in `settings.toml` and inject them into agent sessions
 - 💾 **Intelligent conversation persistence** with automatic summary generation
 - 🎯 **Visual selection integration** - Select code portions directly in Neovim
 - 🔄 **Session restoration** with complete context reconstruction
@@ -152,6 +163,21 @@ kra ai
 - Complete conversation control with context manipulation
 
 ![new chat](docs-assets/chat/ai-new-chat.gif)
+</details>
+
+<details>
+<summary>🧠 <strong>kra ai agent</strong> - Copilot SDK proposal workflow</summary>
+
+**Agent-first coding workflow:**
+1. **Role selection** - Reuse the existing role catalog for the Copilot SDK session
+2. **Model selection** - Choose a Copilot model, or set `ai.agent.defaultModel` in `settings.toml`
+3. **Proposal workspace** - The agent works in an isolated git worktree that mirrors your current working tree
+4. **Diff review in Neovim** - Review the generated `git diff`, open proposal files, refine them, then explicitly apply or reject
+
+**MCP configuration:**
+- Define MCP servers under `ai.agent.mcpServers.*` in `settings.toml`
+- Active servers are injected into the SDK session automatically
+- The built-in toolset remains available alongside configured MCP tools
 </details>
 
 <details>

@@ -33,7 +33,6 @@ export async function waitForSocket(socketPath: string, timeout = 5000): Promise
 export async function addNeovimFunctions(nvim: NeovimClient, channelId: number): Promise<void> {
     await nvim.command(`
         function! SaveAndSubmit()
-            normal! o
             write
             call rpcnotify(${channelId}, 'prompt_action', 'submit_pressed')
         endfunction
@@ -79,7 +78,23 @@ export async function addCommands(nvim: NeovimClient): Promise<void> {
 }
 
 export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
-    await nvim.command(`nnoremap <CR> :call SaveAndSubmit()<CR>`)
+    if ('executeLua' in nvim && typeof nvim.executeLua === 'function') {
+        // Global keymaps — no buffer=0 so they work regardless of which buffer is
+        // current when this runs (timing with lazy.nvim startup is non-deterministic).
+        await nvim.executeLua(`
+            local map = vim.keymap.set
+            local opts = { silent = true }
+            map('n', '<CR>', '<Cmd>call SaveAndSubmit()<CR>', vim.tbl_extend('force', opts, { desc = 'Submit user prompt' }))
+            map('n', '@', '<Cmd>call AddFileContext()<CR>', vim.tbl_extend('force', opts, { desc = 'Add file context' }))
+            map('n', '<C-c>', '<Cmd>call StopStream()<CR>', vim.tbl_extend('force', opts, { desc = 'Stop current agent turn' }))
+            map('n', 'f', '<Cmd>call ShowFileContextsPopup()<CR>', vim.tbl_extend('force', opts, { desc = 'Show active file contexts' }))
+            map('n', '<C-x>', '<Cmd>call ClearContexts()<CR>', vim.tbl_extend('force', opts, { desc = 'Clear file contexts' }))
+            map('n', 'r', '<Cmd>call RemoveFileContext()<CR>', vim.tbl_extend('force', opts, { desc = 'Remove a file context' }))
+        `, []);
+        return;
+    }
+
+    await nvim.command(`nnoremap <CR> :call SaveAndSubmit()<CR>`);
     await nvim.command(`nnoremap @ :call AddFileContext()<CR>`);
     await nvim.command(`nnoremap <C-c> :call StopStream()<CR>`);
     await nvim.command(`nnoremap f :call ShowFileContextsPopup()<CR>`);

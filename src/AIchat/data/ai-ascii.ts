@@ -16,10 +16,14 @@ export const aiAscii = `
         +----------+-----------------------------------------------------------------------------------------------------------------------------+
         | Command  | Description                                                                                                                 |
         +----------+-----------------------------------------------------------------------------------------------------------------------------+
-        | chat     | 🗨️  Start a new chat session in Neovim. Send prompts with Enter in normal mode. Optionally save with a summary on exit.     |
-        |----------|-----------------------------------------------------------------------------------------------------------------------------|
-        | load     | 📂  Browse saved chats. View summaries and choose whether to open or skip individual sessions.                              |
-        |----------|-----------------------------------------------------------------------------------------------------------------------------|
-        | delete   | 🧽  Select and delete any saved chat from a presented list.                                                                 |
+        | chat        | 🗨️  Start a new chat session in Neovim. Send prompts with Enter in normal mode. Optionally save with a summary on exit.  |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | agent       | 🧠 Start a Copilot SDK agent session with Neovim review/apply flow and project-local MCP configuration.                  |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | load        | 📂  Browse saved chats. View summaries and choose whether to open or skip individual sessions.                           |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | delete      | 🧽  Select and delete any saved chat from a presented list.                                                              |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | quota-agent | ℹ️  Display copilot session/weekly/monthly quotas.                                                                       |
         +----------+-----------------------------------------------------------------------------------------------------------------------------+
 `

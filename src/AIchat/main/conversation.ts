@@ -162,7 +162,6 @@ async function handleSubmit(
         }
     } finally {
         currentStreamController = null;
-        await appendToChat(chatFile, '\n');
         const userEntryHeader = formatChatEntry('USER', '', false);
         await appendToChat(chatFile, userEntryHeader);
         await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);

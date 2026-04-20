@@ -16,3 +16,25 @@ command = ""
 active = true
 currentSession = "this will update automatically on load/save session"
 timeoutMs = 20000
+
+[ai.agent]
+defaultModel = "gpt-5-mini"
+
+[ai.agent.mcpServers.filesystem]
+active = false
+type = "local"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+tools = ["*"]
+
+# GitHub's native hosted MCP — gives the agent GitHub API tools
+# (search repos/issues/PRs, read files, etc.) without extra setup.
+# Requires a GitHub token with appropriate scopes.
+[ai.agent.mcpServers.github]
+active = false
+type = "http"
+url = "https://api.githubcopilot.com/mcp/"
+tools = ["*"]
+
+[ai.agent.mcpServers.github.headers]
+Authorization = "Bearer YOUR_GITHUB_TOKEN"

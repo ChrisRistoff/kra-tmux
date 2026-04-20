@@ -38,13 +38,13 @@ describe('formatChatEntry', () => {
 
     it('should return formatted entry with default header when content is provided', () => {
         const result = formatChatEntry('user', 'Hello chat', false);
-        const expected = `---\n### user (2020-01-01T00:00:00.000Z)\n\nHello chat\n---\n`;
+        const expected = `\n---\n### user (2020-01-01T00:00:00.000Z)\n\nHello chat\n---\n`;
         expect(result).toBe(expected);
     });
 
     it('should return header only if no content is provided', () => {
         const result = formatChatEntry('user', '', false);
-        const expected = `---\n### user (2020-01-01T00:00:00.000Z)\n\n`;
+        const expected = `\n---\n### user (2020-01-01T00:00:00.000Z)\n\n`;
         expect(result).toBe(expected);
     });
 

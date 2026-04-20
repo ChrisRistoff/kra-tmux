@@ -31,8 +31,10 @@ export type GitCommandName = {
 
 export type AiCommandName = {
     'chat': Command,
+    'agent': Command,
     'load': Command,
     'delete': Command,
+    'quota-agent': Command,
 }
 
 export type SystemCommands = Record<keyof SystemCommandName, Command>;

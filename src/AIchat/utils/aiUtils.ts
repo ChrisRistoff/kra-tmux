@@ -20,7 +20,7 @@ export async function promptUserForTemperature(model: string) {
 
 export function formatChatEntry(role: string, content: string, topLevel = false): string {
     const timestamp = new Date().toISOString();
-    let header = `---\n### ${role} (${timestamp})\n\n`;
+    let header = `\n---\n### ${role} (${timestamp})\n\n`;
 
     if (topLevel) {
         header = `### ${role} (${timestamp})\n\n`;

@@ -25,7 +25,8 @@ const mockStreamController = {
 
 // Mock NeovimClient
 const mockNvim = {
-    command: jest.fn()
+    command: jest.fn(),
+    executeLua: jest.fn(),
 } as unknown as jest.Mocked<NeovimClient>;
 
 const mockedOs = jest.mocked(os);
@@ -128,13 +129,11 @@ describe('nvim-utils', () => {
             it('should set up all key bindings', async () => {
                 await setupKeyBindings(mockNvim);
 
-                expect(mockNvim.command).toHaveBeenCalledTimes(6);
-                expect(mockNvim.command).toHaveBeenCalledWith('nnoremap <CR> :call SaveAndSubmit()<CR>');
-                expect(mockNvim.command).toHaveBeenCalledWith('nnoremap @ :call AddFileContext()<CR>');
-                expect(mockNvim.command).toHaveBeenCalledWith('nnoremap <C-c> :call StopStream()<CR>');
-                expect(mockNvim.command).toHaveBeenCalledWith('nnoremap f :call ShowFileContextsPopup()<CR>');
-                expect(mockNvim.command).toHaveBeenCalledWith('nnoremap <C-x> :call ClearContexts()<CR>');
-                expect(mockNvim.command).toHaveBeenCalledWith('nnoremap r :call RemoveFileContext()<CR>');
+                expect(mockNvim.executeLua).toHaveBeenCalledTimes(1);
+                expect(mockNvim.executeLua).toHaveBeenCalledWith(
+                    expect.stringContaining("map('n', '<CR>'"),
+                    []
+                );
             });
         });
 

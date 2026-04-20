@@ -1,6 +1,10 @@
 -- init.lua
 -- Bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+local project_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":p:h")
+package.path = project_root .. "/?.lua;" .. package.path
+package.path = project_root .. "/lua/?.lua;" .. package.path
+
 if not vim.loop.fs_stat(lazypath) then
     vim.fn.system({
         "git",
@@ -192,6 +196,71 @@ require("lazy").setup({
         end,
         ft = { "markdown" },
     },
+    {
+        "rcarriga/nvim-notify",
+        config = function()
+            local notify = require("notify")
+
+            notify.setup({
+                background_colour = "#000000",
+                fps = 60,
+                max_height = function()
+                    return math.floor(vim.o.lines * 0.3)
+                end,
+                max_width = function()
+                    return math.floor(vim.o.columns * 0.45)
+                end,
+                render = "wrapped-compact",
+                stages = "fade_in_slide_out",
+                timeout = 3000,
+                top_down = false,
+            })
+
+            vim.notify = notify
+        end,
+    },
+    {
+        "folke/noice.nvim",
+        event = "VeryLazy",
+        dependencies = {
+            "MunifTanjim/nui.nvim",
+            "rcarriga/nvim-notify",
+        },
+        config = function()
+            require("noice").setup({
+                cmdline = {
+                    enabled = true,
+                },
+                lsp = {
+                    progress = {
+                        enabled = false,
+                    },
+                },
+                messages = {
+                    enabled = true,
+                    view = "mini",
+                },
+                notify = {
+                    enabled = true,
+                    view = "notify",
+                },
+                popupmenu = {
+                    enabled = false,
+                },
+                presets = {
+                    long_message_to_split = true,
+                    lsp_doc_border = true,
+                },
+            })
+        end,
+    },
+    {
+        "folke/which-key.nvim",
+        event = "VeryLazy",
+        config = function()
+            require("which-key").setup({})
+        end,
+    },
 
     -- Indent guides for better structure
     {
@@ -365,7 +434,17 @@ require("lazy").setup({
                     lualine_a = { 'mode' },
                     lualine_b = { 'branch', 'diff', 'diagnostics' },
                     lualine_c = { { 'filename', path = 1 } },
-                    lualine_x = { 'encoding', 'fileformat', 'filetype' },
+                    lualine_x = {
+                        {
+                            function()
+                                return require('kra_agent_ui').statusline()
+                            end,
+                            color = { fg = "#7dcfff", gui = "bold" },
+                        },
+                        'encoding',
+                        'fileformat',
+                        'filetype'
+                    },
                     lualine_y = { 'progress' },
                     lualine_z = { 'location' }
                 },
@@ -458,6 +537,9 @@ map('n', '<leader>p', '"+p', { silent = true, desc = 'Paste from system clipboar
 -- Quick folding for managing long conversations
 map('n', '<leader>z', 'za', { silent = true, desc = 'Toggle fold' })
 map('n', '<leader>Z', 'zA', { silent = true, desc = 'Toggle fold recursively' })
+
+-- Toggle agent popups (noice tool notifications + ask_user window) on/off
+map('n', '<Space>t', function() require('kra_agent_ui').toggle_popups() end, { silent = true, desc = 'Toggle agent popups' })
 
 -- Performance optimizations for large chat logs
 vim.opt.updatetime = 300
@@ -565,8 +647,3 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 
 -- Apply colors immediately
 setup_markdown_colors()
-
--- Add the project directory to Lua package path
-local project_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":p:h")
-package.path = project_root .. "/?.lua;" .. package.path
-package.path = project_root .. "/lua/?.lua;" .. package.path
