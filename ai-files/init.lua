@@ -414,7 +414,7 @@ require("lazy").setup({
             require('lualine').setup {
                 options = {
                     icons_enabled = true,
-                    theme = 'tokyonight',
+                    theme = 'tokyonight-night',
                     component_separators = { left = '', right = '' },
                     section_separators = { left = '', right = '' },
                     disabled_filetypes = {
@@ -463,7 +463,19 @@ require("lazy").setup({
             }
         end,
     },
+    
+    -- Tokyonight colorscheme for lualine
+    {
+        'folke/tokyonight.nvim',
+        lazy = false,
+        priority = 1000,
+        config = function()
+            vim.cmd.colorscheme 'tokyonight-night'
+        end,
+    },
 })
+
+
 
 -- Optimized settings for chat experience
 vim.opt.number = false     -- Clean look for chat

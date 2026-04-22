@@ -10,7 +10,7 @@ const AGENT_DRAFT_HEADER = '## 👤 USER PROMPT (draft)';
 /** One line written to the chat file when a tool finishes. */
 export function formatToolLine(toolSummary: string, success: boolean): string {
     const icon = success ? '✓' : '✗';
-    return `\`${icon} ${toolSummary}\`\n`;
+    return `\n\`${icon} ${toolSummary}\`\n`;
 }
 
 /**
@@ -23,7 +23,8 @@ export function formatConfirmQuestion(question: string, choices: string[]): stri
 }
 
 export function formatConfirmAnswer(answer: string): string {
-    return `**👤 You:** ${answer}\n\n---\n\n`;
+    const timestamp = new Date().toISOString();
+    return `\n---\n\n## 👤 USER PROMPT · ${timestamp}\n\n${answer}\n\n`;
 }
 
 function truncateMultiline(value: string): string {

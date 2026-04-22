@@ -16,14 +16,86 @@ export interface EditToolRequest {
 
 export interface EditLinesRequest {
     displayPath: string;
-    endLine: number;
-    newContent: string;
-    startLine: number;
     targetPath: string;
+    // Single-edit form
+    startLine?: number;
+    endLine?: number;
+    newContent?: string;
+    // Multi-edit (array) form
+    startLines?: number[];
+    endLines?: number[];
+    newContents?: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Some agents (notably reasoning models) occasionally JSON-encode array or
+// number fields, so we receive `"[1, 5]"` instead of `[1, 5]`. Try to recover
+// the structured value before falling back to undefined.
+function coerceArray(value: unknown): unknown[] | undefined {
+    if (Array.isArray(value)) return value;
+
+    if (typeof value === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(value);
+
+            return Array.isArray(parsed) ? parsed : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    return undefined;
+}
+
+function coerceNumberArray(value: unknown): number[] | undefined {
+    const arr = coerceArray(value);
+
+    if (!arr) return undefined;
+
+    const out: number[] = [];
+
+    for (const v of arr) {
+        if (typeof v === 'number' && Number.isFinite(v)) {
+            out.push(v);
+        } else if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) {
+            out.push(Number(v));
+        } else {
+            return undefined;
+        }
+    }
+
+    return out;
+}
+
+function coerceStringArray(value: unknown): string[] | undefined {
+    const arr = coerceArray(value);
+
+    if (!arr) return undefined;
+
+    const out: string[] = [];
+
+    for (const v of arr) {
+        if (typeof v === 'string') {
+            out.push(v);
+        } else {
+            return undefined;
+        }
+    }
+
+    return out;
+}
+
+function coerceNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+        return Number(value);
+    }
+
+    return undefined;
 }
 
 export function getToolArgsRecord(toolArgs: unknown): Record<string, unknown> | undefined {
@@ -34,6 +106,7 @@ export function getToolArgsRecord(toolArgs: unknown): Record<string, unknown> | 
     if (typeof toolArgs === 'string') {
         try {
             const parsed: unknown = JSON.parse(toolArgs);
+
             return isRecord(parsed) ? parsed : undefined;
         } catch {
             return undefined;
@@ -60,9 +133,11 @@ export function extractWriteRequest(toolArgs: unknown, workspacePath: string): T
 
     const rawPath = typeof args.path === 'string'
         ? args.path
-        : typeof args.fileName === 'string'
-            ? args.fileName
-            : undefined;
+        : typeof args.file_path === 'string'
+            ? args.file_path
+            : typeof args.fileName === 'string'
+                ? args.fileName
+                : undefined;
     const contentField = typeof args.content === 'string'
         ? 'content'
         : typeof args.newContent === 'string'
@@ -113,19 +188,27 @@ export function extractEditLinesRequest(toolArgs: unknown, workspacePath: string
     if (!args) return undefined;
 
     const rawPath = typeof args.file_path === 'string' ? args.file_path : undefined;
-    const startLine = typeof args.start_line === 'number' ? args.start_line : undefined;
-    const endLine = typeof args.end_line === 'number' ? args.end_line : undefined;
+    if (!rawPath) return undefined;
+
+    const targetPath = path.isAbsolute(rawPath) ? rawPath : path.join(workspacePath, rawPath);
+
+    // Multi-edit (array) form — accept real arrays OR JSON-encoded strings.
+    const startLines = coerceNumberArray(args.startLines);
+    const endLines = coerceNumberArray(args.endLines);
+    const newContents = coerceStringArray(args.newContents);
+
+    if (startLines && endLines && newContents) {
+        return { displayPath: rawPath, targetPath, startLines, endLines, newContents };
+    }
+
+    // Single-edit form
+    const startLine = coerceNumber(args.start_line);
+    const endLine = coerceNumber(args.end_line);
     const newContent = typeof args.new_content === 'string' ? args.new_content : undefined;
 
-    if (!rawPath || startLine === undefined || endLine === undefined || newContent === undefined) {
+    if (startLine === undefined || endLine === undefined || newContent === undefined) {
         return undefined;
     }
 
-    return {
-        displayPath: rawPath,
-        endLine,
-        newContent,
-        startLine,
-        targetPath: path.isAbsolute(rawPath) ? rawPath : path.join(workspacePath, rawPath),
-    };
+    return { displayPath: rawPath, endLine, newContent, startLine, targetPath };
 }

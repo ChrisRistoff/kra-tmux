@@ -10,10 +10,12 @@ A full agentic workflow powered by the **GitHub Copilot SDK**, integrated direct
 - [Model Selection](#-model-selection)
 - [Key Bindings](#️-key-bindings)
 - [Tool Approval](#-tool-approval)
+- [File Editing Tools (kra-file-context MCP)](#-file-editing-tools-kra-file-context-mcp)
+- [Session Diff History](#-session-diff-history)
+- [Skills](#-skills)
 - [MCP Server Configuration](#-mcp-server-configuration)
 - [Quota Monitoring](#-quota-monitoring)
 
----
 
 ## 🚀 Quick Start
 
@@ -117,7 +119,12 @@ On startup, the agent checks `settings.toml` for a default model:
 defaultModel = "gpt-5-mini"
 ```
 
-If no default is set (or the model isn't available), an interactive picker shows all available Copilot models. Disabled models are shown with a `[DISABLED]` prefix.
+If no default is set (or the model isn't available), an interactive picker shows all available Copilot models. Each entry is annotated with:
+
+- `[DISABLED]` — the model is currently unavailable
+- `[xN]` — the billing multiplier (premium interaction cost) when greater than 1
+
+After choosing a model, if it advertises multiple reasoning efforts (e.g. `low`, `medium`, `high`, `xhigh`), a second picker prompts for the desired effort. The model's recommended effort is marked `(default)`.
 
 ---
 
@@ -139,13 +146,15 @@ If no default is set (or the model isn't available), an interactive picker shows
 | `<leader>y` | Toggle YOLO mode (auto-approve all tools) |
 | `<leader>P` | Reset remembered per-family tool approvals |
 | `<leader>h` | Browse tool call history for this session |
+| `<leader>s` | Browse session diff history (all AI write diffs) |
+| `<Space>t` | Toggle tool/intent popups on or off (global keymap) |
 | `<leader>?` | Show all keymaps (which-key) |
 
 > **Note:** The proposal diff opens automatically after each turn that modifies files. `<leader>o/a/r` let you re-trigger those actions from the chat buffer if you've closed the diff tab.
 
 #### Tool Call History (`<leader>h`)
 
-Opens a searchable Telescope picker listing every tool invoked during the session — name, arguments summary, and success/failure status. Useful for auditing what the agent did or replaying context into a new prompt.
+Opens a searchable Telescope picker listing every tool invoked during the session — name, started/updated time, and success/failure status. The preview pane shows the tool's **result** (output) for the highlighted entry. Press `<CR>` to open a read-only side-by-side view in a new tab: the **arguments JSON** (as the agent sent them) on the left, and the **tool result** on the right. Inside the view, `q` closes the tab and `<Tab>` / `<S-Tab>` switch focus between the two panes. The history is view-only — tools cannot be re-run from here.
 
 ### Proposal Review Tab
 
@@ -165,10 +174,13 @@ When the agent requests permission to run a tool (strict mode):
 
 | Key | Action |
 |-----|--------|
+| `<CR>` | Run the currently highlighted action (same as pressing its letter) |
+| `<Up>` / `<Down>` | Move the highlight between actions |
 | `a` | Approve this tool call once |
 | `s` | Allow this **tool family** for the rest of the session |
 | `y` | Enable **YOLO mode** — approve everything automatically |
-| `e` | Open the **diff editor** to review/edit the proposed change |
+| `e` | Open the **diff editor** to review/edit the proposed change (file writes only — falls back to JSON editor for other tools) |
+| `J` / `<leader>j` | Open the raw tool JSON args in an editor (only when a write preview is shown) |
 | `d` / `q` | Deny this tool call |
 
 #### Diff Editor (after pressing `e`)
@@ -206,6 +218,57 @@ Every other tool call shows a popup. You see the tool name, arguments, and — f
 ### YOLO Mode
 
 All tool calls are approved automatically. File writes still go directly to the repository. Toggle with `<leader>y`; reset with `<leader>P`.
+
+---
+
+## 🛠 File Editing Tools (kra-file-context MCP)
+
+The agent has a built-in MCP server (`kra-file-context`) that exposes precise, line-range based file editing tools. To force the agent to use these — instead of fuzzy string-replacement tools — the SDK's stock editing tools are **excluded**:
+
+```
+excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit']
+```
+
+The agent must use the following tools instead:
+
+| Tool | Purpose |
+|------|---------|
+| `get_outline(file_path)` | Returns a structured outline (functions, classes, methods + line numbers). Cheap way to understand a large file before reading it. |
+| `read_lines(file_path, start_line, end_line)` | Read a specific line range (1-indexed, inclusive). |
+| `read_lines(file_path, startLines[], endLines[])` | **Array form** — read multiple ranges in one call (parallel arrays). |
+| `read_function(file_path, function_name)` | Look up a symbol by name and return its full body. |
+| `edit_lines(file_path, start_line, end_line, new_content)` | Replace a line range with new content. Empty `new_content` deletes the lines. Returns the old content for verification. |
+| `edit_lines(file_path, startLines[], endLines[], newContents[])` | **Array form** — apply multiple edits in one call. Line numbers refer to the original file; the tool sorts ranges bottom-to-top internally and rejects overlapping ranges. |
+| `create_file(file_path, content)` | Create a new file (or overwrite an existing one). Parent directories are created automatically. |
+
+### Why line ranges instead of string replacement?
+
+Line-range edits are precise and never fail due to stale `old_str` context. The recommended workflow is:
+
+1. `get_outline` → understand the file
+2. `read_lines` → confirm the exact lines to change
+3. `edit_lines` → replace them
+
+For multi-section reads/edits, **always prefer the array form** over multiple sequential calls.
+
+---
+
+## 📜 Session Diff History
+
+Every write the agent performs (`edit_lines`, `create_file`, etc.) is recorded in a session-scoped diff history. Press `<leader>s` in the chat buffer to open a Telescope picker showing:
+
+- **One entry per write** — the diff that was actually applied at that point in the session
+- **One `ORIG` entry per unique file** — the diff between the file's pre-session baseline and its current state
+
+Select any entry to open the diff in a new tab. The `ORIG` entries make it easy to revert a single file to how it was before the session started, even after many edits.
+
+---
+
+## 🎓 Skills
+
+The agent loads skills from `<repo>/skills/` via the SDK's `skillDirectories` option. Skills are reusable instruction sets / prompt fragments that the agent can pull in on demand (file format and discovery follow the Copilot SDK skill convention).
+
+Drop a skill folder into `skills/` and it becomes available the next time you start `kra ai agent`. The directory does not exist by default — create it when you have skills to register.
 
 ---
 

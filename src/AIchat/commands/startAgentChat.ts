@@ -4,25 +4,67 @@ import * as conversation from '@/AIchat/main/agentConversation';
 import { getAgentDefaultModel, getGithubToken } from '@/AIchat/utils/agentSettings';
 import * as ui from '@/UI/generalUI';
 
+type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
+interface PickedModel {
+    modelId: string;
+    reasoningEffort?: ReasoningEffort;
+}
+
+
 function sortModels(models: ModelInfo[]): ModelInfo[] {
     return [...models].sort((left, right) => left.name.localeCompare(right.name));
 }
 
-async function pickCopilotModel(client: CopilotClient): Promise<string> {
-    const models = sortModels(await client.listModels());
-    const defaultModel = await getAgentDefaultModel();
+function formatBillingMultiplier(model: ModelInfo): string {
+    const multiplier = model.billing?.multiplier;
 
-    if (defaultModel && models.some((model) => model.id === defaultModel)) {
-        return defaultModel;
+    if (!multiplier) {
+        return '';
     }
 
-    const labelToModel = new Map<string, string>();
+    return ` [x${multiplier}]`;
+}
+
+async function pickReasoningEffort(model: ModelInfo): Promise<ReasoningEffort | undefined> {
+    const supported = model.supportedReasoningEfforts;
+
+    if (!supported || !supported.length) {
+        return undefined;
+    }
+
+    const defaultEffort = model.defaultReasoningEffort;
+    const itemsArray = supported.map((effort) =>
+        defaultEffort === effort ? `${effort} (default)` : effort
+    );
+
+    const selected = await ui.searchSelectAndReturnFromArray({
+        itemsArray,
+        prompt: 'Select reasoning effort level',
+    });
+
+    return selected.replace(' (default)', '') as ReasoningEffort;
+}
+
+async function pickCopilotModel(client: CopilotClient): Promise<PickedModel> {
+    const models = sortModels(await client.listModels());
+    const defaultModelId = await getAgentDefaultModel();
+
+    if (defaultModelId && models.some((model) => model.id === defaultModelId)) {
+        const defaultModel = models.find((m) => m.id === defaultModelId)!;
+        const reasoningEffort = await pickReasoningEffort(defaultModel);
+
+        return { modelId: defaultModelId, ...(reasoningEffort ? { reasoningEffort } : {}) };
+    }
+
+    const labelToModel = new Map<string, ModelInfo>();
     const itemsArray = models.map((model) => {
         const disabled = model.policy?.state === 'disabled';
+        const billing = formatBillingMultiplier(model);
         const label = disabled
-            ? `[DISABLED] ${model.name} (${model.id})`
-            : `${model.name} (${model.id})`;
-        labelToModel.set(label, model.id);
+            ? `[DISABLED] ${model.name} (${model.id})${billing}`
+            : `${model.name} (${model.id})${billing}`;
+        labelToModel.set(label, model);
 
         return label;
     });
@@ -38,7 +80,9 @@ async function pickCopilotModel(client: CopilotClient): Promise<string> {
         throw new Error('No Copilot model selected.');
     }
 
-    return selectedModel;
+    const reasoningEffort = await pickReasoningEffort(selectedModel);
+
+    return { modelId: selectedModel.id, ...(reasoningEffort ? { reasoningEffort } : {}) };
 }
 
 export async function startAgentChat(): Promise<void> {
@@ -61,9 +105,15 @@ export async function startAgentChat(): Promise<void> {
             itemsArray: Object.keys(aiRoles),
             prompt: 'Select an agent role',
         });
-        const model = await pickCopilotModel(client);
+        const { modelId, reasoningEffort } = await pickCopilotModel(client);
 
-        await conversation.converseAgent({ client, role, model });
+        await conversation.converseAgent({
+            client,
+            role,
+            model: modelId,
+            ...(reasoningEffort ? { reasoningEffort } : {}),
+        });
+
     } catch (error) {
         await client.forceStop();
         throw error;
