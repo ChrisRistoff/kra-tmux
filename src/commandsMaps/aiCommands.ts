@@ -1,5 +1,5 @@
-import * as ai from "@/AIchat";
-import { aiAscii } from "@/AIchat/data/ai-ascii";
+import * as ai from "@/AI";
+import { aiAscii } from "@/AI/shared/data/ai-ascii";
 import { AiCommands } from "@/commandsMaps/types/commandTypes"
 
 export const aiCommands : AiCommands = {

@@ -29,6 +29,7 @@ export async function loadSession(): Promise<void> {
 
         if (!savedSessionsData) {
             console.error('No saved sessions found.');
+
             return;
         }
 
@@ -74,7 +75,7 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
     for (const result of sessionResults) {
         const sessionConfig = savedData[result.sessionName];
 
-        if (!sessionConfig?.windows) {
+        if (!sessionConfig.windows) {
             continue;
         }
 
@@ -83,6 +84,7 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
             // if windows have an index property, use it; otherwise use array index
             const aIndex = (a as any).windowIndex ?? sessionConfig.windows.indexOf(a);
             const bIndex = (b as any).windowIndex ?? sessionConfig.windows.indexOf(b);
+
             return aIndex - bIndex;
         });
 
@@ -92,6 +94,7 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
             // skip invalid window configurations
             if (!validateWindowConfig(window)) {
                 console.warn(`Skipping invalid window config: ${window.windowName}`);
+
                 return;
             }
 
@@ -127,7 +130,7 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
             // setup each pane with its command and working directory
             window.panes.forEach((pane, paneIndex) => {
                 const paneTarget = `${windowTarget}.${paneIndex}`;
-                const workingDir = pane.currentPath?.split('/').slice(3).join('/') || '~';
+                const workingDir = pane.currentPath.split('/').slice(3).join('/') || '~';
 
                 if (pane.currentCommand === "nvim") {
                     const nvimSessionFile = `${nvimSessionsPath}/${serverName}/${result.sessionName}_${tmuxWindowIndex}_${paneIndex}.vim`;
@@ -158,11 +161,12 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
  * @returns True if window configuration is valid, false otherwise
  */
 function validateWindowConfig(window: Window): boolean {
-    const paneCount = window.panes?.length || 0;
+    const paneCount = window.panes.length || 0;
 
     // must have at least one pane
     if (!paneCount) {
         console.warn(`Window ${window.windowName} has no panes`);
+
         return false;
     }
 
@@ -172,6 +176,7 @@ function validateWindowConfig(window: Window): boolean {
     // For multiple panes, layout should exist
     if (!window.layout) {
         console.warn(`Window ${window.windowName} has ${paneCount} panes but no layout`);
+
         return false;
     }
 
@@ -229,6 +234,7 @@ async function createBaseSessions(sessionNames: string[]): Promise<SessionResult
     }
 
     console.log(`Successfully created ${results.filter(r => r.success).length}/${sessionNames.length} sessions`);
+
     return results;
 }
 

@@ -42,7 +42,7 @@ describe('loadSession', () => {
 
         mockCreateLockFile.mockResolvedValue();
         mockTmux.sourceTmuxConfig.mockResolvedValue();
-        mockTmux.updateCurrentSession.mockImplementation(() => new Promise(() => { }));
+        mockTmux.updateCurrentSession.mockImplementation(async () => new Promise(() => { }));
         mockTmux.killServer.mockResolvedValue();
         mockUtils.sleep.mockResolvedValue();
         mockSaveSessionsToFile.mockResolvedValue();

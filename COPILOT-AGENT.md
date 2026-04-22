@@ -40,7 +40,7 @@ src/            ← agent edits files here (uncommitted)
 package.json    ← changes visible as git diff
 ```
 
-When the agent finishes a turn that changed files, **the diff opens automatically** in a Neovim tab for review.
+Use `<leader>d` to open the proposal diff tab at any time to review what changed.
 
 - **Apply** (`<leader>a`) — changes are already on disk; this just confirms you're happy with them.
 - **Reject** (`<leader>r`) — runs `git restore . && git clean -fd` to discard all uncommitted changes.
@@ -49,7 +49,7 @@ When the agent finishes a turn that changed files, **the diff opens automaticall
 
 1. **Start** — `kra ai agent` starts the Copilot SDK session and opens Neovim
 2. **Turn** — You submit a prompt; the agent reasons and calls tools (with your approval in strict mode)
-3. **Review** — If files changed, the proposal diff tab opens. Inspect, edit files, then apply or reject
+3. **Review** — Use `<leader>d` to open the proposal diff tab. Inspect, edit files, then apply or reject
 4. **Apply** — `<leader>a` (or `a` in the diff tab) acknowledges the changes (already written to disk)
 5. **Continue** — Submit the next prompt; changes accumulate as uncommitted diffs across turns
 6. **End session** — When the agent calls `confirm_task_complete` and you select "End session", the session closes
@@ -100,9 +100,9 @@ flowchart TD
     ALLOW --> SDK
     DENY --> SDK
 
-    TURN_END --> CHANGED{Files changed?}
-    CHANGED -- No --> PROMPT
-    CHANGED -- Yes --> DIFF_TAB[Proposal diff tab opens in Neovim]
+    TURN_END --> PROMPT
+    TURN_END --> CHANGED{Check changes manually?}
+    CHANGED -- leader+d --> DIFF_TAB[Proposal diff tab]
     DIFF_TAB --> REVIEW[Inspect and edit files]
     REVIEW -- a: apply / changes already on disk --> PROMPT
     REVIEW -- r: reject / git restore + clean -fd --> PROMPT
@@ -150,7 +150,7 @@ After choosing a model, if it advertises multiple reasoning efforts (e.g. `low`,
 | `<Space>t` | Toggle tool/intent popups on or off (global keymap) |
 | `<leader>?` | Show all keymaps (which-key) |
 
-> **Note:** The proposal diff opens automatically after each turn that modifies files. `<leader>o/a/r` let you re-trigger those actions from the chat buffer if you've closed the diff tab.
+> **Note:** `<leader>d` opens the proposal diff tab on demand. `<leader>o/a/r` let you open a file, apply, or reject from anywhere.
 
 #### Tool Call History (`<leader>h`)
 
@@ -158,7 +158,7 @@ Opens a searchable Telescope picker listing every tool invoked during the sessio
 
 ### Proposal Review Tab
 
-The diff tab opens automatically. It has its own local keymaps:
+The diff tab has its own local keymaps:
 
 | Key | Action |
 |-----|--------|
@@ -226,13 +226,16 @@ All tool calls are approved automatically. File writes still go directly to the 
 The agent has a built-in MCP server (`kra-file-context`) that exposes precise, line-range based file editing tools. To force the agent to use these — instead of fuzzy string-replacement tools — the SDK's stock editing tools are **excluded**:
 
 ```
-excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit']
+excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob']
 ```
+
+The built-in `grep` and `glob` tools are also replaced by the unified `search` tool below.
 
 The agent must use the following tools instead:
 
 | Tool | Purpose |
 |------|---------|
+| `search(name_pattern?, content_pattern?)` | **Unified file finder + content grep.** Provide a glob (`name_pattern`), a regex (`content_pattern`), or both to intersect. Every result is annotated with the file's line count. Powered by ripgrep; respects `.gitignore`. Replaces the built-in `grep`/`glob` tools. |
 | `get_outline(file_path)` | Returns a structured outline (functions, classes, methods + line numbers). Cheap way to understand a large file before reading it. |
 | `read_lines(file_path, start_line, end_line)` | Read a specific line range (1-indexed, inclusive). |
 | `read_lines(file_path, startLines[], endLines[])` | **Array form** — read multiple ranges in one call (parallel arrays). |
@@ -241,17 +244,32 @@ The agent must use the following tools instead:
 | `edit_lines(file_path, startLines[], endLines[], newContents[])` | **Array form** — apply multiple edits in one call. Line numbers refer to the original file; the tool sorts ranges bottom-to-top internally and rejects overlapping ranges. |
 | `create_file(file_path, content)` | Create a new file (or overwrite an existing one). Parent directories are created automatically. |
 
+### `search` options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `name_pattern` | string | Glob to filter by file name/path (e.g. `**/*.ts`, `src/AI/**/auth*`). |
+| `content_pattern` | string | Ripgrep regex to search file contents. |
+| `path` | string | Root directory to search from. Defaults to cwd. |
+| `type` | string | Ripgrep `--type` alias (e.g. `ts`, `py`, `go`). |
+| `case_insensitive` | boolean | Case-insensitive content match. Default `false`. |
+| `context` | number | Lines of context around each match (`-C N`). Default `0`. |
+| `multiline` | boolean | Allow pattern to match across line boundaries. Default `false`. |
+| `max_results` | number | Cap on results (file count or match-line count). Default `50`, hard cap `200`. |
+
+At least one of `name_pattern` or `content_pattern` is required.
+
 ### Why line ranges instead of string replacement?
 
 Line-range edits are precise and never fail due to stale `old_str` context. The recommended workflow is:
 
-1. `get_outline` → understand the file
-2. `read_lines` → confirm the exact lines to change
-3. `edit_lines` → replace them
+1. `search` → locate the file(s) and note the reported line count
+2. `get_outline` → understand the file structure; especially valuable for files over ~150 lines where guessing read ranges wastes tokens
+3. `read_lines` → reads only the exact range(s) needed
+4. `edit_lines` → replaces them — makes one targeted call per changed section, not a wholesale file rewrite
 
 For multi-section reads/edits, **always prefer the array form** over multiple sequential calls.
 
----
 
 ## 📜 Session Diff History
 

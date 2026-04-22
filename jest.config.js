@@ -12,7 +12,7 @@ module.exports = {
     coverageDirectory: 'coverage',
     coveragePathIgnorePatterns: [
         '/node_modules/',
-        '/src/AIchat/data/keys.ts',
+        '/src/AI/AIChat/data/keys.ts',
     ],
     moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/src/$1',

@@ -41,6 +41,7 @@ const main = async (): Promise<void> => {
             break;
         case 'settings':
             await handleChangeSettings();
+
             return;
         default:
             console.log(workflowAscii);

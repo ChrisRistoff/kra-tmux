@@ -9,6 +9,7 @@ jest.mock('child_process', () => ({
         if (typeof callback === 'function') {
             return mockExecCommand(...args);
         }
+
         return {};
     }
 }));
@@ -22,6 +23,7 @@ describe('tmux-utils', () => {
         jest.useFakeTimers();
         mockExecCommand.mockImplementation((_: string, callback: Function) => {
             callback(null, '', '');
+
             return {};
         });
     });
@@ -38,6 +40,7 @@ describe('tmux-utils', () => {
         it('should resolve with stdout and stderr on success', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(null, 'success output', 'warning message');
+
                 return {};
             });
 
@@ -52,6 +55,7 @@ describe('tmux-utils', () => {
         it('should reject with error on command failure', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(new Error('Command failed'), '', '');
+
                 return {};
             });
 
@@ -192,6 +196,7 @@ describe('tmux-utils', () => {
                 } else {
                     setTimeout(() => callback(null, '', ''), 0);
                 }
+
                 return {};
             });
 
@@ -222,6 +227,7 @@ describe('tmux-utils', () => {
         it('should return true when string is found', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(null, 'matching line with search term', '');
+
                 return {};
             });
 
@@ -232,6 +238,7 @@ describe('tmux-utils', () => {
         it('should return false when string is not found', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(null, '', '');
+
                 return {};
             });
 
@@ -242,6 +249,7 @@ describe('tmux-utils', () => {
         it('should return false and log error when grep has stderr', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(null, '', 'grep: test.txt: No such file or directory');
+
                 return {};
             });
 
@@ -253,6 +261,7 @@ describe('tmux-utils', () => {
         it('should return false when exec throws an error', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(new Error('Command failed'), '', '');
+
                 return {};
             });
 
@@ -263,6 +272,7 @@ describe('tmux-utils', () => {
         it('should properly escape file name in command', async () => {
             mockExecCommand.mockImplementation((_: string, callback: Function) => {
                 callback(null, 'found', '');
+
                 return {};
             });
 

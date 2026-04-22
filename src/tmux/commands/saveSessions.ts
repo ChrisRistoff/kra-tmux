@@ -34,6 +34,7 @@ export async function saveSessionsToFile(): Promise<void> {
 
     if (!fileName) {
         console.log('Save cancelled.');
+
         return;
     }
 

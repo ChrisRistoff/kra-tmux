@@ -32,6 +32,7 @@ const createMockWidget = (type: string, options: any) => {
             } else {
                 handlers[`key ${key}`] = handler;
             }
+
             return widget; // for chaining
         }),
         focus: jest.fn(),
@@ -70,6 +71,7 @@ const createMockWidget = (type: string, options: any) => {
         _items: () => items
     };
     mockWidgets[type].push(widget);
+
     return widget;
 };
 

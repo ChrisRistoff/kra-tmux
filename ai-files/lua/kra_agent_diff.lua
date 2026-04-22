@@ -6,6 +6,7 @@ local ns = vim.api.nvim_create_namespace("kra_agent_diff")
 -- the user can always revisit a past change via open_diff_history().
 local diff_history    = {}
 local original_by_path = {}  -- first-seen content for each path, for revert
+local crlf_by_path     = {}  -- true if the original file used CRLF line endings
 
 local function join_buffer_text(buf, keep_trailing_newline)
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -376,22 +377,23 @@ function M.open_write_diff_editor(channel_id, payload, send_fn, opts)
     local filetype = infer_filetype(preview.displayPath or "")
 
     local function read_file_lines(file_path)
-        if not file_path then return {} end
+        if not file_path then return {}, false end
         local f = io.open(file_path, "rb")
-        if not f then return {} end
+        if not f then return {}, false end
         local content = f:read("*a")
         f:close()
-        if not content or #content == 0 then return {} end
+        if not content or #content == 0 then return {}, false end
+        local has_crlf = content:find("\r\n", 1, true) ~= nil
         local lines = vim.split(content, "\n", { plain = true })
-        for i, l in ipairs(lines) do
-            lines[i] = (l:gsub("\r$", ""))
+        for i, line in ipairs(lines) do
+            lines[i] = line:gsub("\r$", "")
         end
-        if lines[#lines] == "" then table.remove(lines) end
-        return lines
+        return lines, has_crlf
     end
 
-    local current_lines  = read_file_lines(preview.currentPath)
-    local proposed_lines = read_file_lines(preview.proposedPath)
+
+    local current_lines, current_crlf = read_file_lines(preview.currentPath)
+    local proposed_lines               = read_file_lines(preview.proposedPath)
 
     local diff_added, diff_removed = compute_diff_stats(current_lines, proposed_lines)
     local diff_stats = string.format("+%d -%d", diff_added, diff_removed)
@@ -403,6 +405,7 @@ function M.open_write_diff_editor(channel_id, payload, send_fn, opts)
         local seq = #diff_history + 1
         if not original_by_path[path] then
             original_by_path[path] = current_lines
+            crlf_by_path[path]     = current_crlf
         end
         history_entry = {
             seq            = seq,
@@ -709,8 +712,9 @@ local function open_revert_diff_editor(path, original_lines)
 
     local function do_revert()
         local lines   = vim.api.nvim_buf_get_lines(right_buf, 0, -1, false)
-        local content = table.concat(lines, "\n")
-        local file    = io.open(path, "w")
+        local sep     = (crlf_by_path[path] or false) and "\r\n" or "\n"
+        local content = table.concat(lines, sep)
+        local file    = io.open(path, "wb")  -- binary: preserve chosen separator
         if file then
             file:write(content)
             file:close()
@@ -806,8 +810,9 @@ local function open_history_diff_view(entry)
             return
         end
         local lines   = vim.api.nvim_buf_get_lines(right_buf, 0, -1, false)
-        local content = table.concat(lines, "\n")
-        local file    = io.open(path, "w")
+        local sep     = (crlf_by_path[path] or false) and "\r\n" or "\n"
+        local content = table.concat(lines, sep)
+        local file    = io.open(path, "wb")  -- binary: preserve chosen separator
         if file then
             file:write(content)
             file:close()
@@ -965,4 +970,3 @@ end
 M.extract_write_preview = extract_write_preview
 
 return M
-

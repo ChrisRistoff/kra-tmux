@@ -82,6 +82,7 @@ async function getForegroundCommand(panePid: string): Promise<string> {
         // assume the last child is the foreground process
         const lastPid = childPids[childPids.length - 1];
         const { stdout: cmd } = await bash.execCommand(`ps -p ${lastPid} -o comm=`);
+
         return cmd.toString().trim();
     } catch (e) {
         return "";

@@ -62,6 +62,7 @@ describe('Nvim Session Operations', () => {
                 if (path === nvimSessionsPath) return true;
                 if (path === fullFolderPath) return true;
                 if (path === fullSessionPath) return true;
+
                 return false;
             });
 

@@ -1,0 +1,121 @@
+import { CopilotClient, type ModelInfo } from "@github/copilot-sdk";
+import { aiRoles } from '@/AI/shared/data/roles';
+import * as conversation from '@/AI/AIAgent/main/agentConversation';
+import { getAgentDefaultModel, getGithubToken } from '@/AI/AIAgent/utils/agentSettings';
+import * as ui from '@/UI/generalUI';
+
+type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
+interface PickedModel {
+    modelId: string;
+    reasoningEffort?: ReasoningEffort;
+}
+
+
+function sortModels(models: ModelInfo[]): ModelInfo[] {
+    return [...models].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function formatBillingMultiplier(model: ModelInfo): string {
+    const multiplier = model.billing?.multiplier;
+
+    if (!multiplier) {
+        return '';
+    }
+
+    return ` [x${multiplier}]`;
+}
+
+async function pickReasoningEffort(model: ModelInfo): Promise<ReasoningEffort | undefined> {
+    const supported = model.supportedReasoningEfforts;
+
+    if (!supported?.length) {
+        return undefined;
+    }
+
+    const defaultEffort = model.defaultReasoningEffort;
+    const itemsArray = supported.map((effort) =>
+        defaultEffort === effort ? `${effort} (default)` : effort
+    );
+
+    const selected = await ui.searchSelectAndReturnFromArray({
+        itemsArray,
+        prompt: 'Select reasoning effort level',
+    });
+
+    return selected.replace(' (default)', '') as ReasoningEffort;
+}
+
+async function pickCopilotModel(client: CopilotClient): Promise<PickedModel> {
+    const models = sortModels(await client.listModels());
+    const defaultModelId = await getAgentDefaultModel();
+
+    if (defaultModelId && models.some((model) => model.id === defaultModelId)) {
+        const defaultModel = models.find((m) => m.id === defaultModelId)!;
+        const reasoningEffort = await pickReasoningEffort(defaultModel);
+
+        return { modelId: defaultModelId, ...(reasoningEffort ? { reasoningEffort } : {}) };
+    }
+
+    const labelToModel = new Map<string, ModelInfo>();
+    const itemsArray = models.map((model) => {
+        const disabled = model.policy?.state === 'disabled';
+        const billing = formatBillingMultiplier(model);
+        const label = disabled
+            ? `[DISABLED] ${model.name} (${model.id})${billing}`
+            : `${model.name} (${model.id})${billing}`;
+        labelToModel.set(label, model);
+
+        return label;
+    });
+
+    const selectedLabel = await ui.searchSelectAndReturnFromArray({
+        itemsArray,
+        prompt: 'Select a Copilot model',
+    });
+
+    const selectedModel = labelToModel.get(selectedLabel);
+
+    if (!selectedModel) {
+        throw new Error('No Copilot model selected.');
+    }
+
+    const reasoningEffort = await pickReasoningEffort(selectedModel);
+
+    return { modelId: selectedModel.id, ...(reasoningEffort ? { reasoningEffort } : {}) };
+}
+
+export async function startAgentChat(): Promise<void> {
+    const githubToken = getGithubToken();
+    const client = new CopilotClient({
+        ...(githubToken ? { githubToken } : {}),
+        useLoggedInUser: !githubToken,
+    });
+
+    try {
+        await client.start();
+
+        const authStatus = await client.getAuthStatus();
+
+        if (!authStatus.isAuthenticated && !githubToken) {
+            throw new Error(authStatus.statusMessage || 'GitHub Copilot SDK authentication is not configured.');
+        }
+
+        const role = await ui.searchSelectAndReturnFromArray({
+            itemsArray: Object.keys(aiRoles),
+            prompt: 'Select an agent role',
+        });
+        const { modelId, reasoningEffort } = await pickCopilotModel(client);
+
+        await conversation.converseAgent({
+            client,
+            role,
+            model: modelId,
+            ...(reasoningEffort ? { reasoningEffort } : {}),
+        });
+
+    } catch (error) {
+        await client.forceStop();
+        throw error;
+    }
+}
