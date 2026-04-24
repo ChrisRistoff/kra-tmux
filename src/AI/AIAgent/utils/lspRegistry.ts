@@ -57,10 +57,10 @@ export class LspRegistry {
     }
 
     private installShutdownHooks(): void {
-        const handler = (): void => { void this.shutdownAll(); };
+        const handler = (): void => { this.shutdownAll().catch(() => { /* shutting down */ }); };
         process.once('exit', handler);
-        process.once('SIGINT', () => { void this.shutdownAll().then(() => process.exit(130)); });
-        process.once('SIGTERM', () => { void this.shutdownAll().then(() => process.exit(143)); });
+        process.once('SIGINT', () => { this.shutdownAll().catch(() => undefined).then(() => process.exit(130)); });
+        process.once('SIGTERM', () => { this.shutdownAll().catch(() => undefined).then(() => process.exit(143)); });
     }
 
     hasServerFor(filePath: string): boolean {

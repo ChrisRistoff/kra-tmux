@@ -1,7 +1,5 @@
 import * as fs from 'fs/promises';
 import path from 'path';
-
-import { aiRoles } from '@/AI/shared/data/roles';
 import { getConfiguredMcpServers } from '@/AI/AIAgent/utils/agentSettings';
 import {
     createProposalWorkspace,
@@ -144,9 +142,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
 
         systemMessage: {
             mode: 'append',
-            content: `${aiRoles[options.role]}
-
-<turn_completion priority="critical">
+            content: `<turn_completion priority="critical">
 End every turn by calling \`confirm_task_complete\` with a concise summary and 2–4 concrete choices. This applies whether you finished, are blocked, need clarification, or are unsure what to do next. Never end a turn with plain text or without calling \`confirm_task_complete\` — the user relies on this signal to know when you are done and to respond appropriately.
 </turn_completion>
 
@@ -154,33 +150,72 @@ End every turn by calling \`confirm_task_complete\` with a concise summary and 2
 You are in a detached proposal workspace. Edits land in the real repository only after the user reviews the resulting git diff in Neovim, so edit files freely.
 </workspace>
 
-<tool_usage>
-Default workflow: search → outline → read_lines → edit_lines. Run independent calls in parallel.
+<reading_code>
+**Check file size FIRST to choose the right workflow.**
 
-Searching — \`kra-file-context:search\` (replaces grep/glob, both disabled).
-Use \`name_pattern\` (glob) to find files, \`content_pattern\` (regex) to grep contents, or both together to intersect. Every result is annotated \`path (N lines)\` so you can decide read-whole vs outline up front.
+For small files (≤150 lines):
+  1. Call read_lines for the entire file — the tool rejects it if >150 lines and tells you to call get_outline first
+  2. No outline step needed
 
-Reading code
-  - Files ≤150 lines: read whole with \`read_lines\`.
-  - Files >150 lines: call \`get_outline\` FIRST, then \`read_lines\` on the exact range, or \`read_function\` if you know the symbol. Never guess ranges — speculative reads (e.g. "first 100 + last 100") waste the same tokens you were trying to save.
+For large files (>150 lines):
+  1. Call get_outline to see line count + symbol locations (shows which functions/classes are where)
+  2. Find the exact range you need (use the line numbers from get_outline)
+  3. Call read_lines ONLY on that specific range
+  4. Example: if you see a function starts at line 203 and ends at line 215, read_lines start_line:203 end_line:215 — not the whole file
 
-Reading data files (JSON/YAML/TOML/MD/.env/logs)
-\`get_outline\` still returns the line count even with no symbols; use it to size a small \`read_lines\` window. The built-in \`view\` / \`read_file\` tools are disabled.
+**Why this matters:** When you read more than you need, you waste tokens. The outline tells you exactly where to look, so use it to find the minimal range, then read only that range.
 
-Editing
-Required workflow: \`get_outline\` → \`read_lines\` on the exact target range → \`edit_lines\`. For multiple small changes to one file, make multiple targeted \`edit_lines\` calls — one per section. Never rewrite a file you only partially read; you will destroy content you never saw. Always edit with the smallest possible range, never the whole file.
+Reading data files (JSON/YAML/TOML/MD/.env/logs):
+  - Always call get_outline first to see line count
+  - Then read_lines on a targeted range, not the whole file
+  - Example: For a large log file (500 lines), don't read all 500. Read around the error line you're looking for.
 
-Creating new files: use \`create_file\`.
-</tool_usage>
+Searching:
+  Use \`kra-file-context:search\` (replaces grep/glob, both disabled).
+  Use \`name_pattern\` (glob) for file names, \`content_pattern\` (regex) for content.
+  Results show line count — use that to decide if you need get_outline before read_lines.
+</reading_code>
 
-Reminder: end every turn with \`confirm_task_complete\`.`,
+<surgical_edits>
+**Goal: Edit ONLY the lines that must change. Do not rewrite surrounding context.**
+
+Workflow:
+  1. Call get_outline to find what you need
+  2. Call read_lines on the EXACT range containing your change
+  ⚠ You MUST read the target lines before editing — the tool rejects edits without a prior read.
+  3. read_lines prefixes every line like \`  142: code here\` — use those numbers directly as startLine/endLine
+  4. Call edit_lines with startLine and endLine as tight as possible
+
+**Before calling edit_lines — declare your ranges:**
+Output \`Editing: L14-15, L88-88, L142-145\`. **Every line in each range must change** — if a line is only there to preserve context, remove it from the range entirely (the tool keeps untouched lines automatically). If any range spans a whole function but only 1-2 lines change inside it, split into tight sub-ranges.
+
+
+Critical rule: Every line between startLine and endLine will be REPLACED with your newContent.
+  - If you read lines 100–180 and need to change only lines 142–145, call edit_lines with startLine:142 endLine:145
+  - Do NOT include unchanged lines 100–141 and 146–180 in your newContent
+  - If only line 88 changes, use startLine:88 endLine:88 (single-line range: 88–88)
+  - Do NOT pass the whole 100-line range just because you read it
+
+For multiple changes in the same file:
+  - Use the multi-edit array form with several tight ranges
+  - Example: lines 12–12, lines 47–49, lines 88–88 all in one call
+  - Do NOT combine them into a single large range
+
+**Why this matters:** Every line in the range is replaced verbatim. Stale surrounding context silently overwrites newer code you didn't intend to change.
+</surgical_edits>
+
+<creating_files>
+Use \`create_file\` for new files only. It refuses if the file already exists. For existing files, use edit_lines.
+</creating_files>
+
+Reminder: Always call confirm_task_complete before ending your turn.`,
         },
     });
+
 
     const state: AgentConversationState = {
         chatFile,
         model: options.model,
-        role: options.role,
         client: options.client,
         session,
         nvim: nvimClient,

@@ -50,7 +50,7 @@ function coerceArray(value: unknown): unknown[] | undefined {
     return undefined;
 }
 
-function coerceNumberArray(value: unknown): number[] | undefined {
+export function coerceNumberArray(value: unknown): number[] | undefined {
     const arr = coerceArray(value);
 
     if (!arr) return undefined;
@@ -88,7 +88,7 @@ function coerceStringArray(value: unknown): string[] | undefined {
     return out;
 }
 
-function coerceNumber(value: unknown): number | undefined {
+export function coerceNumber(value: unknown): number | undefined {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
 
     if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {

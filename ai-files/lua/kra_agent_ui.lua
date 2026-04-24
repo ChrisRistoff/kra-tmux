@@ -1,7 +1,7 @@
 local M = {}
 
 local popups = require("kra_agent_popups")
-local diff   = require("kra_agent_diff")
+local diff = require("kra_agent_diff")
 
 local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 local uv = vim.uv or vim.loop
@@ -33,7 +33,9 @@ local function current_icon()
 end
 
 local function render_notification(timeout)
-    if state.popups_hidden then return end
+    if state.popups_hidden then
+        return
+    end
     state.notification = vim.notify(state.body or "", state.level, {
         title = state.title,
         replace = state.notification,
@@ -46,25 +48,35 @@ end
 
 local function dismiss_notification()
     if state.notification then
-        pcall(function() require("notify").dismiss({ pending = false, silent = true }) end)
+        pcall(function()
+            require("notify").dismiss({ pending = false, silent = true })
+        end)
         state.notification = nil
     end
 end
 
 local function stop_spinner()
-    if not state.timer then return end
+    if not state.timer then
+        return
+    end
     state.timer:stop()
     state.timer:close()
     state.timer = nil
 end
 
 local function start_spinner()
-    if state.timer then return end
+    if state.timer then
+        return
+    end
     state.timer = uv.new_timer()
-    state.timer:start(0, 120, vim.schedule_wrap(function()
-        state.spinner_index = (state.spinner_index % #spinner_frames) + 1
-        render_notification(false)
-    end))
+    state.timer:start(
+        0,
+        120,
+        vim.schedule_wrap(function()
+            state.spinner_index = (state.spinner_index % #spinner_frames) + 1
+            render_notification(false)
+        end)
+    )
 end
 
 local function upsert_history(tool_name, details, args_json)
@@ -78,11 +90,11 @@ local function upsert_history(tool_name, details, args_json)
     end
 
     local entry = {
-        args_json  = args_json or "",
-        details    = details,
+        args_json = args_json or "",
+        details = details,
         started_at = timestamp,
-        status     = "running",
-        title      = tool_name,
+        status = "running",
+        title = tool_name,
         updated_at = timestamp,
     }
     table.insert(state.history, entry)
@@ -98,10 +110,10 @@ local function complete_history(tool_name, details, success)
         entry = upsert_history(tool_name, details)
     end
 
-    entry.title      = tool_name
-    entry.result     = details
-    entry.details    = details
-    entry.status     = success and "done" or "failed"
+    entry.title = tool_name
+    entry.result = details
+    entry.details = details
+    entry.status = success and "done" or "failed"
     entry.updated_at = os.date("%H:%M:%S")
     state.active_entry_index = nil
 end
@@ -140,33 +152,31 @@ local function open_history_view(entry)
     -- LEFT: args JSON
     local left_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, vim.split(args_text, "\n", { plain = true }))
-    vim.bo[left_buf].buftype    = "nofile"
-    vim.bo[left_buf].bufhidden  = "wipe"
-    vim.bo[left_buf].swapfile   = false
-    vim.bo[left_buf].filetype   = "json"
+    vim.bo[left_buf].buftype = "nofile"
+    vim.bo[left_buf].bufhidden = "wipe"
+    vim.bo[left_buf].swapfile = false
+    vim.bo[left_buf].filetype = "json"
     vim.bo[left_buf].modifiable = false
-    vim.bo[left_buf].modified   = false
+    vim.bo[left_buf].modified = false
     local left_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(left_win, left_buf)
     vim.wo[left_win].number = true
-    vim.wo[left_win].wrap   = false
-    vim.wo[left_win].winbar = string.format(
-        " 󰘦 ARGS  %s  [%s] ", entry.title or "tool", entry.status or "?"
-    )
+    vim.wo[left_win].wrap = false
+    vim.wo[left_win].winbar = string.format(" 󰘦 ARGS  %s  [%s] ", entry.title or "tool", entry.status or "?")
 
     -- RIGHT: result
     vim.cmd("vsplit")
     local right_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(right_buf, 0, -1, false, vim.split(result_text, "\n", { plain = true }))
-    vim.bo[right_buf].buftype    = "nofile"
-    vim.bo[right_buf].bufhidden  = "wipe"
-    vim.bo[right_buf].swapfile   = false
+    vim.bo[right_buf].buftype = "nofile"
+    vim.bo[right_buf].bufhidden = "wipe"
+    vim.bo[right_buf].swapfile = false
     vim.bo[right_buf].modifiable = false
-    vim.bo[right_buf].modified   = false
+    vim.bo[right_buf].modified = false
     local right_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(right_win, right_buf)
     vim.wo[right_win].number = true
-    vim.wo[right_win].wrap   = true
+    vim.wo[right_win].wrap = true
     vim.wo[right_win].winbar = string.format(
         " 󰊕 RESULT  %s  ·  %s → %s ",
         entry.title or "tool",
@@ -175,7 +185,9 @@ local function open_history_view(entry)
     )
 
     local function close_view()
-        if vim.api.nvim_tabpage_is_valid(view_tab) then vim.cmd("tabclose") end
+        if vim.api.nvim_tabpage_is_valid(view_tab) then
+            vim.cmd("tabclose")
+        end
         if vim.api.nvim_tabpage_is_valid(original_tab) then
             vim.api.nvim_set_current_tabpage(original_tab)
         end
@@ -184,9 +196,9 @@ local function open_history_view(entry)
     local base = { silent = true, nowait = true }
     for _, buf in ipairs({ left_buf, right_buf }) do
         local o = vim.tbl_extend("force", base, { buffer = buf })
-        vim.keymap.set("n", "q",       close_view, vim.tbl_extend("force", o, { desc = "Close tool view" }))
-        vim.keymap.set("n", "<Tab>",   "<C-w>w",   vim.tbl_extend("force", o, { desc = "Next pane" }))
-        vim.keymap.set("n", "<S-Tab>", "<C-w>W",   vim.tbl_extend("force", o, { desc = "Prev pane" }))
+        vim.keymap.set("n", "q", close_view, vim.tbl_extend("force", o, { desc = "Close tool view" }))
+        vim.keymap.set("n", "<Tab>", "<C-w>w", vim.tbl_extend("force", o, { desc = "Next pane" }))
+        vim.keymap.set("n", "<S-Tab>", "<C-w>W", vim.tbl_extend("force", o, { desc = "Prev pane" }))
     end
 
     vim.api.nvim_set_current_win(left_win)
@@ -265,6 +277,7 @@ function M.finish_turn()
     state.icon = "󰚩"
     state.level = vim.log.levels.INFO
     state.statusline = "Ready"
+    render_notification(3000)
     redraw_statusline()
 end
 
@@ -275,6 +288,7 @@ function M.ready_for_next_prompt()
     state.icon = "󰚩"
     state.level = vim.log.levels.INFO
     state.statusline = "Ready"
+    render_notification(3000)
     redraw_statusline()
 end
 
@@ -294,11 +308,11 @@ end
 
 function M.show_history()
     local ok, err = pcall(function()
-        local pickers      = require("telescope.pickers")
-        local finders      = require("telescope.finders")
-        local previewers   = require("telescope.previewers")
-        local conf         = require("telescope.config").values
-        local actions      = require("telescope.actions")
+        local pickers = require("telescope.pickers")
+        local finders = require("telescope.finders")
+        local previewers = require("telescope.previewers")
+        local conf = require("telescope.config").values
+        local actions = require("telescope.actions")
         local action_state = require("telescope.actions.state")
 
         if #state.history == 0 then
@@ -311,46 +325,61 @@ function M.show_history()
             table.insert(results, state.history[index])
         end
 
-        pickers.new({
-            layout_strategy = "horizontal",
-            layout_config   = { preview_width = 0.55, width = 0.95, height = 0.85 },
-        }, {
-            prompt_title = string.format("Agent Tool History  (%d calls)", #state.history),
-            finder = finders.new_table({
-                results = results,
-                entry_maker = function(entry)
-                    local icon = entry.status == "done"   and "󰄬"
-                               or entry.status == "failed" and "󰅖"
-                               or "󱁤"
-                    return {
-                        value   = entry,
-                        display = string.format("%s %s · %s",
-                            icon, entry.title, entry.updated_at or entry.started_at or ""),
-                        ordinal = string.format("%s %s %s",
-                            entry.title or "", entry.status or "", entry.details or ""),
-                    }
+        pickers
+            .new({
+                layout_strategy = "horizontal",
+                layout_config = { preview_width = 0.55, width = 0.95, height = 0.85 },
+            }, {
+                prompt_title = string.format("Agent Tool History  (%d calls)", #state.history),
+                finder = finders.new_table({
+                    results = results,
+                    entry_maker = function(entry)
+                        local icon = entry.status == "done" and "󰄬" or entry.status == "failed" and "󰅖" or "󱁤"
+                        return {
+                            value = entry,
+                            display = string.format(
+                                "%s %s · %s",
+                                icon,
+                                entry.title,
+                                entry.updated_at or entry.started_at or ""
+                            ),
+                            ordinal = string.format(
+                                "%s %s %s",
+                                entry.title or "",
+                                entry.status or "",
+                                entry.details or ""
+                            ),
+                        }
+                    end,
+                }),
+                previewer = previewers.new_buffer_previewer({
+                    title = "Tool result",
+                    define_preview = function(self, entry)
+                        local item = entry.value
+                        local text = item.result or item.details or "(no result)"
+                        vim.api.nvim_buf_set_lines(
+                            self.state.bufnr,
+                            0,
+                            -1,
+                            false,
+                            vim.split(text, "\n", { plain = true })
+                        )
+                    end,
+                }),
+                sorter = conf.generic_sorter({}),
+                attach_mappings = function(prompt_bufnr)
+                    actions.select_default:replace(function()
+                        local sel = action_state.get_selected_entry()
+                        actions.close(prompt_bufnr)
+                        if not sel then
+                            return
+                        end
+                        open_history_view(sel.value)
+                    end)
+                    return true
                 end,
-            }),
-            previewer = previewers.new_buffer_previewer({
-                title = "Tool result",
-                define_preview = function(self, entry)
-                    local item = entry.value
-                    local text = item.result or item.details or "(no result)"
-                    vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
-                        vim.split(text, "\n", { plain = true }))
-                end,
-            }),
-            sorter = conf.generic_sorter({}),
-            attach_mappings = function(prompt_bufnr)
-                actions.select_default:replace(function()
-                    local sel = action_state.get_selected_entry()
-                    actions.close(prompt_bufnr)
-                    if not sel then return end
-                    open_history_view(sel.value)
-                end)
-                return true
-            end,
-        }):find()
+            })
+            :find()
     end)
 
     if not ok then

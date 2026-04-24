@@ -66,7 +66,9 @@ local function hide_permission_window()
         vim.bo[permission.buf].bufhidden = "hide"
     end
     if permission.popup then
-        pcall(function() permission.popup:hide() end)
+        pcall(function()
+            permission.popup:hide()
+        end)
     elseif permission.win and vim.api.nvim_win_is_valid(permission.win) then
         vim.api.nvim_win_close(permission.win, false)
         permission.win = nil
@@ -78,7 +80,9 @@ local function show_permission_window()
         return
     end
     if permission.popup then
-        pcall(function() permission.popup:show() end)
+        pcall(function()
+            permission.popup:show()
+        end)
     elseif permission.buf and vim.api.nvim_buf_is_valid(permission.buf) then
         if permission.win and vim.api.nvim_win_is_valid(permission.win) then
             return
@@ -149,6 +153,7 @@ local function build_permission_actions(preview)
         label = "Allow this tool family",
         description = "Skip repeated approvals for the same tool family this session.",
     })
+
     table.insert(actions, {
         id = "yolo",
         key = "y",
@@ -156,6 +161,7 @@ local function build_permission_actions(preview)
         label = "Enable YOLO mode",
         description = "Stop asking for tool approvals until you reset the session mode.",
     })
+
     table.insert(actions, {
         id = "deny",
         key = "d",
@@ -244,7 +250,9 @@ local function close_user_input()
     end
 
     if user_input_state.popup then
-        pcall(function() user_input_state.popup:unmount() end)
+        pcall(function()
+            user_input_state.popup:unmount()
+        end)
     elseif user_input_state.win and vim.api.nvim_win_is_valid(user_input_state.win) then
         vim.api.nvim_win_close(user_input_state.win, true)
     end
@@ -257,7 +265,9 @@ local function close_user_input()
 end
 
 local function hide_user_input_window()
-    if not user_input_state.popup and not (user_input_state.win and vim.api.nvim_win_is_valid(user_input_state.win)) then
+    if
+        not user_input_state.popup and not (user_input_state.win and vim.api.nvim_win_is_valid(user_input_state.win))
+    then
         return
     end
     -- Switch bufhidden to "hide" so the buffer survives its window closing
@@ -265,7 +275,9 @@ local function hide_user_input_window()
         vim.bo[user_input_state.buf].bufhidden = "hide"
     end
     if user_input_state.popup then
-        pcall(function() user_input_state.popup:hide() end)
+        pcall(function()
+            user_input_state.popup:hide()
+        end)
     else
         vim.api.nvim_win_close(user_input_state.win, false)
         user_input_state.win = nil
@@ -277,22 +289,28 @@ local function show_user_input_window()
         return
     end
     if user_input_state.popup then
-        pcall(function() user_input_state.popup:show() end)
+        pcall(function()
+            user_input_state.popup:show()
+        end)
     elseif not (user_input_state.win and vim.api.nvim_win_is_valid(user_input_state.win)) then
         -- Re-open the window for the existing buffer
         local width = math.min(math.max(70, math.floor(vim.o.columns * 0.65)), 120)
         local height = math.min(math.max(8, math.floor(vim.o.lines * 0.5)), math.floor(vim.o.lines * 0.85))
         local row = math.max(1, math.floor((vim.o.lines - height) / 2) - 1)
         local col = math.floor((vim.o.columns - width) / 2)
+
         local win = vim.api.nvim_open_win(user_input_state.buf, true, {
             relative = "editor",
-            row = row, col = col,
-            width = width, height = height,
+            row = row,
+            col = col,
+            width = width,
+            height = height,
             border = "rounded",
             style = "minimal",
             title = " Agent Question ",
             title_pos = "center",
         })
+
         user_input_state.win = win
         vim.wo[win].wrap = true
         vim.wo[win].cursorline = true
@@ -360,7 +378,9 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
     close_user_input()
 
     choices = choices or {}
-    if allow_freeform == nil then allow_freeform = true end
+    if allow_freeform == nil then
+        allow_freeform = true
+    end
 
     local selected_index = 1
 
@@ -373,6 +393,7 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
         close_user_input()
         vim.schedule(function()
             local nui_ok, Input = pcall(require, "nui.input")
+
             if nui_ok then
                 local input_popup = Input({
                     position = "50%",
@@ -397,6 +418,7 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
                         send("", true)
                     end,
                 })
+
                 input_popup:mount()
                 local nui_event = require("nui.utils.autocmd").event
                 input_popup:on(nui_event.BufLeave, function()
@@ -406,33 +428,43 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
                 -- fallback: small floating window in insert mode
                 local fbuf = vim.api.nvim_create_buf(false, true)
                 local fwidth = math.min(60, vim.o.columns - 4)
+
                 local fwin = vim.api.nvim_open_win(fbuf, true, {
                     relative = "editor",
                     row = math.floor((vim.o.lines - 3) / 2),
                     col = math.floor((vim.o.columns - fwidth) / 2),
-                    width = fwidth, height = 1,
+                    width = fwidth,
+                    height = 1,
                     border = "rounded",
                     style = "minimal",
                     title = " Type your answer (Enter to submit, Esc to cancel) ",
                     title_pos = "center",
                 })
+
                 if prefill and prefill ~= "" then
                     vim.api.nvim_buf_set_lines(fbuf, 0, -1, false, { prefill })
                 end
+
                 vim.cmd("startinsert!")
                 local function submit()
                     local text = vim.api.nvim_buf_get_lines(fbuf, 0, 1, false)[1] or ""
-                    if vim.api.nvim_win_is_valid(fwin) then vim.api.nvim_win_close(fwin, true) end
+                    if vim.api.nvim_win_is_valid(fwin) then
+                        vim.api.nvim_win_close(fwin, true)
+                    end
                     pcall(vim.api.nvim_buf_delete, fbuf, { force = true })
                     send(text, true)
                 end
+
                 local function cancel()
-                    if vim.api.nvim_win_is_valid(fwin) then vim.api.nvim_win_close(fwin, true) end
+                    if vim.api.nvim_win_is_valid(fwin) then
+                        vim.api.nvim_win_close(fwin, true)
+                    end
                     pcall(vim.api.nvim_buf_delete, fbuf, { force = true })
                     send("", true)
                 end
+
                 local fopts = { buffer = fbuf, silent = true }
-                vim.keymap.set({ "i", "n" }, "<CR>",  submit, fopts)
+                vim.keymap.set({ "i", "n" }, "<CR>", submit, fopts)
                 vim.keymap.set({ "i", "n" }, "<Esc>", cancel, fopts)
             end
         end)
@@ -448,11 +480,36 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
 
     local n_choices = #all_choices
 
-    -- Compute height from actual content: question lines + 3 section lines + choices.
-    local question_line_count = #vim.split(question or "", "\n", { plain = true })
-    local content_lines = question_line_count + 3 + n_choices
     local width = math.min(math.max(70, math.floor(vim.o.columns * 0.65)), 120)
-    local height = math.min(math.max(content_lines + 2, 8), math.floor(vim.o.lines * 0.85))
+    -- Inner text width = popup width minus the 2 border columns nui draws
+    -- around a rounded border. Used to estimate how many display rows each
+    -- logical line will occupy once Neovim soft-wraps it (`wrap = true`).
+    local inner_width = math.max(1, width - 2)
+
+    local function wrapped_rows(text)
+        local display = vim.fn.strdisplaywidth(text or "")
+        if display == 0 then
+            return 1
+        end
+        return math.ceil(display / inner_width)
+    end
+
+    -- Count the actual rendered rows: each question line (split on \n) wraps
+    -- independently, then the 3 separator lines, then each choice line. Without
+    -- this, long single-line questions pushed the choices off the bottom of the
+    -- popup because the previous logic only counted hard newlines.
+    local content_rows = 0
+    for _, line in ipairs(vim.split(question or "", "\n", { plain = true })) do
+        content_rows = content_rows + wrapped_rows(line)
+    end
+    content_rows = content_rows + 3 -- blank + "Actions ..." header + blank
+    for _, choice in ipairs(all_choices) do
+        -- "❯ " or "  " prefix adds 2 display columns
+        content_rows = content_rows + wrapped_rows("  " .. choice)
+    end
+
+    local max_height = math.max(8, math.floor(vim.o.lines * 0.85))
+    local height = math.min(math.max(content_rows + 2, 8), max_height)
     local buf
     local win
 
@@ -469,7 +526,7 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
                 text = {
                     top = "  Agent Question ",
                     top_align = "center",
-                    bottom = " ↑/↓ navigate · <CR> select · q cancel ",
+                    bottom = " ↑/↓ navigate · <CR> select · q cancel · <Space>t hide ",
                     bottom_align = "center",
                 },
             },
@@ -479,6 +536,7 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
                 wrap = true,
             },
         })
+
         popup:mount()
         buf = popup.bufnr
         win = popup.winid
@@ -486,11 +544,14 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
     else
         local row = math.max(1, math.floor((vim.o.lines - height) / 2) - 1)
         local col = math.floor((vim.o.columns - width) / 2)
+
         buf = vim.api.nvim_create_buf(false, true)
         win = vim.api.nvim_open_win(buf, true, {
             relative = "editor",
-            row = row, col = col,
-            width = width, height = height,
+            row = row,
+            col = col,
+            width = width,
+            height = height,
             border = "rounded",
             style = "minimal",
             title = " Agent Question ",
@@ -525,9 +586,31 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
 
     local opts = { buffer = buf, silent = true, nowait = true }
     vim.keymap.set("n", "<CR>", confirm, vim.tbl_extend("force", opts, { desc = "Select answer" }))
-    vim.keymap.set("n", "<Down>", function() move(1) end, vim.tbl_extend("force", opts, { desc = "Next choice" }))
-    vim.keymap.set("n", "<Up>", function() move(-1) end, vim.tbl_extend("force", opts, { desc = "Prev choice" }))
-    vim.keymap.set("n", "q", function() send("", true) end, vim.tbl_extend("force", opts, { desc = "Cancel" }))
+    vim.keymap.set("n", "<Down>", function()
+        move(1)
+    end, vim.tbl_extend("force", opts, { desc = "Next choice" }))
+    vim.keymap.set("n", "<Up>", function()
+        move(-1)
+    end, vim.tbl_extend("force", opts, { desc = "Prev choice" }))
+    vim.keymap.set("n", "q", function()
+        send("", true)
+    end, vim.tbl_extend("force", opts, { desc = "Cancel" }))
+
+    -- Buffer-local toggle so <Space>t (the global agent-popup toggle) works
+    -- even when the popup is focused. Without this, depending on Neovim's
+    -- timing/leader resolution, the global mapping can fail to fire from
+    -- inside the popup buffer.
+    local function toggle_from_popup()
+        vim.schedule(function()
+            local ok, ui = pcall(require, "kra_agent_ui")
+            if ok then
+                ui.toggle_popups()
+            end
+        end)
+    end
+
+    vim.keymap.set("n", "<Space>t", toggle_from_popup, vim.tbl_extend("force", opts, { desc = "Toggle agent popups" }))
+    vim.keymap.set("n", "<leader>t", toggle_from_popup, vim.tbl_extend("force", opts, { desc = "Toggle agent popups" }))
 
     -- Number shortcuts for quick selection
     for i = 1, math.min(n_choices, 9) do
@@ -568,9 +651,8 @@ function M.request_permission(channel_id, payload)
     local popup_ok, Popup = pcall(require, "nui.popup")
 
     if popup_ok then
-        local footer = preview
-            and " <CR>/a allow · e diff review · j raw json · s family · y yolo · d deny "
-            or " <CR>/a allow · e edit args · s family · y yolo · d deny "
+        local footer = preview and " <CR>/a allow · e diff review · j raw json · s family · y yolo · d deny · <Space>t hide "
+            or " <CR>/a allow · e edit args · s family · y yolo · d deny · <Space>t hide "
         local popup = Popup({
             enter = true,
             focusable = true,
@@ -676,19 +758,45 @@ function M.request_permission(channel_id, payload)
     end
 
     local opts = { buffer = buf, silent = true, nowait = true }
-    vim.keymap.set("n", "<CR>", function() execute_action(actions[selected_index].id) end, vim.tbl_extend("force", opts, { desc = "Run selected approval action" }))
-    vim.keymap.set("n", "<Down>", function() move_selection(1) end, vim.tbl_extend("force", opts, { desc = "Next approval action" }))
-    vim.keymap.set("n", "<Up>", function() move_selection(-1) end, vim.tbl_extend("force", opts, { desc = "Previous approval action" }))
-    vim.keymap.set("n", "a", function() execute_action("allow") end, vim.tbl_extend("force", opts, { desc = "Approve tool once" }))
-    vim.keymap.set("n", "e", function() execute_action(preview and "edit-diff" or "edit-json") end, vim.tbl_extend("force", opts, { desc = "Open approval editor" }))
+    vim.keymap.set("n", "<CR>", function()
+        execute_action(actions[selected_index].id)
+    end, vim.tbl_extend("force", opts, { desc = "Run selected approval action" }))
+    vim.keymap.set("n", "<Down>", function()
+        move_selection(1)
+    end, vim.tbl_extend("force", opts, { desc = "Next approval action" }))
+    vim.keymap.set("n", "<Up>", function()
+        move_selection(-1)
+    end, vim.tbl_extend("force", opts, { desc = "Previous approval action" }))
+    vim.keymap.set("n", "a", function()
+        execute_action("allow")
+    end, vim.tbl_extend("force", opts, { desc = "Approve tool once" }))
+    vim.keymap.set("n", "e", function()
+        execute_action(preview and "edit-diff" or "edit-json")
+    end, vim.tbl_extend("force", opts, { desc = "Open approval editor" }))
     if preview then
-        vim.keymap.set("n", "J", function() execute_action("edit-json") end, vim.tbl_extend("force", opts, { desc = "Edit raw tool JSON" }))
-        vim.keymap.set("n", "<leader>j", function() execute_action("edit-json") end, vim.tbl_extend("force", opts, { desc = "Edit raw tool JSON" }))
+        vim.keymap.set("n", "J", function()
+            execute_action("edit-json")
+        end, vim.tbl_extend("force", opts, { desc = "Edit raw tool JSON" }))
+        vim.keymap.set("n", "<leader>j", function()
+            execute_action("edit-json")
+        end, vim.tbl_extend("force", opts, { desc = "Edit raw tool JSON" }))
     end
-    vim.keymap.set("n", "s", function() execute_action("allow-family") end, vim.tbl_extend("force", opts, { desc = "Allow this tool family for session" }))
-    vim.keymap.set("n", "y", function() execute_action("yolo") end, vim.tbl_extend("force", opts, { desc = "Enable YOLO mode" }))
-    vim.keymap.set("n", "d", function() execute_action("deny") end, vim.tbl_extend("force", opts, { desc = "Deny tool call" }))
-    vim.keymap.set("n", "q", function() execute_action("deny") end, vim.tbl_extend("force", opts, { desc = "Close and deny" }))
+    vim.keymap.set("n", "s", function()
+        execute_action("allow-family")
+    end, vim.tbl_extend("force", opts, { desc = "Allow this tool family for session" }))
+    vim.keymap.set("n", "y", function()
+        execute_action("yolo")
+    end, vim.tbl_extend("force", opts, { desc = "Enable YOLO mode" }))
+    vim.keymap.set("n", "d", function()
+        execute_action("deny")
+    end, vim.tbl_extend("force", opts, { desc = "Deny tool call" }))
+    vim.keymap.set("n", "q", function()
+        execute_action("deny")
+    end, vim.tbl_extend("force", opts, { desc = "Close and deny" }))
+
+    if popups_hidden then
+        hide_permission_window()
+    end
 end
 
 function M.set_popups_hidden(hidden)

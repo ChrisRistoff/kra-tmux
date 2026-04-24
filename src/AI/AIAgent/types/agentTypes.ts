@@ -6,7 +6,6 @@ export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface AgentConversationOptions {
     client: CopilotClient;
-    role: string;
     model: string;
     reasoningEffort?: ReasoningEffort;
 }
@@ -19,7 +18,6 @@ export interface AgentUserInputResponse {
 export interface AgentConversationState {
     chatFile: string;
     model: string;
-    role: string;
     client: CopilotClient;
     session: CopilotSession;
     nvim: neovim.NeovimClient;

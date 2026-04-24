@@ -1,5 +1,4 @@
 import { CopilotClient, type ModelInfo } from "@github/copilot-sdk";
-import { aiRoles } from '@/AI/shared/data/roles';
 import * as conversation from '@/AI/AIAgent/main/agentConversation';
 import { getAgentDefaultModel, getGithubToken } from '@/AI/AIAgent/utils/agentSettings';
 import * as ui from '@/UI/generalUI';
@@ -101,15 +100,10 @@ export async function startAgentChat(): Promise<void> {
             throw new Error(authStatus.statusMessage || 'GitHub Copilot SDK authentication is not configured.');
         }
 
-        const role = await ui.searchSelectAndReturnFromArray({
-            itemsArray: Object.keys(aiRoles),
-            prompt: 'Select an agent role',
-        });
         const { modelId, reasoningEffort } = await pickCopilotModel(client);
 
         await conversation.converseAgent({
             client,
-            role,
             model: modelId,
             ...(reasoningEffort ? { reasoningEffort } : {}),
         });

@@ -4,6 +4,8 @@ import path from 'path';
 import * as neovim from 'neovim';
 import type { VimValue } from 'neovim/lib/types/VimValue';
 import {
+    coerceNumber,
+    coerceNumberArray,
     extractEditLinesRequest,
     extractEditRequest,
     extractWriteRequest,
@@ -28,6 +30,8 @@ import type {
     ToolWritePreview,
 } from '@/AI/AIAgent/types/agentTypes';
 import { atomicWriteFile } from '@/AI/AIAgent/utils/fileSafety';
+
+const EDIT_LINES_HARD_CAP = 100;
 
 function quoteForShell(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -237,6 +241,41 @@ export async function buildWritePreview(toolArgs: unknown, workspacePath: string
 }
 
 
+// Builds a compact "File: ... / Line ranges: ..." summary for the file-context
+// `read_lines` and `edit_lines` tool calls so the permission popup shows the
+// targeted ranges at a glance instead of an opaque "Arguments:" placeholder.
+function summarizeLineRanges(args: Record<string, unknown> | undefined): string | undefined {
+    if (!args) return undefined;
+    const filePath = typeof args.file_path === 'string' ? args.file_path : undefined;
+    const startArr = coerceNumberArray(args.startLines);
+    const endArr = coerceNumberArray(args.endLines);
+
+    const ranges: Array<[number, number]> = [];
+    if (startArr && endArr && startArr.length === endArr.length && startArr.length > 0) {
+        for (let i = 0; i < startArr.length; i++) ranges.push([startArr[i], endArr[i]]);
+    } else {
+        const s = coerceNumber(args.start_line);
+        const e = coerceNumber(args.end_line);
+        if (s !== undefined && e !== undefined) ranges.push([s, e]);
+    }
+
+    if (!filePath && ranges.length === 0) return undefined;
+
+    const out: string[] = [];
+    if (filePath) out.push(`File: ${filePath}`);
+    if (ranges.length > 0) {
+        const total = ranges.reduce((acc, [s, e]) => acc + Math.max(0, e - s + 1), 0);
+        const list = ranges
+            .map(([s, e]) => (s === e ? `${s}` : `${s}\u2013${e}`))
+            .join(', ');
+        out.push(
+            `Line ranges: ${list}  (${ranges.length} range${ranges.length === 1 ? '' : 's'}, ${total} line${total === 1 ? '' : 's'})`
+        );
+    }
+
+    return out.join('\n');
+}
+
 export async function buildToolApprovalDetails(input: AgentPreToolUseHookInput, workspacePath: string): Promise<{
     argsJson: string,
     details: string,
@@ -248,13 +287,16 @@ export async function buildToolApprovalDetails(input: AgentPreToolUseHookInput, 
         ? input.toolArgs
         : JSON.stringify(input.toolArgs ?? {}, null, 2);
     const argsRecord = getToolArgsRecord(input.toolArgs);
-    const summary = typeof argsRecord?.command === 'string'
-        ? `Command:\n${argsRecord.command}`
-        : typeof argsRecord?.query === 'string'
-            ? `Query:\n${argsRecord.query}`
-            : typeof argsRecord?.path === 'string'
-                ? `Path:\n${argsRecord.path}`
-                : 'Arguments:';
+    const isLineRangeTool = input.toolName.includes('read_lines') || input.toolName.includes('edit_lines');
+    const lineRangeSummary = isLineRangeTool ? summarizeLineRanges(argsRecord) : undefined;
+    const summary = lineRangeSummary
+        ?? (typeof argsRecord?.command === 'string'
+            ? `Command:\n${argsRecord.command}`
+            : typeof argsRecord?.query === 'string'
+                ? `Query:\n${argsRecord.query}`
+                : typeof argsRecord?.path === 'string'
+                    ? `Path:\n${argsRecord.path}`
+                    : 'Arguments:');
     const writePreview = await buildWritePreview(input.toolArgs, workspacePath);
     const sections = [
         `Tool: ${input.toolName}`,
@@ -329,7 +371,7 @@ export async function promptToolApproval(
             }
         };
 
-        const handler = (method: string, args: unknown[]) => {
+        const handler = (method: string, args: unknown[]): void => {
             if (method !== 'tool_permission_decision') {
                 return;
             }
@@ -359,6 +401,7 @@ export async function promptToolApproval(
         };
 
         nvimClient.on('notification', handler);
+
         void nvimClient.executeLua(`require('kra_agent_ui').request_permission(...)`, [
             channelId,
             {
@@ -577,6 +620,39 @@ export async function handlePreToolUse(
         }
     }
 
+    // Upfront cap check for edit_lines: reject ranges >100 lines BEFORE building
+    // the diff or asking for approval. Saves the round-trip and gives the agent
+    // an actionable error in one turn (with concrete split suggestions).
+    if (input.toolName.includes('edit_lines')) {
+        const editReq = extractEditLinesRequest(input.toolArgs, workspacePath);
+        if (editReq) {
+            const starts = editReq.startLines ?? (editReq.startLine !== undefined ? [editReq.startLine] : []);
+            const ends = editReq.endLines ?? (editReq.endLine !== undefined ? [editReq.endLine] : []);
+            const violations: string[] = [];
+            for (let i = 0; i < starts.length; i++) {
+                const span = ends[i] - starts[i] + 1;
+                if (span > EDIT_LINES_HARD_CAP) {
+                    const where = starts.length > 1 ? ` (range ${i})` : '';
+                    const splitCount = Math.ceil(span / EDIT_LINES_HARD_CAP);
+                    violations.push(`${starts[i]}–${ends[i]} = ${span} lines${where}; split into ${splitCount} ranges of <=${EDIT_LINES_HARD_CAP} lines each`);
+                }
+            }
+            if (violations.length > 0) {
+                return {
+                    permissionDecision: 'deny',
+                    permissionDecisionReason: [
+                        `edit_lines hard cap is ${EDIT_LINES_HARD_CAP} lines per range. The following range(s) exceed it:`,
+                        ...violations.map(v => `  - ${v}`),
+                        '',
+                        'Use the multi-edit form (startLines/endLines/newContents arrays) so non-overlapping regions go in a single call.',
+                        'For a near-total file rewrite, split into multiple non-overlapping ranges that each cover <=100 lines of the original file.',
+                        'Do NOT attempt to bypass this cap.',
+                    ].join('\n'),
+                };
+            }
+        }
+    }
+
     if (state.approvalMode === 'yolo' || state.allowedToolFamilies.has(toolFamily)) {
         return (await applyStrReplaceEditorDirectly(input, workspacePath)) ?? { permissionDecision: 'allow' };
     }
@@ -613,20 +689,14 @@ export async function handlePreToolUse(
         return { permissionDecision: 'allow', modifiedArgs };
     }
 
-    // for edit_lines: if the user edited the diff, convert the full-file result back
-    // into line-range args that the MCP server can apply (start=1, end=huge → full replace).
-    // Strip any array-form fields so the MCP server uses the single-edit path.
+    // For edit_lines: if the user edited the diff, we'd want to apply that final
+    // content. But the MCP server's 100-line cap and read-tracking gate are
+    // intentionally absolute (no override). The upfront size check earlier in
+    // this function rejects oversized edit_lines BEFORE the diff opens, so by
+    // this point we know the agent's args are within the cap. Editing the diff
+    // beyond the original line range is not supported — accept the agent's
+    // original args (the user has at least seen the diff) and let MCP apply.
     if (input.toolName.includes('edit_lines') && preview?.applyStrategy === 'edit-tool') {
-        if (userNewStr !== undefined) {
-            const args = getToolArgsRecord(input.toolArgs);
-            const { startLines: _sl, endLines: _el, newContents: _nc, ...baseArgs } = (args ?? {}) as Record<string, unknown> & { startLines?: unknown; endLines?: unknown; newContents?: unknown };
-
-            return {
-                permissionDecision: 'allow',
-                modifiedArgs: { ...baseArgs, start_line: 1, end_line: 999999, new_content: userNewStr, __user_approved: true },
-            };
-        }
-
         return { permissionDecision: 'allow' };
     }
 

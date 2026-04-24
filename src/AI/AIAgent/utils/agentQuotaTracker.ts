@@ -27,6 +27,7 @@ export function setupQuotaTracking(state: AgentConversationState): void {
                 isUnlimitedEntitlement: snap.isUnlimitedEntitlement,
             };
         }
+
         fs.mkdir(path.dirname(QUOTA_CACHE_PATH), { recursive: true })
             .then(async () => fs.writeFile(QUOTA_CACHE_PATH, JSON.stringify({ updatedAt: new Date().toISOString(), snapshots: cache }, null, 2)))
             .catch(() => { /* non-critical */ });

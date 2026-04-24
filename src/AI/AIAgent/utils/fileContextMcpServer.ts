@@ -5,7 +5,7 @@
  *   read_lines(file_path, start, end)   — return a specific line range (1-indexed)
  *   read_function(file_path, name)      — return the body of a named symbol
  *   edit_lines(file_path, ...)          — replace a line range (or multiple ranges)
- *   create_file(file_path, content)     — create/overwrite a file
+ *   create_file(file_path, content)     — create a NEW file (refuses if path exists)
  *
  * The agent is directed to use these tools instead of the built-in str_replace_editor,
  * write_file, and read_file tools which are excluded from the session.
@@ -28,6 +28,18 @@ import {
 import { TOOLS } from './fileContextMcpServerTools';
 import { runLspQuery, LspOp, LspQueryArgs } from './lspQueryHandler';
 import { getLspDiagnosticsForFile } from './lspDiagnosticsBridge';
+
+
+// Belt-and-suspenders: never let an unhandled error from a spawned LSP child
+// (or any other async chain) tear down the MCP server. Without these, a single
+// unhandled rejection or uncaught exception kills the stdio server with no
+// chance for the parent CLI to reconnect, leaving the agent without file tools.
+process.on('uncaughtException', (err) => {
+    process.stderr.write(`[mcp] uncaughtException: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+});
+process.on('unhandledRejection', (reason) => {
+    process.stderr.write(`[mcp] unhandledRejection: ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}\n`);
+});
 
 
 interface JsonRpcRequest {
@@ -141,10 +153,10 @@ function coerceNumber(value: unknown): number | undefined {
 }
 
 
-// Hard cap on a single edit_lines range. There is intentionally NO public
-// override flag — agents cannot bypass this. The internal `__user_approved`
-// flag (set only by agentToolHook when the user accepts a full-file diff)
-// bypasses both this cap and the read-before-edit gate.
+// Hard cap on a single edit_lines range. There is intentionally NO override
+// flag of any kind — neither agents nor MCP clients can bypass this. Larger
+// changes must be split into multiple ranges (multi-edit array form counts
+// each range separately).
 const LARGE_RANGE_THRESHOLD = 100;
 
 // ── Read-before-edit tracker ─────────────────────────────────────────────────
@@ -155,6 +167,14 @@ const LARGE_RANGE_THRESHOLD = 100;
 // or create_file, since line numbers shift and prior reads may no longer be
 // accurate.
 const seenLines = new Map<string, Set<number>>();
+
+// ── Outline-before-read soft gate ────────────────────────────────────────────
+// Files larger than OUTLINE_GATE_THRESHOLD lines that haven't been outlined yet
+// in this session will have their outline returned instead of raw content when
+// read_lines is called. This steers the AI toward targeted reads. Cleared
+// (with seenLines) after each successful edit since line numbers shift.
+const outlinedFiles = new Set<string>();
+const OUTLINE_GATE_THRESHOLD = 150;
 
 function canonicalPath(p: string): string {
     return path.resolve(p);
@@ -186,7 +206,9 @@ function findUnreadGap(filePath: string, start: number, end: number): [number, n
 }
 
 function clearReadCache(filePath: string): void {
-    seenLines.delete(canonicalPath(filePath));
+    const key = canonicalPath(filePath);
+    seenLines.delete(key);
+    outlinedFiles.delete(key);
 }
 
 // Build a compact outline string for read_function not-found errors so we don't
@@ -611,6 +633,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         try {
             const outline = await getFileOutline(filePath);
 
+            outlinedFiles.add(canonicalPath(filePath));
             return textContent(formatOutline(filePath, outline));
         } catch (err) {
             return errorContent(`Could not read file: ${err instanceof Error ? err.message : String(err)}`);
@@ -647,9 +670,23 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         }
 
         try {
+            // Soft gate: if the file hasn't been outlined yet this session, return its
+            // outline instead of raw content so the AI can make a targeted read.
+            if (!outlinedFiles.has(canonicalPath(filePath))) {
+                const outline = await getFileOutline(filePath);
+                if (outline.lineCount > OUTLINE_GATE_THRESHOLD) {
+                    outlinedFiles.add(canonicalPath(filePath));
+                    return errorContent(
+                        `File has ${outline.lineCount} lines — call \`get_outline\` first to identify the exact range you need, then retry read_lines with a targeted range.\n\n` +
+                        formatOutline(filePath, outline)
+                    );
+                }
+            }
+
             if (await isBinaryFile(filePath)) {
                 return errorContent(`File appears to be binary: ${filePath}. Refusing to return its contents.`);
             }
+
 
             const content = await fs.readFile(filePath, 'utf8');
             const lines = content.split('\n');
@@ -658,8 +695,9 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             for (let i = 0; i < startLines.length; i++) {
                 const s = startLines[i];
                 const e = endLines[i];
+                const count = e - s + 1;
                 const numbered = numberLines(lines, s, e);
-                sections.push(isMulti ? `Lines ${s}\u2013${e}:\n${numbered}` : numbered);
+                sections.push(`Lines ${s}\u2013${e} (${count} line${count === 1 ? '' : 's'}):\n${numbered}`);
             }
 
             for (let i = 0; i < startLines.length; i++) markRead(filePath, startLines[i], endLines[i]);
@@ -701,6 +739,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             const numbered = numberLines(lines, range.start, range.end);
 
             markRead(filePath, range.start, range.end);
+            outlinedFiles.add(canonicalPath(filePath));
 
             return textContent(`Lines ${range.start}\u2013${range.end}:\n\n${numbered}`);
         } catch (err) {
@@ -709,7 +748,6 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     }
 
     if (name === 'edit_lines') {
-        const userApproved = args.__user_approved === true;
         let startLines = coerceNumberArray(args.startLines);
         let endLines = coerceNumberArray(args.endLines);
         let newContents = coerceStringArray(args.newContents);
@@ -754,9 +792,8 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             let lines = raw.split('\n');
 
             // Validate range sizes against the ORIGINAL file before applying any edit.
-            // Hard cap: no public override. The internal __user_approved flag (set by
-            // agentToolHook when the user accepts a full-file diff) bypasses both the
-            // size cap and the read-before-edit gate.
+            // Hard cap: no override of any kind. Larger changes must be split into
+            // multiple ranges (multi-edit form counts each range separately).
             for (let i = 0; i < startLines.length; i++) {
                 const start = startLines[i];
                 const end = endLines[i];
@@ -771,22 +808,20 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 
                 const clampedEnd = Math.min(end, lines.length);
                 const span = clampedEnd - start + 1;
-                if (span > LARGE_RANGE_THRESHOLD && !userApproved) {
+                if (span > LARGE_RANGE_THRESHOLD) {
                     return errorContent(
                         `Range${where} (${start}\u2013${end}) covers ${span} lines, exceeding the hard cap of ${LARGE_RANGE_THRESHOLD}. ` +
                         'Split the change into multiple smaller edit_lines calls (a multi-edit array call counts each range separately).'
                     );
                 }
 
-                if (!userApproved) {
-                    const gap = findUnreadGap(filePath, start, clampedEnd);
-                    if (gap) {
-                        return errorContent(
-                            `Refusing to edit lines ${gap[0]}\u2013${gap[1]} of ${filePath}: those lines have not been read in this session. ` +
-                            'Call read_lines or read_function on the target range first, then retry the edit. ' +
-                            '(Read-tracking is reset for a file after each successful edit_lines/create_file.)'
-                        );
-                    }
+                const gap = findUnreadGap(filePath, start, clampedEnd);
+                if (gap) {
+                    return errorContent(
+                        `Refusing to edit lines ${gap[0]}\u2013${gap[1]} of ${filePath}: those lines have not been read in this session. ` +
+                        'Call read_lines or read_function on the target range first, then retry the edit. ' +
+                        '(Read-tracking is reset for a file after each successful edit_lines/create_file.)'
+                    );
                 }
             }
 
@@ -825,6 +860,18 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     if (name === 'create_file') {
         const content = typeof args.content === 'string' ? args.content : undefined;
         if (content === undefined) return errorContent('content argument is required.');
+
+        // create_file is for NEW files only. Modifications to existing files must
+        // go through edit_lines (multi-range form for changes spanning multiple
+        // regions). This prevents bypassing the edit_lines cap by overwriting.
+        let exists = false;
+        try { await fs.access(filePath); exists = true; } catch { /* does not exist */ }
+        if (exists) {
+            return errorContent(
+                `Refusing to create_file: ${filePath} already exists. Use edit_lines to modify existing files ` +
+                '(use the multi-range form \u2014 startLines/endLines/newContents arrays \u2014 for changes spanning multiple regions).'
+            );
+        }
 
         try {
             await atomicWriteFile(filePath, content);

@@ -19,6 +19,7 @@ export const TOOLS = [
         name: 'read_lines',
         description: [
             'Returns specific lines from a file (1-indexed, inclusive).',
+            'Each returned line is prefixed with its line number (e.g. `  267: ...`) so you can pinpoint the exact lines you need for a follow-up `edit_lines` call.',
             'Use this to read only the section you need after checking the outline.',
             'Supports multiple ranges in one call: pass startLines and endLines as parallel arrays (startLines[i] pairs with endLines[i]).',
             'Always prefer the array form over multiple separate calls.',
@@ -70,8 +71,12 @@ export const TOOLS = [
             'Supports multiple edits in one call: pass startLines, endLines, and newContents as parallel arrays.',
             'Always prefer the array form over multiple separate calls.',
             'All line numbers must refer to the ORIGINAL file — the tool sorts ranges internally (largest first) so order does not matter.',
-            'No single range may cover more than 100 lines (hard cap, no override). For larger changes, split into multiple smaller edits.',
+            'No single range may cover more than 100 lines (hard cap, no override of any kind). For larger changes, split into multiple smaller edits — prefer the multi-edit array form so non-overlapping regions all go in one call.',
             'Read-before-edit: every targeted line must have been returned by read_lines or read_function within the current session, otherwise the call is rejected. The cache is reset after each successful edit.',
+            'Make MINIMAL, SURGICAL edits: target the SMALLEST possible line range that contains your change. Use the line numbers prefixed in the `read_lines` output to pinpoint the exact lines that must change — do NOT pass the entire range you happened to read just because you read it. If only lines 142–145 need to change inside a 200-line read, edit ONLY 142–145.',
+            'Do NOT include unchanged surrounding lines in newContents "for context". Do NOT add or remove unrelated blank lines, do NOT reformat unrelated code, do NOT touch lines outside the scope of your task. Every line inside [start_line, end_line] WILL be replaced verbatim by newContents — unchanged lines in that range are pure waste and a frequent source of accidental edits.',
+            'For multiple non-adjacent small changes within one file, prefer several tight ranges in one multi-edit call (e.g. lines 12–12, 47–49, 88–88) over one big range that spans them all.',
+            'For near-total file rewrites: split the file into multiple non-overlapping ranges of <=100 lines each and pass them all in one multi-edit call. Do not attempt to bypass the cap.',
         ].join(' '),
         inputSchema: {
             type: 'object',
@@ -106,9 +111,10 @@ export const TOOLS = [
     {
         name: 'create_file',
         description: [
-            'Creates a new file (or overwrites an existing one) with the given content.',
+            'Creates a NEW file with the given content. Refuses if the target path already exists.',
+            'To MODIFY an existing file, use edit_lines (use the multi-edit array form for changes spanning multiple regions).',
             'Parent directories are created automatically.',
-            'Use this instead of str_replace_editor or write_file for all file creation.',
+            'Use this instead of str_replace_editor or write_file for new-file creation.',
             'Writes are atomic (temp file + rename) so a crash mid-write cannot corrupt the destination.',
         ].join(' '),
         inputSchema: {

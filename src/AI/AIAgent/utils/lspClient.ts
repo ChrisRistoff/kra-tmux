@@ -147,7 +147,14 @@ export class LspClient {
         });
         this.proc = proc;
 
+        // Without an 'error' listener, a spawn failure (ENOENT, EACCES) emits
+        // an uncaught error event that crashes the parent (the MCP server).
+        proc.on('error', () => { this.stopped = true; });
+
         proc.stderr.on('data', () => { /* swallow; could be wired to a log file */ });
+        // Stream 'error' events on stdin/stdout/stderr (e.g. EPIPE when the
+        // child dies mid-write) are also fatal without a listener.
+        proc.stderr.on('error', () => { this.stopped = true; });
 
         proc.on('exit', () => {
             this.stopped = true;
@@ -156,6 +163,9 @@ export class LspClient {
         if (!proc.stdout || !proc.stdin) {
             throw new Error(`LSP ${this.spec.id}: failed to acquire stdio pipes`);
         }
+
+        proc.stdin.on('error', () => { this.stopped = true; });
+        proc.stdout.on('error', () => { this.stopped = true; });
 
         const connection = createProtocolConnection(
             new StreamMessageReader(proc.stdout),
@@ -203,7 +213,7 @@ export class LspClient {
             `${this.spec.id} initialize`,
         );
 
-        void connection.sendNotification(InitializedNotification.type, {});
+        connection.sendNotification(InitializedNotification.type, {}).catch(() => { /* server gone */ });
     }
 
     private async withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -312,7 +322,7 @@ export class LspClient {
                     conn.sendRequest(ShutdownRequest.type),
                     new Promise((resolve) => setTimeout(resolve, 1000)),
                 ]);
-                void conn.sendNotification(ExitNotification.type);
+                conn.sendNotification(ExitNotification.type).catch(() => { /* server already exiting */ });
                 conn.dispose();
             }
         } catch {

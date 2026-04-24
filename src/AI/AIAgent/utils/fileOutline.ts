@@ -1,17 +1,29 @@
 /**
  * File outline extraction.
  *
- * Uses tree-sitter (proper AST parsing) for TypeScript, JavaScript, Python and
- * Go — these give us accurate start AND end lines per symbol so the agent can
- * grab a function with read_lines directly without a follow-up read_function.
+ * Primary path: ask the configured LSP server for `textDocument/documentSymbol`
+ * — the server returns a precise, semantic list of definitions with start/end
+ * lines, and the agent can grab a function with read_lines directly without a
+ * follow-up read_function in many cases.
  *
- * Falls back to a regex-based scan for unknown extensions or if a tree-sitter
- * grammar fails to load (e.g. missing native binding). The regex path produces
+ * Imports are not part of `documentSymbol`, so we collect them with a tiny
+ * top-of-file regex scan per language.
+ *
+ * Falls back to a regex-based scan when no LSP server is configured for the
+ * file's extension or when the LSP request fails. The regex path produces
  * start lines only; end is approximated as "next entry's start - 1".
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import {
+    DocumentSymbol,
+    DocumentSymbolRequest,
+    SymbolInformation,
+    SymbolKind,
+} from 'vscode-languageserver-protocol/node.js';
+import { fileUri } from './lspClient';
+import { getLspRegistry } from './lspRegistry';
 
 export interface OutlineEntry {
     name: string;
@@ -34,10 +46,10 @@ export interface ImportInfo {
 export interface FileOutline {
     lineCount: number;
     entries: OutlineEntry[];
-    // True when the outline was produced by tree-sitter (endLine is exact).
+    // True when the outline was produced by the LSP (endLine is exact).
     // False when it came from the regex fallback (endLine is approximated).
     accurate: boolean;
-    // Top-of-file imports collected via tree-sitter (when the grammar is supported).
+    // Top-of-file imports collected via a per-language regex scan.
     imports?: ImportInfo;
 }
 
@@ -51,88 +63,45 @@ interface CacheEntry {
 const outlineCache = new Map<string, CacheEntry>();
 
 // ────────────────────────────────────────────────────────────────────────────
-// Tree-sitter path
+// LSP path
 // ────────────────────────────────────────────────────────────────────────────
 
-interface ITsNode {
-    type: string;
-    text: string;
-    startPosition: { row: number; column: number };
-    endPosition: { row: number; column: number };
-    children: ITsNode[];
-    childForFieldName: (name: string) => ITsNode | null;
-}
+// Subset of LSP SymbolKind values we surface in outlines, mapped to short labels
+// matching what the previous tree-sitter implementation produced so existing
+// consumers (and the agent's prompts) see no behavioural change.
+const KIND_LABEL: Partial<Record<SymbolKind, string>> = {
+    [SymbolKind.File]: 'file',
+    [SymbolKind.Module]: 'module',
+    [SymbolKind.Namespace]: 'namespace',
+    [SymbolKind.Package]: 'package',
+    [SymbolKind.Class]: 'class',
+    [SymbolKind.Method]: 'method',
+    [SymbolKind.Property]: 'property',
+    [SymbolKind.Field]: 'field',
+    [SymbolKind.Constructor]: 'constructor',
+    [SymbolKind.Enum]: 'enum',
+    [SymbolKind.Interface]: 'interface',
+    [SymbolKind.Function]: 'function',
+    [SymbolKind.Variable]: 'const',
+    [SymbolKind.Constant]: 'const',
+    [SymbolKind.EnumMember]: 'enum-member',
+    [SymbolKind.Struct]: 'struct',
+    [SymbolKind.TypeParameter]: 'type',
+};
 
-interface ITsParser {
-    parse: (input: string) => { rootNode: ITsNode };
-    setLanguage: (lang: unknown) => void;
-}
-
-interface ILanguageSpec {
-    parser: ITsParser;
-    visit: (root: ITsNode, out: OutlineEntry[], lines: string[]) => void;
-    extractImports?: (root: ITsNode) => ImportInfo | undefined;
-}
-
-const langCache = new Map<string, ILanguageSpec | null>();
-
-function loadLanguage(key: string): ILanguageSpec | null {
-    if (langCache.has(key)) return langCache.get(key) ?? null;
-
-    let spec: ILanguageSpec | null = null;
-    try {
-        const parserCtor = require('tree-sitter') as new () => ITsParser;
-        const parser = new parserCtor();
-
-        switch (key) {
-            case 'ts': {
-                const tsMod = require('tree-sitter-typescript') as { typescript: unknown };
-                parser.setLanguage(tsMod.typescript);
-                spec = { parser, visit: visitJsLike, extractImports: extractImportsJsLike };
-                break;
-            }
-            case 'tsx': {
-                const tsMod = require('tree-sitter-typescript') as { tsx: unknown };
-                parser.setLanguage(tsMod.tsx);
-                spec = { parser, visit: visitJsLike, extractImports: extractImportsJsLike };
-                break;
-            }
-            case 'js': {
-                parser.setLanguage(require('tree-sitter-javascript'));
-                spec = { parser, visit: visitJsLike, extractImports: extractImportsJsLike };
-                break;
-            }
-            case 'py': {
-                parser.setLanguage(require('tree-sitter-python'));
-                spec = { parser, visit: visitPython, extractImports: extractImportsPython };
-                break;
-            }
-            case 'go': {
-                parser.setLanguage(require('tree-sitter-go'));
-                spec = { parser, visit: visitGo, extractImports: extractImportsGo };
-                break;
-            }
-        }
-    } catch {
-        spec = null;
-    }
-
-    langCache.set(key, spec);
-
-    return spec;
-}
-
-function extKey(filePath: string): string | undefined {
-    const ext = path.extname(filePath).toLowerCase();
-    switch (ext) {
-        case '.ts': case '.mts': case '.cts': return 'ts';
-        case '.tsx': return 'tsx';
-        case '.js': case '.jsx': case '.mjs': case '.cjs': return 'js';
-        case '.py': return 'py';
-        case '.go': return 'go';
-        default: return undefined;
-    }
-}
+// SymbolKinds we suppress from the outline (would just be noise: string
+// literals, numeric literals, individual array/object expressions, etc.).
+const SKIP_KINDS = new Set<SymbolKind>([
+    SymbolKind.String,
+    SymbolKind.Number,
+    SymbolKind.Boolean,
+    SymbolKind.Array,
+    SymbolKind.Object,
+    SymbolKind.Key,
+    SymbolKind.Null,
+    SymbolKind.Event,
+    SymbolKind.Operator,
+]);
 
 function makePreview(line: string | undefined): string {
     if (!line) return '';
@@ -143,14 +112,149 @@ function makePreview(line: string | undefined): string {
         : trimmed;
 }
 
-function pushEntry(out: OutlineEntry[], lines: string[], node: ITsNode, name: string, kind: string): void {
-    const start = node.startPosition.row + 1;
-    const end = node.endPosition.row + 1;
-    out.push({ name, kind, line: start, endLine: end, preview: makePreview(lines[start - 1]) });
+function kindLabel(kind: SymbolKind): string | undefined {
+    if (SKIP_KINDS.has(kind)) return undefined;
+
+    return KIND_LABEL[kind];
 }
 
-function getName(node: ITsNode): string | undefined {
-    return node.childForFieldName('name')?.text ?? undefined;
+function isDocumentSymbolArray(value: unknown): value is DocumentSymbol[] {
+    return Array.isArray(value)
+        && (value.length === 0
+            || (value[0] !== null
+                && typeof value[0] === 'object'
+                && 'range' in (value[0] as object)
+                && 'selectionRange' in (value[0] as object)));
+}
+
+function flattenDocumentSymbols(
+    symbols: DocumentSymbol[],
+    lines: string[],
+    out: OutlineEntry[],
+    insideClass: boolean,
+): void {
+    for (const sym of symbols) {
+        // documentSymbol uses 0-indexed lines; our outline is 1-indexed.
+        const start = sym.range.start.line + 1;
+        const end = sym.range.end.line + 1;
+
+        let label = kindLabel(sym.kind);
+        if (label) {
+            // Reclassify Function-kind symbols nested directly in a class as methods,
+            // matching the previous tree-sitter behaviour. Some servers report class
+            // members with SymbolKind.Function instead of Method.
+            if (insideClass && sym.kind === SymbolKind.Function) label = 'method';
+
+            out.push({
+                name: sym.name,
+                kind: label,
+                line: start,
+                endLine: end,
+                preview: makePreview(lines[start - 1]),
+            });
+        }
+
+        if (sym.children && sym.children.length > 0) {
+            const childInsideClass = insideClass
+                || sym.kind === SymbolKind.Class
+                || sym.kind === SymbolKind.Interface
+                || sym.kind === SymbolKind.Struct;
+            flattenDocumentSymbols(sym.children, lines, out, childInsideClass);
+        }
+    }
+}
+
+function flattenSymbolInformation(
+    symbols: SymbolInformation[],
+    lines: string[],
+): OutlineEntry[] {
+    const out: OutlineEntry[] = [];
+    for (const sym of symbols) {
+        const label = kindLabel(sym.kind);
+        if (!label) continue;
+        const start = sym.location.range.start.line + 1;
+        const end = sym.location.range.end.line + 1;
+        out.push({
+            name: sym.name,
+            kind: label,
+            line: start,
+            endLine: end,
+            preview: makePreview(lines[start - 1]),
+        });
+    }
+
+    return out;
+}
+
+async function tryLsp(filePath: string, lines: string[]): Promise<OutlineEntry[] | undefined> {
+    const absPath = path.resolve(filePath);
+    let registry;
+    try {
+        registry = await getLspRegistry();
+    } catch {
+        return undefined;
+    }
+    if (!registry.hasServerFor(absPath)) return undefined;
+
+    let client;
+    try {
+        client = await registry.getClientFor(absPath);
+    } catch {
+        return undefined;
+    }
+    if (!client) return undefined;
+
+    try {
+        await client.openFile(absPath);
+        const result = await client.sendRequest<unknown, DocumentSymbol[] | SymbolInformation[] | null>(
+            DocumentSymbolRequest.type,
+            { textDocument: { uri: fileUri(absPath) } },
+        );
+        if (!result) return [];
+
+        const entries: OutlineEntry[] = [];
+        if (isDocumentSymbolArray(result)) {
+            flattenDocumentSymbols(result, lines, entries, false);
+        } else {
+            entries.push(...flattenSymbolInformation(result, lines));
+        }
+
+        // Dedup on (name, line) — some servers emit overlapping entries.
+        const seen = new Set<string>();
+        const dedup = entries.filter((e) => {
+            const k = `${e.name}@${e.line}`;
+            if (seen.has(k)) return false;
+            seen.add(k);
+
+            return true;
+        });
+        dedup.sort((a, b) => a.line - b.line);
+
+        return dedup;
+    } catch {
+        return undefined;
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Import extraction (regex; LSP documentSymbol does not include imports)
+// ────────────────────────────────────────────────────────────────────────────
+
+type ImportLang = 'js' | 'py' | 'go';
+
+function importLang(filePath: string): ImportLang | undefined {
+    const ext = path.extname(filePath).toLowerCase();
+    switch (ext) {
+        case '.ts': case '.tsx': case '.mts': case '.cts':
+        case '.js': case '.jsx': case '.mjs': case '.cjs':
+            return 'js';
+        case '.py': case '.pyi':
+            return 'py';
+        case '.go':
+            return 'go';
+        default:
+            return undefined;
+    }
 }
 
 function unquote(s: string): string {
@@ -165,217 +269,136 @@ function unquote(s: string): string {
     return s;
 }
 
-// Walk only top-level children — imports are conventionally at the top of the file.
-function extractImportsJsLike(root: ITsNode): ImportInfo | undefined {
-    const sources: string[] = [];
-    let firstLine = Infinity;
-    let lastLine = 0;
-
-    for (const node of root.children) {
-        let src: ITsNode | null = null;
-        if (node.type === 'import_statement' || node.type === 'export_statement') {
-            src = node.childForFieldName('source');
-        }
-        if (!src) continue;
-        sources.push(unquote(src.text));
-        firstLine = Math.min(firstLine, node.startPosition.row + 1);
-        lastLine = Math.max(lastLine, node.endPosition.row + 1);
-    }
-
-    if (sources.length === 0) return undefined;
-
-    return { firstLine, lastLine, sources };
-}
-
-function extractImportsPython(root: ITsNode): ImportInfo | undefined {
-    const sources: string[] = [];
-    let firstLine = Infinity;
-    let lastLine = 0;
-
-    for (const node of root.children) {
-        if (node.type !== 'import_statement' && node.type !== 'import_from_statement') continue;
-        const label = node.text.replace(/\s+/g, ' ').trim();
-        sources.push(label.length > 60 ? label.slice(0, 59) + '…' : label);
-        firstLine = Math.min(firstLine, node.startPosition.row + 1);
-        lastLine = Math.max(lastLine, node.endPosition.row + 1);
-    }
-
-    if (sources.length === 0) return undefined;
-
-    return { firstLine, lastLine, sources };
-}
-
-function extractImportsGo(root: ITsNode): ImportInfo | undefined {
-    const sources: string[] = [];
-    let firstLine = Infinity;
-    let lastLine = 0;
-
-    const collectSpec = (n: ITsNode): void => {
-        if (n.type === 'import_spec') {
-            const path = n.childForFieldName('path')
-                ?? n.children.find((c) => c.type === 'interpreted_string_literal' || c.type === 'raw_string_literal')
-                ?? null;
-            if (path) sources.push(unquote(path.text));
-
-            return;
-        }
-        for (const c of n.children) collectSpec(c);
-    };
-
-    for (const node of root.children) {
-        if (node.type !== 'import_declaration') continue;
-        firstLine = Math.min(firstLine, node.startPosition.row + 1);
-        lastLine = Math.max(lastLine, node.endPosition.row + 1);
-        collectSpec(node);
-    }
-
-    if (sources.length === 0) return undefined;
-
-    return { firstLine, lastLine, sources };
-}
-
-// JavaScript / TypeScript / TSX share the same grammar shape for the kinds we care about.
-function visitJsLike(root: ITsNode, out: OutlineEntry[], lines: string[]): void {
-    const visit = (node: ITsNode, insideClass: boolean): void => {
-        switch (node.type) {
-            case 'function_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, lines, node, n, 'function');
-                break;
-            }
-            case 'class_declaration':
-            case 'abstract_class_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, lines, node, n, 'class');
-                for (const c of node.children) visit(c, true);
-
-                return;
-            }
-            case 'interface_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, lines, node, n, 'interface');
-                break;
-            }
-            case 'type_alias_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, lines, node, n, 'type');
-                break;
-            }
-            case 'enum_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, lines, node, n, 'enum');
-                break;
-            }
-            case 'method_definition':
-            case 'method_signature':
-            case 'abstract_method_signature': {
-                if (insideClass) {
-                    const n = getName(node);
-                    if (n) pushEntry(out, lines, node, n, 'method');
-                }
-                break;
-            }
-            case 'public_field_definition':
-            case 'property_signature': {
-                if (insideClass) {
-                    const n = getName(node);
-                    if (n) pushEntry(out, lines, node, n, 'field');
-                }
-                break;
-            }
-            case 'lexical_declaration':
-            case 'variable_declaration': {
-                // Hoist arrow / function-expression consts to the outline.
-                for (const decl of node.children) {
-                    if (decl.type !== 'variable_declarator') continue;
-                    const init = decl.childForFieldName('value');
-                    if (!init || (init.type !== 'arrow_function' && init.type !== 'function_expression' && init.type !== 'function')) continue;
-                    const nameNode = decl.childForFieldName('name');
-                    const n = nameNode?.text;
-                    if (n) pushEntry(out, lines, decl, n, 'const');
-                }
-                break;
-            }
-        }
-        for (const c of node.children) visit(c, insideClass);
-    };
-    visit(root, false);
-}
-
-function visitPython(root: ITsNode, out: OutlineEntry[], lines: string[]): void {
-    const visit = (node: ITsNode, insideClass: boolean): void => {
-        if (node.type === 'function_definition') {
-            const n = getName(node);
-            if (n) pushEntry(out, lines, node, n, insideClass ? 'method' : 'function');
-        } else if (node.type === 'class_definition') {
-            const n = getName(node);
-            if (n) pushEntry(out, lines, node, n, 'class');
-            for (const c of node.children) visit(c, true);
-
-            return;
-        }
-        for (const c of node.children) visit(c, insideClass);
-    };
-    visit(root, false);
-}
-
-function visitGo(root: ITsNode, out: OutlineEntry[], _lines: string[]): void {
-    for (const node of root.children) {
-        switch (node.type) {
-            case 'function_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, _lines, node, n, 'func');
-                break;
-            }
-            case 'method_declaration': {
-                const n = getName(node);
-                if (n) pushEntry(out, _lines, node, n, 'method');
-                break;
-            }
-            case 'type_declaration': {
-                for (const spec of node.children) {
-                    if (spec.type !== 'type_spec') continue;
-                    const nameNode = spec.childForFieldName('name');
-                    const n = nameNode?.text;
-                    if (n) pushEntry(out, _lines, spec, n, 'type');
-                }
-                break;
-            }
-        }
-    }
-}
-
-function tryTreeSitter(filePath: string, content: string, lines: string[]): FileOutline | undefined {
-    const key = extKey(filePath);
-    if (!key) return undefined;
-    const lang = loadLanguage(key);
+function extractImports(filePath: string, lines: string[]): ImportInfo | undefined {
+    const lang = importLang(filePath);
     if (!lang) return undefined;
 
-    try {
-        const tree = lang.parser.parse(content);
-        const entries: OutlineEntry[] = [];
-        lang.visit(tree.rootNode, entries, lines);
-        // Tree-sitter walks may produce duplicates for some nested cases; keep first occurrence per (name,line).
-        const seen = new Set<string>();
-        const dedup = entries.filter((e) => {
-            const k = `${e.name}@${e.line}`;
-            if (seen.has(k)) return false;
-            seen.add(k);
-
-            return true;
-        });
-        // Sort by line for stable output.
-        dedup.sort((a, b) => a.line - b.line);
-
-        const imports = lang.extractImports ? lang.extractImports(tree.rootNode) : undefined;
-
-        const result: FileOutline = { lineCount: lines.length, entries: dedup, accurate: true };
-        if (imports) result.imports = imports;
-
-        return result;
-    } catch {
-        return undefined;
+    switch (lang) {
+        case 'js': return extractImportsJs(lines);
+        case 'py': return extractImportsPy(lines);
+        case 'go': return extractImportsGo(lines);
     }
+}
+
+const JS_IMPORT_RE = /^\s*(?:import|export)\b[^;]*?from\s+(['"`])([^'"`]+)\1/;
+const JS_BARE_IMPORT_RE = /^\s*import\s+(['"`])([^'"`]+)\1/;
+
+function extractImportsJs(lines: string[]): ImportInfo | undefined {
+    const sources: string[] = [];
+    let firstLine = Infinity;
+    let lastLine = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
+        const trimmed = raw.trim();
+        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) continue;
+
+        // Multi-line import: collect lines until we see the matching `from '…'` or bare `'…'`.
+        if (/^\s*import\b/.test(raw) || /^\s*export\b.*\bfrom\b/.test(raw)) {
+            const startLine = i + 1;
+            let buf = raw;
+            while (i < lines.length - 1 && !/['"`]\s*;?\s*$/.test(lines[i]) && !/from\s+['"`][^'"`]+['"`]/.test(buf)) {
+                i++;
+                buf += ' ' + lines[i];
+            }
+            const m = JS_IMPORT_RE.exec(buf) ?? JS_BARE_IMPORT_RE.exec(buf);
+            if (m) {
+                sources.push(m[2]);
+                firstLine = Math.min(firstLine, startLine);
+                lastLine = Math.max(lastLine, i + 1);
+            }
+            continue;
+        }
+
+        // Stop scanning once we hit a non-import top-level construct.
+        break;
+    }
+
+    if (sources.length === 0) return undefined;
+
+    return { firstLine, lastLine, sources };
+}
+
+function extractImportsPy(lines: string[]): ImportInfo | undefined {
+    const sources: string[] = [];
+    let firstLine = Infinity;
+    let lastLine = 0;
+    let inFromBlock = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
+        const trimmed = raw.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        if (/^\s*(import|from)\b/.test(raw)) {
+            const startLine = i + 1;
+            let buf = trimmed;
+            // Handle parenthesised multi-line `from x import (a, b, c)`.
+            if (buf.includes('(') && !buf.includes(')')) {
+                inFromBlock = true;
+                while (i < lines.length - 1 && inFromBlock) {
+                    i++;
+                    buf += ' ' + lines[i].trim();
+                    if (buf.includes(')')) inFromBlock = false;
+                }
+            }
+            const label = buf.replace(/\s+/g, ' ').trim();
+            sources.push(label.length > 60 ? label.slice(0, 59) + '…' : label);
+            firstLine = Math.min(firstLine, startLine);
+            lastLine = Math.max(lastLine, i + 1);
+            continue;
+        }
+
+        // Stop scanning at the first non-import construct (Python convention).
+        break;
+    }
+
+    if (sources.length === 0) return undefined;
+
+    return { firstLine, lastLine, sources };
+}
+
+const GO_IMPORT_SINGLE_RE = /^\s*import\s+(?:[A-Za-z_.][\w.]*\s+)?(['"`][^'"`]+['"`])/;
+const GO_IMPORT_SPEC_RE = /^\s*(?:[A-Za-z_.][\w.]*\s+)?(['"`][^'"`]+['"`])/;
+
+function extractImportsGo(lines: string[]): ImportInfo | undefined {
+    const sources: string[] = [];
+    let firstLine = Infinity;
+    let lastLine = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
+        const trimmed = raw.trim();
+        if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('package')) continue;
+
+        if (/^\s*import\s*\(/.test(raw)) {
+            const startLine = i + 1;
+            i++;
+            while (i < lines.length && !/^\s*\)/.test(lines[i])) {
+                const m = GO_IMPORT_SPEC_RE.exec(lines[i]);
+                if (m) sources.push(unquote(m[1]));
+                i++;
+            }
+            firstLine = Math.min(firstLine, startLine);
+            lastLine = Math.max(lastLine, i + 1);
+            continue;
+        }
+
+        const single = GO_IMPORT_SINGLE_RE.exec(raw);
+        if (single) {
+            sources.push(unquote(single[1]));
+            firstLine = Math.min(firstLine, i + 1);
+            lastLine = Math.max(lastLine, i + 1);
+            continue;
+        }
+
+        // Stop once we leave the import section.
+        if (/^\s*(func|type|var|const)\b/.test(raw)) break;
+    }
+
+    if (sources.length === 0) return undefined;
+
+    return { firstLine, lastLine, sources };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -397,7 +420,7 @@ const PATTERNS: { kind: string; re: RegExp }[] = [
     { kind: 'type', re: /^type\s+(\w+)\s+(?:struct|interface)/ },
 ];
 
-function regexOutline(lines: string[]): FileOutline {
+function regexOutline(lines: string[]): OutlineEntry[] {
     const entries: OutlineEntry[] = [];
 
     for (let i = 0; i < lines.length; i++) {
@@ -432,7 +455,7 @@ function regexOutline(lines: string[]): FileOutline {
         }
     }
 
-    return { lineCount: lines.length, entries, accurate: false };
+    return entries;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -448,7 +471,17 @@ export async function getFileOutline(filePath: string): Promise<FileOutline> {
     const content = await fs.readFile(filePath, 'utf8');
     const lines = content.split('\n');
 
-    const outline = tryTreeSitter(filePath, content, lines) ?? regexOutline(lines);
+    const lspEntries = await tryLsp(filePath, lines);
+    const imports = extractImports(filePath, lines);
+
+    let outline: FileOutline;
+    if (lspEntries) {
+        outline = { lineCount: lines.length, entries: lspEntries, accurate: true };
+    } else {
+        outline = { lineCount: lines.length, entries: regexOutline(lines), accurate: false };
+    }
+    if (imports) outline.imports = imports;
+
     outlineCache.set(filePath, { mtime, outline });
 
     return outline;
