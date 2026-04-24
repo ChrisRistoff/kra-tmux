@@ -34,6 +34,18 @@ type RemoteMcpServerSettings = BaseMcpServerSettings & {
 
 export type McpServerSettings = LocalMcpServerSettings | RemoteMcpServerSettings;
 
+export type LspServerSettings = {
+    active?: boolean,
+    extensions: string[],
+    cmd: string,
+    args?: string[],
+    rootMarkers?: string[],
+    initOptions?: Record<string, unknown>,
+    env?: Record<string, string>,
+    spawnTimeoutMs?: number,
+    requestTimeoutMs?: number,
+}
+
 type AgentSettings = {
     defaultModel?: string,
     mcpServers?: Record<string, McpServerSettings>,
@@ -48,5 +60,6 @@ export type Settings = {
     autosave: Autosave,
     ai?: {
         agent?: AgentSettings,
-    }
+    },
+    lsp?: Record<string, LspServerSettings>,
 }

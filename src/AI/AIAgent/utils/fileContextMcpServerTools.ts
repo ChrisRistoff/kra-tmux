@@ -70,7 +70,8 @@ export const TOOLS = [
             'Supports multiple edits in one call: pass startLines, endLines, and newContents as parallel arrays.',
             'Always prefer the array form over multiple separate calls.',
             'All line numbers must refer to the ORIGINAL file — the tool sorts ranges internally (largest first) so order does not matter.',
-            'Ranges covering more than 100 lines must opt in via large_range: true (or largeRanges: true for the multi-edit form) to prevent accidental wholesale deletion.',
+            'No single range may cover more than 100 lines (hard cap, no override). For larger changes, split into multiple smaller edits.',
+            'Read-before-edit: every targeted line must have been returned by read_lines or read_function within the current session, otherwise the call is rejected. The cache is reset after each successful edit.',
         ].join(' '),
         inputSchema: {
             type: 'object',
@@ -81,10 +82,6 @@ export const TOOLS = [
                 new_content: {
                     type: 'string',
                     description: 'New content to insert in place of the replaced lines. Pass empty string to delete the lines. Single-edit only.',
-                },
-                large_range: {
-                    type: 'boolean',
-                    description: 'Optional. Set to true to bypass the 100-line safeguard for a single edit. Single-edit only.',
                 },
                 startLines: {
                     type: 'array',
@@ -100,10 +97,6 @@ export const TOOLS = [
                     type: 'array',
                     items: { type: 'string' },
                     description: 'Replacement content for each edit. Must be the same length as startLines and endLines.',
-                },
-                largeRanges: {
-                    type: 'boolean',
-                    description: 'Optional. Set to true to bypass the 100-line safeguard for ALL edits in the multi-edit form.',
                 },
             },
             required: ['file_path'],
@@ -180,4 +173,51 @@ export const TOOLS = [
             ],
         },
     },
+
+    {
+        name: 'lsp_query',
+        description: [
+            'Queries a configured Language Server (gopls, pyright, rust-analyzer, ...) about a position in a file.',
+            'Use for hover docs, go-to-definition, references, implementations, type definitions, or a flat list of document symbols.',
+            'Server is selected automatically by the file extension based on [lsp.*] entries in settings.toml.',
+            'Position can be given as (line, col) or (line, symbol) where symbol is searched within that line; both are 1-indexed.',
+            'For document_symbols only file_path is required. The first call per language pays a startup + indexing cost.',
+        ].join(' '),
+        inputSchema: {
+            type: 'object',
+            properties: {
+                file_path: {
+                    type: 'string',
+                    description: 'Absolute or workspace-relative path to the file.',
+                },
+                op: {
+                    type: 'string',
+                    enum: ['hover', 'definition', 'references', 'implementation', 'type_definition', 'document_symbols'],
+                    description: 'The LSP operation to perform.',
+                },
+                line: {
+                    type: 'number',
+                    description: 'Target line (1-indexed). Required for everything except document_symbols.',
+                },
+                col: {
+                    type: 'number',
+                    description: 'Target column (1-indexed). Provide either col or symbol.',
+                },
+                symbol: {
+                    type: 'string',
+                    description: 'Symbol text to scan for on the target line. Used when col is omitted; resolves to the column of the first occurrence.',
+                },
+                occurrence: {
+                    type: 'number',
+                    description: 'Optional. Which occurrence of symbol on the line to use (1-indexed). Default 1.',
+                },
+                include_declaration: {
+                    type: 'boolean',
+                    description: 'Optional. references only — include the declaration itself in the results. Default true.',
+                },
+            },
+            required: ['file_path', 'op'],
+        },
+    },
 ];
+

@@ -10,11 +10,13 @@
  * The agent is directed to use these tools instead of the built-in str_replace_editor,
  * write_file, and read_file tools which are excluded from the session.
  *
- * Run directly: node dest/AI/AIAgent/utils/fileContextMcpServer.js
+ * Run directly: node dest/src/AI/AIAgent/utils/fileContextMcpServer.js
  */
+import 'module-alias/register';
 
 import * as readline from 'readline';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import { spawn } from 'child_process';
 import { getFileOutline, formatOutline, findFunctionRange } from './fileOutline';
 import { getDiagnosticsForFile } from './lspDiagnostics';
@@ -24,6 +26,9 @@ import {
     MAX_LINES_PER_CALL,
 } from './fileSafety';
 import { TOOLS } from './fileContextMcpServerTools';
+import { runLspQuery, LspOp, LspQueryArgs } from './lspQueryHandler';
+import { getLspDiagnosticsForFile } from './lspDiagnosticsBridge';
+
 
 interface JsonRpcRequest {
     jsonrpc: '2.0';
@@ -136,9 +141,53 @@ function coerceNumber(value: unknown): number | undefined {
 }
 
 
-// Guard against accidental wholesale deletion: any single edit_lines range covering
-// more than this many lines must be opted into via large_range / largeRanges[i] = true.
+// Hard cap on a single edit_lines range. There is intentionally NO public
+// override flag — agents cannot bypass this. The internal `__user_approved`
+// flag (set only by agentToolHook when the user accepts a full-file diff)
+// bypasses both this cap and the read-before-edit gate.
 const LARGE_RANGE_THRESHOLD = 100;
+
+// ── Read-before-edit tracker ─────────────────────────────────────────────────
+// Per-session memory of which (file, line) pairs the agent has actually
+// inspected via read_lines / read_function / create_file. edit_lines refuses
+// to touch lines that haven't been seen, forcing the agent to look before it
+// rewrites. The cache is cleared for a file after any successful edit_lines
+// or create_file, since line numbers shift and prior reads may no longer be
+// accurate.
+const seenLines = new Map<string, Set<number>>();
+
+function canonicalPath(p: string): string {
+    return path.resolve(p);
+}
+
+function markRead(filePath: string, start: number, end: number): void {
+    const key = canonicalPath(filePath);
+    let s = seenLines.get(key);
+    if (!s) {
+        s = new Set();
+        seenLines.set(key, s);
+    }
+    for (let i = start; i <= end; i++) s.add(i);
+}
+
+function findUnreadGap(filePath: string, start: number, end: number): [number, number] | undefined {
+    const s = seenLines.get(canonicalPath(filePath));
+    if (!s) return [start, end];
+    let gapStart: number | undefined;
+    let gapEnd = start;
+    for (let i = start; i <= end; i++) {
+        if (!s.has(i)) {
+            if (gapStart === undefined) gapStart = i;
+            gapEnd = i;
+        }
+    }
+
+    return gapStart !== undefined ? [gapStart, gapEnd] : undefined;
+}
+
+function clearReadCache(filePath: string): void {
+    seenLines.delete(canonicalPath(filePath));
+}
 
 // Build a compact outline string for read_function not-found errors so we don't
 // dump hundreds of entries back into the agent's context just to say "missing".
@@ -159,15 +208,31 @@ function totalRequestedLines(starts: number[], ends: number[]): number {
     return total;
 }
 
-// Append TS diagnostics (errors + warnings, single-file scope) to an edit
+// Append diagnostics (errors + warnings, single-file scope) to an edit
 // summary so the agent sees them in the same turn it made the change.
-// Silent no-op for non-TS/JS files or if the language service can't load.
-function withDiagnostics(filePath: string, summary: string): string {
+//
+// Source order:
+//   1. If the file's extension has a configured LSP server in settings.toml,
+//      ask that server (pull-mode `textDocument/diagnostic`, falling back to
+//      cached push-mode `publishDiagnostics`). This is the same code path
+//      used by editors like VS Code and Neovim.
+//   2. Otherwise (or if the LSP path returned nothing usable), fall back to
+//      the in-process TypeScript Compiler API check for .ts/.js files.
+//
+// Silent no-op when neither path produces diagnostics.
+async function withDiagnostics(filePath: string, summary: string): Promise<string> {
     let diags: string | undefined;
     try {
-        diags = getDiagnosticsForFile(filePath);
+        diags = await getLspDiagnosticsForFile(filePath);
     } catch {
-        return summary;
+        // ignore; try the in-process fallback
+    }
+    if (!diags) {
+        try {
+            diags = getDiagnosticsForFile(filePath);
+        } catch {
+            return summary;
+        }
     }
 
     return diags ? `${summary}\n\n${diags}` : summary;
@@ -195,7 +260,7 @@ interface RgRunResult {
     code: number;
 }
 
-function runRg(rgArgs: string[], cwd: string): Promise<RgRunResult> {
+async function runRg(rgArgs: string[], cwd: string): Promise<RgRunResult> {
     return new Promise((resolve, reject) => {
         const child = spawn('rg', rgArgs, { cwd });
         let stdout = '';
@@ -240,7 +305,7 @@ async function countLinesForAll(filePaths: string[]): Promise<Map<string, number
 
     const workers = Array.from(
         { length: Math.min(SEARCH_LINE_COUNT_CONCURRENCY, filePaths.length) },
-        () => worker(),
+        async () => worker(),
     );
     await Promise.all(workers);
 
@@ -469,6 +534,24 @@ async function searchContent(opts: SearchOpts): Promise<string> {
 }
 
 async function handleToolCall(name: string, args: Record<string, unknown>): Promise<ReturnType<typeof textContent>> {
+    if (name === 'lsp_query') {
+        const filePath = typeof args.file_path === 'string' ? args.file_path : '';
+        const op = args.op as LspOp;
+        const queryArgs: LspQueryArgs = { file_path: filePath, op };
+        if (typeof args.line === 'number') queryArgs.line = args.line;
+        if (typeof args.col === 'number') queryArgs.col = args.col;
+        if (typeof args.symbol === 'string') queryArgs.symbol = args.symbol;
+        if (typeof args.occurrence === 'number') queryArgs.occurrence = args.occurrence;
+        if (typeof args.include_declaration === 'boolean') queryArgs.include_declaration = args.include_declaration;
+        try {
+            const text = await runLspQuery(queryArgs);
+
+            return textContent(text);
+        } catch (err) {
+            return errorContent(`lsp_query failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+
     if (name === 'search') {
         const namePattern = typeof args.name_pattern === 'string' && args.name_pattern.length > 0
             ? args.name_pattern
@@ -579,6 +662,8 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
                 sections.push(isMulti ? `Lines ${s}\u2013${e}:\n${numbered}` : numbered);
             }
 
+            for (let i = 0; i < startLines.length; i++) markRead(filePath, startLines[i], endLines[i]);
+
             return textContent(sections.join('\n\n'));
         } catch (err) {
             return errorContent(`Could not read file: ${err instanceof Error ? err.message : String(err)}`);
@@ -615,6 +700,8 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             const lines = content.split('\n');
             const numbered = numberLines(lines, range.start, range.end);
 
+            markRead(filePath, range.start, range.end);
+
             return textContent(`Lines ${range.start}\u2013${range.end}:\n\n${numbered}`);
         } catch (err) {
             return errorContent(`Could not read file: ${err instanceof Error ? err.message : String(err)}`);
@@ -622,10 +709,10 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     }
 
     if (name === 'edit_lines') {
+        const userApproved = args.__user_approved === true;
         let startLines = coerceNumberArray(args.startLines);
         let endLines = coerceNumberArray(args.endLines);
         let newContents = coerceStringArray(args.newContents);
-        let largeRanges = args.largeRanges === true;
         const isMulti = !!(startLines || endLines || newContents);
 
         if (isMulti) {
@@ -645,13 +732,12 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             startLines = [start];
             endLines = [end];
             newContents = [newContent];
-            largeRanges = args.large_range === true;
         }
 
         // O(n log n) overlap check, sort by start, scan adjacent pairs.
         // Loop body is a no-op for single-range edits, so this is safe to run unconditionally.
         const order = Array.from({ length: startLines.length }, (_, i) => i)
-            .sort((a, b) => startLines![a] - startLines![b]);
+            .sort((a, b) => startLines[a] - startLines[b]);
         for (let i = 1; i < order.length; i++) {
             const prev = order[i - 1];
             const curr = order[i];
@@ -668,11 +754,13 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             let lines = raw.split('\n');
 
             // Validate range sizes against the ORIGINAL file before applying any edit.
+            // Hard cap: no public override. The internal __user_approved flag (set by
+            // agentToolHook when the user accepts a full-file diff) bypasses both the
+            // size cap and the read-before-edit gate.
             for (let i = 0; i < startLines.length; i++) {
                 const start = startLines[i];
                 const end = endLines[i];
                 const where = isMulti ? ` at index ${i}` : '';
-                const flagName = isMulti ? 'largeRanges' : 'large_range';
 
                 if (start < 1 || end < start) {
                     return errorContent(`Invalid range${where}: start_line (${start}) must be >= 1 and <= end_line (${end}).`);
@@ -681,18 +769,30 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
                     return errorContent(`start_line (${start})${where} is beyond the file length (${lines.length} lines).`);
                 }
 
-                const span = Math.min(end, lines.length) - start + 1;
-                if (span > LARGE_RANGE_THRESHOLD && !largeRanges) {
+                const clampedEnd = Math.min(end, lines.length);
+                const span = clampedEnd - start + 1;
+                if (span > LARGE_RANGE_THRESHOLD && !userApproved) {
                     return errorContent(
-                        `Range${where} (${start}\u2013${end}) covers ${span} lines, exceeds the large-range guard (${LARGE_RANGE_THRESHOLD}). ` +
-                        `If this is intentional, retry with ${flagName}: true. Otherwise narrow the range.`
+                        `Range${where} (${start}\u2013${end}) covers ${span} lines, exceeding the hard cap of ${LARGE_RANGE_THRESHOLD}. ` +
+                        'Split the change into multiple smaller edit_lines calls (a multi-edit array call counts each range separately).'
                     );
+                }
+
+                if (!userApproved) {
+                    const gap = findUnreadGap(filePath, start, clampedEnd);
+                    if (gap) {
+                        return errorContent(
+                            `Refusing to edit lines ${gap[0]}\u2013${gap[1]} of ${filePath}: those lines have not been read in this session. ` +
+                            'Call read_lines or read_function on the target range first, then retry the edit. ' +
+                            '(Read-tracking is reset for a file after each successful edit_lines/create_file.)'
+                        );
+                    }
                 }
             }
 
             // Apply edits bottom-to-top (by startLine desc) so earlier line numbers remain valid as we apply each edit.
             const indices = Array.from({ length: startLines.length }, (_, i) => i)
-                .sort((a, b) => startLines![b] - startLines![a]);
+                .sort((a, b) => startLines[b] - startLines[a]);
 
             const summaries: string[] = [];
 
@@ -713,8 +813,9 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             }
 
             await atomicWriteFile(filePath, lines.join('\n'));
+            clearReadCache(filePath);
 
-            return textContent(withDiagnostics(filePath, summaries.join('\n')));
+            return textContent(await withDiagnostics(filePath, summaries.join('\n')));
         } catch (err) {
             return errorContent(`Could not edit file: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -727,9 +828,13 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 
         try {
             await atomicWriteFile(filePath, content);
+
             const lineCount = content.split('\n').length;
 
-            return textContent(withDiagnostics(filePath, `Created ${filePath} (${lineCount} line${lineCount === 1 ? '' : 's'}).`));
+            clearReadCache(filePath);
+            markRead(filePath, 1, lineCount);
+
+            return textContent(await withDiagnostics(filePath, `Created ${filePath} (${lineCount} line${lineCount === 1 ? '' : 's'}).`));
         } catch (err) {
             return errorContent(`Could not create file: ${err instanceof Error ? err.message : String(err)}`);
         }

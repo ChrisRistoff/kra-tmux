@@ -64,7 +64,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             type: 'stdio' as const,
             command: process.execPath,
             args: [path.join(__dirname, '..', 'utils', 'fileContextMcpServer.js')],
-            tools: ['get_outline', 'read_lines', 'read_function', 'edit_lines', 'create_file', 'search'],
+            tools: ['get_outline', 'read_lines', 'read_function', 'edit_lines', 'create_file', 'search', 'lsp_query'],
         },
     };
     const stateRef: { current?: AgentConversationState } = {};

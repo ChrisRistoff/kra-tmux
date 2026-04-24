@@ -40,6 +40,7 @@
         "tree-sitter-javascript": "^0.23.1",
         "tree-sitter-python": "^0.23.6",
         "tree-sitter-typescript": "^0.23.2",
+        "vscode-languageserver-protocol": "^3.17.5",
         "zod": "^3.25.76"
     },
     "devDependencies": {

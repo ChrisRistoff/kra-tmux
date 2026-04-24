@@ -623,8 +623,7 @@ export async function handlePreToolUse(
 
             return {
                 permissionDecision: 'allow',
-                modifiedArgs: { ...baseArgs, start_line: 1, end_line: 999999, new_content: userNewStr, large_range: true },
-
+                modifiedArgs: { ...baseArgs, start_line: 1, end_line: 999999, new_content: userNewStr, __user_approved: true },
             };
         }
 
