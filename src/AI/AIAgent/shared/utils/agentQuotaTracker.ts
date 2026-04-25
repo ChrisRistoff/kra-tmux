@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import type { AgentConversationState } from '@/AI/AIAgent/types/agentTypes';
+import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
 
 const QUOTA_WARN_THRESHOLDS = [50, 25, 10];
 const QUOTA_CACHE_PATH = path.join(os.homedir(), '.local', 'share', 'kra-tmux', 'quota-cache.json');
@@ -32,17 +32,17 @@ export function setupQuotaTracking(state: AgentConversationState): void {
             .then(async () => fs.writeFile(QUOTA_CACHE_PATH, JSON.stringify({ updatedAt: new Date().toISOString(), snapshots: cache }, null, 2)))
             .catch(() => { /* non-critical */ });
 
-        for (const [quota_id, snap] of Object.entries(snapshots)) {
+        for (const [quotaId, snap] of Object.entries(snapshots)) {
             if (snap.isUnlimitedEntitlement) continue;
 
             const pct = snap.remainingPercentage;
             const resetDate = snap.resetDate ? new Date(snap.resetDate).toLocaleString() : 'unknown';
 
             for (const threshold of QUOTA_WARN_THRESHOLDS) {
-                const key = `${quota_id}:${threshold}`;
+                const key = `${quotaId}:${threshold}`;
                 if (pct <= threshold && !warnedThresholds.has(key)) {
                     warnedThresholds.add(key);
-                    const label = quota_id === 'weekly' ? 'weekly usage limit' : `${quota_id} usage limit`;
+                    const label = quotaId === 'weekly' ? 'weekly usage limit' : `${quotaId} usage limit`;
                     const color = pct <= 10 ? '\x1b[31m' : '\x1b[33m';
                     console.warn(`\n${color}⚠ You've used over ${100 - threshold}% of your ${label}. Resets: ${resetDate}\x1b[0m\n`);
                 }

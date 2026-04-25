@@ -1,24 +1,32 @@
 import * as fs from 'fs/promises';
 import path from 'path';
-import { getConfiguredMcpServers } from '@/AI/AIAgent/utils/agentSettings';
+import { getConfiguredMcpServers } from '@/AI/AIAgent/shared/utils/agentSettings';
 import {
     createProposalWorkspace,
     hasProposalChanges,
     removeProposalWorkspace,
-} from '@/AI/AIAgent/utils/proposalWorkspace';
+} from '@/AI/AIAgent/shared/utils/proposalWorkspace';
 import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
 import * as fileContext from '@/AI/shared/utils/conversationUtils/fileContexts';
-import type { AgentConversationOptions, AgentConversationState } from '@/AI/AIAgent/types/agentTypes';
-import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/utils/agentToolHook';
-import { setupSessionEventHandlers, updateAgentUi } from '@/AI/AIAgent/utils/agentSessionEvents';
+import type {
+    AgentConversationOptions,
+    AgentConversationState,
+    AgentPreToolUseHookInput,
+    AgentPreToolUseHookOutput,
+    AgentPostToolUseHookInput,
+    AgentPostToolUseHookOutput,
+} from '@/AI/AIAgent/shared/types/agentTypes';
+
+import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
+import { setupSessionEventHandlers, updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import {
     addAgentCommands,
     addAgentFunctions,
     createAgentChatFile,
     openAgentNeovim,
     setupAgentKeyBindings,
-} from '@/AI/AIAgent/main/agentNeovimSetup';
-import { getErrorMessage, setupEventHandlers } from '@/AI/AIAgent/main/agentPromptActions';
+} from '@/AI/AIAgent/shared/main/agentNeovimSetup';
+import { getErrorMessage, setupEventHandlers } from '@/AI/AIAgent/shared/main/agentPromptActions';
 
 
 
@@ -66,78 +74,66 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         },
     };
     const stateRef: { current?: AgentConversationState } = {};
+    const mergedMcpServers = {
+        ...mcpServers,
+        ...(options.additionalMcpServers ?? {}),
+    };
     const session = await options.client.createSession({
-        clientName: 'copilot-cli',
         model: options.model,
-        ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         workingDirectory: proposalWorkspace.workspacePath,
-        streaming: true,
-        enableConfigDiscovery: true,
-        skillDirectories: [path.join(__dirname, '..', '..', '..', 'skills')],
-        mcpServers,
+        mcpServers: mergedMcpServers,
         excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob'],
-        onPermissionRequest: () => ({ kind: 'approved' }),
-        infiniteSessions: {
-            enabled: true,
-            backgroundCompactionThreshold: 0.70,
-            bufferExhaustionThreshold: 0.90,
-        },
-        hooks: {
-            onPreToolUse: async (input) => {
-                if (!stateRef.current) {
-                    return {
-                        permissionDecision: 'deny',
-                        permissionDecisionReason: 'Agent UI is not ready yet.',
-                    };
-                }
+        onPreToolUse: async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
+            if (!stateRef.current) {
+                return {
+                    permissionDecision: 'deny',
+                    permissionDecisionReason: 'Agent UI is not ready yet.',
+                };
+            }
 
-                try {
-                    return await handlePreToolUse(stateRef.current, input);
-                } catch (error) {
-                    await updateAgentUi(stateRef.current.nvim, 'show_error', [
-                        `Pre-tool approval failed: ${input.toolName}`,
-                        getErrorMessage(error),
-                    ]);
-
-                    return {
-                        permissionDecision: 'deny',
-                        permissionDecisionReason: `Pre-tool approval failed: ${getErrorMessage(error)}`,
-                    };
-                }
-            },
-            onPostToolUse: async (input) => {
-                // Bash/shell output: errors and summaries land at the tail, so bias
-                // toward keeping more of the end.  All other tools use a 50/50 split.
-                const isBashLike = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
-                    (fragment) => input.toolName.toLowerCase().includes(fragment)
-                );
-                const HEAD_CHARS = isBashLike ? 2000 : 4000;
-                const TAIL_CHARS = isBashLike ? 6000 : 4000;
-                const text = input.toolResult.textResultForLlm;
-                if (text.length <= HEAD_CHARS + TAIL_CHARS) return;
-                const omitted = text.length - HEAD_CHARS - TAIL_CHARS;
+            try {
+                return await handlePreToolUse(stateRef.current, input);
+            } catch (error) {
+                await updateAgentUi(stateRef.current.nvim, 'show_error', [
+                    `Pre-tool approval failed: ${input.toolName}`,
+                    getErrorMessage(error),
+                ]);
 
                 return {
-                    modifiedResult: {
-                        ...input.toolResult,
-                        textResultForLlm: [
-                            text.slice(0, HEAD_CHARS),
-                            `\n…[${omitted} chars omitted]…\n`,
-                            text.slice(text.length - TAIL_CHARS),
-                        ].join(''),
-                    },
+                    permissionDecision: 'deny',
+                    permissionDecisionReason: `Pre-tool approval failed: ${getErrorMessage(error)}`,
                 };
-            },
-            onUserPromptSubmitted: async () => ({
-                additionalContext: 'REMINDER: Call confirm_task_complete before ending your turn — whether you are done, need clarification, or want to ask the user anything.',
-            }),
+            }
+        },
+        onPostToolUse: async (input: AgentPostToolUseHookInput): Promise<AgentPostToolUseHookOutput> => {
+            // Bash/shell output: errors and summaries land at the tail, so bias
+            // toward keeping more of the end.  All other tools use a 50/50 split.
+            const isBashLike = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
+                (fragment) => input.toolName.toLowerCase().includes(fragment)
+            );
+            const HEAD_CHARS = isBashLike ? 2000 : 4000;
+            const TAIL_CHARS = isBashLike ? 6000 : 4000;
+            const text = input.toolResult.textResultForLlm;
+            if (text.length <= HEAD_CHARS + TAIL_CHARS) return {};
+            const omitted = text.length - HEAD_CHARS - TAIL_CHARS;
+
+            return {
+                modifiedResult: {
+                    ...input.toolResult,
+                    textResultForLlm: [
+                        text.slice(0, HEAD_CHARS),
+                        `\n…[${omitted} chars omitted]…\n`,
+                        text.slice(text.length - TAIL_CHARS),
+                    ].join(''),
+                },
+            };
         },
 
         onUserInputRequest: async (request) => handleAgentUserInput(
             nvimClient,
-            request.question,
-            request.choices,
-            request.allowFreeform ?? true
+            request.question as string,
+            request.choices as string[] | undefined,
+            (request.allowFreeform as boolean | undefined) ?? true
         ),
 
         systemMessage: {
@@ -244,7 +240,7 @@ Reminder: Always call confirm_task_complete before ending your turn.`,
         await setupEventHandlers(state);
 
         let cleaningUp = false;
-        const runCleanup = () => {
+        const runCleanup = (): void => {
             if (cleaningUp) return;
             cleaningUp = true;
             cleanup(state).catch(() => process.exit(1));

@@ -5,7 +5,7 @@ import {
     getToolArgsRecord,
     getToolFamily,
     shouldAutoApproveTool,
-} from '@/AI/AIAgent/utils/agentToolApproval';
+} from '@/AI/AIAgent/shared/utils/agentToolApproval';
 
 describe('agentToolApproval helpers', () => {
     it('auto-approves non-destructive intent reporting', () => {

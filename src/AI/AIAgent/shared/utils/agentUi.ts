@@ -1,7 +1,5 @@
-interface ToolResultSummary {
-    content: string;
-    detailedContent?: string;
-}
+import type { ToolResultSummary } from '@/AI/AIAgent/shared/types/agentTypes';
+
 
 const TOOL_TEXT_MAX_LINES = 14;
 const TOOL_TEXT_MAX_LENGTH = 1200;
@@ -70,7 +68,7 @@ export function formatAgentConversationEntry(
     role: 'USER' | 'ASSISTANT',
     options?: { model?: string, timestamp?: string }
 ): string {
-    const timestamp = options?.timestamp || new Date().toISOString();
+    const timestamp = options?.timestamp ?? new Date().toISOString();
     const parts: string[] = [
         role === 'USER' ? '👤 USER PROMPT' : '🤖 ASSISTANT RESPONSE',
     ];
@@ -178,7 +176,7 @@ export function formatToolDisplayName(
     mcpToolName?: string
 ): string {
     return mcpServerName
-        ? `${mcpServerName}:${mcpToolName || toolName}`
+        ? `${mcpServerName}:${mcpToolName ?? toolName}`
         : toolName;
 }
 
@@ -203,7 +201,7 @@ export function formatToolCompletion(
         return truncateMultiline(extractErrorMessage(error));
     }
 
-    const resultText = result?.detailedContent || result?.content || 'Completed successfully.';
+    const resultText = result?.detailedContent ?? result?.content ?? 'Completed successfully.';
 
     return truncateMultiline(resultText);
 }

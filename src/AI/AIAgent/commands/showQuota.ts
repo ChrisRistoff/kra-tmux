@@ -1,7 +1,7 @@
 import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
-import { getGithubToken } from '@/AI/AIAgent/utils/agentSettings';
+import { getGithubToken } from '@/AI/AIAgent/shared/utils/agentSettings';
 
 interface QuotaSnapshot {
     percent_remaining: number;
@@ -95,17 +95,17 @@ export async function showQuota(): Promise<void> {
     }
 
     const data = await response.json() as CopilotUserResponse;
-    const { quota_snapshots, quota_reset_date_utc } = data;
+    const { quota_snapshots: quotaSnapshots, quota_reset_date_utc: quotaResetDateUtc } = data;
 
-    const resetDate = new Date(quota_reset_date_utc).toLocaleDateString(undefined, {
+    const resetDate = new Date(quotaResetDateUtc).toLocaleDateString(undefined, {
         year: 'numeric', month: 'long', day: 'numeric',
     });
 
     console.log('\n\x1b[1mCopilot Quota — Monthly\x1b[0m');
     console.log(`  Resets on: ${resetDate}\n`);
 
-    if (quota_snapshots.premium_interactions) {
-        formatMonthlySnapshot('Premium interactions', quota_snapshots.premium_interactions);
+    if (quotaSnapshots.premium_interactions) {
+        formatMonthlySnapshot('Premium interactions', quotaSnapshots.premium_interactions);
     }
 
     const cache = await readQuotaCache();

@@ -1,4 +1,4 @@
-import { getAgentDefaultModel, getConfiguredMcpServers } from '@/AI/AIAgent/utils/agentSettings';
+import { getAgentDefaultModel, getConfiguredMcpServers } from '@/AI/AIAgent/shared/utils/agentSettings';
 import { loadSettings } from '@/utils/common';
 
 jest.mock('@/utils/common', () => ({

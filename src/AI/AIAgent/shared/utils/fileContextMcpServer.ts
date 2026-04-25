@@ -634,6 +634,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             const outline = await getFileOutline(filePath);
 
             outlinedFiles.add(canonicalPath(filePath));
+
             return textContent(formatOutline(filePath, outline));
         } catch (err) {
             return errorContent(`Could not read file: ${err instanceof Error ? err.message : String(err)}`);
@@ -643,7 +644,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     if (name === 'read_lines') {
         let startLines = coerceNumberArray(args.startLines);
         let endLines = coerceNumberArray(args.endLines);
-        const isMulti = !!(startLines || endLines);
+        const isMulti = !!(startLines ?? endLines);
 
         if (isMulti) {
             if (!startLines || !endLines || startLines.length !== endLines.length) {
@@ -676,6 +677,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
                 const outline = await getFileOutline(filePath);
                 if (outline.lineCount > OUTLINE_GATE_THRESHOLD) {
                     outlinedFiles.add(canonicalPath(filePath));
+
                     return errorContent(
                         `File has ${outline.lineCount} lines — call \`get_outline\` first to identify the exact range you need, then retry read_lines with a targeted range.\n\n` +
                         formatOutline(filePath, outline)
@@ -751,7 +753,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         let startLines = coerceNumberArray(args.startLines);
         let endLines = coerceNumberArray(args.endLines);
         let newContents = coerceStringArray(args.newContents);
-        const isMulti = !!(startLines || endLines || newContents);
+        const isMulti = !!(startLines ?? endLines ?? newContents);
 
         if (isMulti) {
             if (!startLines || !endLines || !newContents ||

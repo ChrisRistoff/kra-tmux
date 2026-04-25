@@ -8,17 +8,17 @@ import {
     formatToolLine,
     formatToolProgress,
     summarizeToolCall,
-} from '@/AI/AIAgent/utils/agentUi';
+} from '@/AI/AIAgent/shared/utils/agentUi';
 import {
     applyProposalToRepo,
     listProposalChanges,
     readProposalDiff,
     rejectProposal,
-} from '@/AI/AIAgent/utils/proposalWorkspace';
+} from '@/AI/AIAgent/shared/utils/proposalWorkspace';
 import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
-import { appendToChat } from '@/AI/AIAgent/utils/agentToolHook';
-import type { AgentConversationState } from '@/AI/AIAgent/types/agentTypes';
-import { setupQuotaTracking } from '@/AI/AIAgent/utils/agentQuotaTracker';
+import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
+import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
+import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';
 
 function escapeForSingleQuotes(s: string): string {
     return s.replace(/'/g, `'\\''`);
@@ -82,7 +82,7 @@ async function selectChangedProposalFile(
     const channelId = await nvimClient.channelId;
 
     return new Promise((resolve) => {
-        const handler = (method: string, args: unknown[]) => {
+        const handler = (method: string, args: unknown[]): void => {
             if (method !== 'proposal_file_selected') {
                 return;
             }
@@ -174,7 +174,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     let writeChain = Promise.resolve();
 
     const enqueue = (fn: () => Promise<void>): void => {
-        writeChain = writeChain.then(fn).catch(() => {});
+        writeChain = writeChain.then(fn).catch(() => { /* swallow */ });
     };
 
     const nvimRefresh = async (): Promise<void> =>
@@ -296,21 +296,21 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     });
 
     state.session.on('tool.execution_progress', (event) => {
-        currentToolLabel = toolLabels.get(event.data.toolCallId) || currentToolLabel;
+        currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Running tool\n\n${formatToolProgress(event.data.progressMessage)}`;
         void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details]);
     });
 
     state.session.on('tool.execution_partial_result', (event) => {
-        currentToolLabel = toolLabels.get(event.data.toolCallId) || currentToolLabel;
+        currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Streaming tool output\n\n${formatToolProgress(event.data.partialOutput)}`;
         void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details]);
     });
 
     state.session.on('tool.execution_complete', (event) => {
         activeToolCount = Math.max(0, activeToolCount - 1);
-        const toolName = toolLabels.get(event.data.toolCallId) || currentToolLabel;
-        const toolSummary = toolStartLabels.get(event.data.toolCallId) || toolName;
+        const toolName = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
+        const toolSummary = toolStartLabels.get(event.data.toolCallId) ?? toolName;
         toolLabels.delete(event.data.toolCallId);
         toolStartLabels.delete(event.data.toolCallId);
         currentToolLabel = toolName;

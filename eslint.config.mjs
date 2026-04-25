@@ -116,9 +116,54 @@ export default [
       {
         selector: 'interface',
         format: ['PascalCase'],
-        prefix: ['I'],
       },
     ],
+    },
+  },
+
+  // Boundary rules: keep Copilot SDK isolated from BYOK and shared code,
+  // and keep BYOK isolated from Copilot. This guarantees the SDK can be
+  // removed by deleting providers/copilot/ without touching the rest.
+  {
+    files: ['src/AI/AIAgent/shared/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['@github/copilot-sdk', '@github/copilot-sdk/*'],
+            message: 'shared/ must not depend on the Copilot SDK. Keep SDK usage inside providers/copilot/.',
+          },
+          {
+            group: [
+              '@/AI/AIAgent/providers/*',
+              '**/AIAgent/providers/*',
+            ],
+            message: 'shared/ must not import from providers/. Move common code into shared/.',
+          },
+        ],
+      }],
+    },
+  },
+  {
+    files: ['src/AI/AIAgent/providers/byok/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['@github/copilot-sdk', '@github/copilot-sdk/*'],
+            message: 'BYOK provider must not depend on the Copilot SDK.',
+          },
+          {
+            group: [
+              '@/AI/AIAgent/providers/copilot',
+              '@/AI/AIAgent/providers/copilot/*',
+              '**/AIAgent/providers/copilot',
+              '**/AIAgent/providers/copilot/*',
+            ],
+            message: 'BYOK provider must not import from providers/copilot/.',
+          },
+        ],
+      }],
     },
   },
 ];

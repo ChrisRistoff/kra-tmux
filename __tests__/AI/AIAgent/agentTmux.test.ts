@@ -1,4 +1,4 @@
-import { buildAgentTmuxCommand } from '@/AI/AIAgent/utils/agentTmux';
+import { buildAgentTmuxCommand } from '@/AI/AIAgent/shared/utils/agentTmux';
 import { neovimConfig } from '@/filePaths';
 
 describe('buildAgentTmuxCommand', () => {

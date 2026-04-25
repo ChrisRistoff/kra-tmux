@@ -10,7 +10,7 @@ import {
     readProposalDiff,
     rejectProposal,
     removeProposalWorkspace,
-} from '@/AI/AIAgent/utils/proposalWorkspace';
+} from '@/AI/AIAgent/shared/utils/proposalWorkspace';
 
 function git(cwd: string, command: string): string {
     return execSync(`git ${command}`, { cwd, encoding: 'utf8' }).trim();

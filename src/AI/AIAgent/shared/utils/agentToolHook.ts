@@ -12,14 +12,14 @@ import {
     getToolArgsRecord,
     getToolFamily,
     shouldAutoApproveTool,
-} from '@/AI/AIAgent/utils/agentToolApproval';
+} from '@/AI/AIAgent/shared/utils/agentToolApproval';
 import {
     formatAgentConversationEntry,
     formatConfirmAnswer,
     formatConfirmQuestion,
     formatToolProgress,
-} from '@/AI/AIAgent/utils/agentUi';
-import { getFileOutline, formatOutline } from '@/AI/AIAgent/utils/fileOutline';
+} from '@/AI/AIAgent/shared/utils/agentUi';
+import { getFileOutline, formatOutline } from '@/AI/AIAgent/shared/utils/fileOutline';
 import * as bash from '@/utils/bashHelper';
 import type {
     AgentConversationState,
@@ -28,8 +28,8 @@ import type {
     AgentUserInputResponse,
     ToolApprovalResult,
     ToolWritePreview,
-} from '@/AI/AIAgent/types/agentTypes';
-import { atomicWriteFile } from '@/AI/AIAgent/utils/fileSafety';
+} from '@/AI/AIAgent/shared/types/agentTypes';
+import { atomicWriteFile } from '@/AI/AIAgent/shared/utils/fileSafety';
 
 const EDIT_LINES_HARD_CAP = 100;
 
@@ -82,7 +82,7 @@ export async function handleAgentUserInput(
     const channelId = await nvimClient.channelId;
 
     return new Promise<AgentUserInputResponse>((resolve) => {
-        const handler = (method: string, args: unknown[]) => {
+        const handler = (method: string, args: unknown[]): void => {
             if (method !== 'user_input_response') {
                 return;
             }
@@ -416,7 +416,7 @@ export async function promptToolApproval(
                 previewApplyStrategy: payload.writePreview?.applyStrategy,
                 previewEndsWithNewline: payload.writePreview?.proposedEndsWithNewline,
                 previewNote: payload.writePreview?.note,
-            } as VimValue,
+            } satisfies Record<string, unknown> as unknown as VimValue,
         ]).catch(() => {
             nvimClient.removeListener('notification', handler);
             void cleanup();
