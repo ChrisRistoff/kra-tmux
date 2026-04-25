@@ -39,7 +39,7 @@ export function createIPCServer(socketPath: string): IPCServer {
         }
     };
 
-    const addListener = (handler: (event: string) => void): Promise<void> => {
+    const addListener = async (handler: (event: string) => void): Promise<void> => {
         return new Promise((resolve, reject) => {
             eventHandler = handler;
 
@@ -73,6 +73,7 @@ export function createIPCServer(socketPath: string): IPCServer {
                         // retry after cleanup
                         addListener(handler).then(resolve).catch(reject);
                     }, 100);
+
                     return;
                 }
                 reject(err);
@@ -105,7 +106,7 @@ export function createIPCServer(socketPath: string): IPCServer {
 export function createIPCClient(socketPath: string): IPCClient {
     const pidFile = `${socketPath}.pid`;
 
-    const emit = (event: string): Promise<void> => {
+    const emit = async (event: string): Promise<void> => {
         return new Promise((resolve, reject) => {
             const client = net.createConnection(socketPath);
 
@@ -149,6 +150,7 @@ export function createIPCClient(socketPath: string): IPCClient {
                     fs.unlinkSync(pidFile);
                     fs.unlinkSync(socketPath);
                 } catch { }
+
                 return false;
             });
 
@@ -159,6 +161,7 @@ export function createIPCClient(socketPath: string): IPCClient {
                 fs.unlinkSync(pidFile);
                 if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
             } catch { }
+
             return false;
         }
     };

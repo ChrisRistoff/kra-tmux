@@ -12,7 +12,8 @@ function createScreen(title: string) {
 function getListSelectedValue(list: blessed.Widgets.ListElement): string {
     const idx = (list as any).selected ?? 0;
     const item = list.getItem(idx);
-    return (item?.getText?.() as string) || (item?.content ?? '');
+
+    return (item.getText()) || (item.content ?? '');
 }
 
 function uniqueStrings(items: string[]) {
@@ -24,6 +25,7 @@ function uniqueStrings(items: string[]) {
             out.push(s);
         }
     }
+
     return out;
 }
 
@@ -32,6 +34,7 @@ function cleanResolve<T>(
     resolve: (v: T) => void
 ) {
     let done = false;
+
     return (value: T) => {
         if (done) return;
         done = true;
@@ -317,6 +320,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
                 searchBox.setValue(val);
                 applyFilter(val);
                 screen.render();
+
                 return;
             }
 
@@ -482,6 +486,7 @@ export async function searchSelectAndReturnFromArray(
                 searchBox.setValue(val);
                 applyFilter(val);
                 screen.render();
+
                 return;
             }
 

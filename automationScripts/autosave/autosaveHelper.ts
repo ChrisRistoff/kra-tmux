@@ -41,6 +41,7 @@ const getTmuxInfo = (sessionName: string, windowId: number | null = null, paneId
         };
     } catch (error) {
         console.warn('Error getting tmux info:', (error as Error).message);
+
         return {
             currentCommand: 'zsh',
             currentPath: process.env.HOME || '/home/user',
@@ -53,6 +54,7 @@ const getTmuxInfo = (sessionName: string, windowId: number | null = null, paneId
 const getGitRepoLink = (path: string): string => {
     try {
         const gitRemote = execSync(`cd "${path}" && git config --get remote.origin.url 2>/dev/null || echo ""`, { encoding: 'utf8' }).trim();
+
         return gitRemote;
     } catch {
         return '';
@@ -63,6 +65,7 @@ const getPanePosition = (sessionName: string, windowId: number, paneId: number):
     try {
         const paneLeft = execSync(`tmux display-message -t "${sessionName}:${windowId}.${paneId}" -p '#{pane_left}'`, { encoding: 'utf8' }).trim();
         const paneTop = execSync(`tmux display-message -t "${sessionName}:${windowId}.${paneId}" -p '#{pane_top}'`, { encoding: 'utf8' }).trim();
+
         return { paneLeft, paneTop };
     } catch {
         return { paneLeft: '0', paneTop: '0' };
@@ -84,6 +87,7 @@ const handleSessionCreated: EventHandler = (sessions: TmuxSessions, context: Eve
         sessions[sessionName] = { windows: [] };
         console.log(`Created new session: ${sessionName}`);
     }
+
     return sessions;
 };
 
@@ -93,6 +97,7 @@ const handleSessionClosed: EventHandler = (sessions: TmuxSessions, context: Even
         delete sessions[sessionName];
         console.log(`Removed session: ${sessionName}`);
     }
+
     return sessions;
 };
 
@@ -102,6 +107,7 @@ const handleSessionRenamed: EventHandler = (sessions: TmuxSessions, context: Eve
         sessions[sessionName] = { windows: [] };
     }
     console.log(`Session renamed to: ${sessionName}`);
+
     return sessions;
 };
 
@@ -111,6 +117,7 @@ const handleWindowCreated: EventHandler = (sessions: TmuxSessions, context: Even
 
     if (windowId === null) {
         console.warn('Window ID is required for window-created event');
+
         return sessions;
     }
 
@@ -184,6 +191,7 @@ const handlePaneCreated: EventHandler = (sessions: TmuxSessions, context: EventC
 
     if (windowId === null || paneId === null) {
         console.warn('Window ID and Pane ID are required for pane-created event');
+
         return sessions;
     }
 
@@ -312,6 +320,7 @@ export const processEvent = (eventString: string, currentSessions: TmuxSessions)
     const parts = eventString.split(':');
     if (parts.length < 3) {
         console.warn('Invalid event string format:', eventString);
+
         return currentSessions;
     }
 
@@ -319,6 +328,7 @@ export const processEvent = (eventString: string, currentSessions: TmuxSessions)
 
     if (source !== 'tmux') {
         console.warn('Non-tmux event received:', eventString);
+
         return currentSessions;
     }
 
@@ -327,6 +337,7 @@ export const processEvent = (eventString: string, currentSessions: TmuxSessions)
 
     if (!handler) {
         console.warn('No handler for event:', eventKey);
+
         return currentSessions;
     }
 

@@ -1,6 +1,10 @@
 -- init.lua
 -- Bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+local project_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":p:h")
+package.path = project_root .. "/?.lua;" .. package.path
+package.path = project_root .. "/lua/?.lua;" .. package.path
+
 if not vim.loop.fs_stat(lazypath) then
     vim.fn.system({
         "git",
@@ -20,8 +24,9 @@ require("lazy").setup({
         "MeanderingProgrammer/render-markdown.nvim",
         dependencies = {
             "nvim-treesitter/nvim-treesitter",
-            "nvim-web-devicons"
+            "nvim-web-devicons",
         },
+
         config = function()
             require("render-markdown").setup({
                 -- Chat-optimized headings with visual prominence
@@ -47,11 +52,13 @@ require("lazy").setup({
                         "RenderMarkdownH6Bg",
                     },
                 },
+
                 paragraph = {
                     enabled = true,
                     left_margin = 1,
                     min_width = 0,
                 },
+
                 code = {
                     enabled = true,
                     sign = true,
@@ -69,12 +76,14 @@ require("lazy").setup({
                     highlight = "RenderMarkdownCode",
                     highlight_inline = "RenderMarkdownCodeInline",
                 },
+
                 dash = {
                     enabled = true,
                     icon = "━",
                     width = "full",
                     highlight = "RenderMarkdownDash",
                 },
+
                 bullet = {
                     enabled = true,
                     icons = { "•", "◦", "▸", "▹" },
@@ -83,6 +92,7 @@ require("lazy").setup({
                     right_pad = 1,
                     highlight = "RenderMarkdownBullet",
                 },
+
                 checkbox = {
                     enabled = true,
                     position = "inline",
@@ -91,23 +101,27 @@ require("lazy").setup({
                         highlight = "RenderMarkdownUnchecked",
                         scope_highlight = "RenderMarkdownUncheckedScope",
                     },
+
                     checked = {
                         icon = " ",
                         highlight = "RenderMarkdownChecked",
                         scope_highlight = "RenderMarkdownCheckedScope",
                     },
+
                     custom = {
                         todo = { raw = "[-]", rendered = "󰥔 ", highlight = "RenderMarkdownTodo" },
                         doing = { raw = "[~]", rendered = "󰔟 ", highlight = "RenderMarkdownDoing" },
                         cancelled = { raw = "[x]", rendered = "󰜺 ", highlight = "RenderMarkdownCancelled" },
                     },
                 },
+
                 quote = {
                     enabled = true,
                     icon = "▎",
                     repeat_linebreak = false,
                     highlight = "RenderMarkdownQuote",
                 },
+
                 pipe_table = {
                     enabled = true,
                     preset = "round",
@@ -115,16 +129,25 @@ require("lazy").setup({
                     cell = "padded",
                     min_width = 0,
                     border = {
-                        "╭", "┬", "╮",
-                        "├", "┼", "┤",
-                        "╰", "┴", "╯",
-                        "│", "─",
+                        "╭",
+                        "┬",
+                        "╮",
+                        "├",
+                        "┼",
+                        "┤",
+                        "╰",
+                        "┴",
+                        "╯",
+                        "│",
+                        "─",
                     },
+
                     alignment_indicator = "━",
                     head = "RenderMarkdownTableHead",
                     row = "RenderMarkdownTableRow",
                     filler = "RenderMarkdownTableFill",
                 },
+
                 callout = {
                     note = { raw = "[!NOTE]", rendered = "󰋽 Note", highlight = "RenderMarkdownInfo" },
                     tip = { raw = "[!TIP]", rendered = "󰌶 Tip", highlight = "RenderMarkdownSuccess" },
@@ -153,6 +176,7 @@ require("lazy").setup({
                     quote = { raw = "[!QUOTE]", rendered = "󱆨 Quote", highlight = "RenderMarkdownQuote" },
                     cite = { raw = "[!CITE]", rendered = "󱆨 Cite", highlight = "RenderMarkdownQuote" },
                 },
+
                 link = {
                     enabled = true,
                     image = "󰥶 ",
@@ -165,15 +189,18 @@ require("lazy").setup({
                         github = { pattern = "github%.com", icon = "󰊤 ", highlight = "RenderMarkdownSuccess" },
                     },
                 },
+
                 sign = {
                     enabled = true,
                     highlight = "RenderMarkdownSign",
                 },
+
                 math = {
                     enabled = true,
                     single_dollar = true,
                     highlight = "RenderMarkdownMath",
                 },
+
                 html = {
                     enabled = true,
                     comment = {
@@ -181,6 +208,7 @@ require("lazy").setup({
                         highlight = "RenderMarkdownIgnore",
                     },
                 },
+
                 latex = {
                     enabled = true,
                     converter = "latex2text",
@@ -191,6 +219,73 @@ require("lazy").setup({
             })
         end,
         ft = { "markdown" },
+    },
+
+    {
+        "rcarriga/nvim-notify",
+        config = function()
+            local notify = require("notify")
+
+            notify.setup({
+                background_colour = "#000000",
+                fps = 60,
+                max_height = function()
+                    return math.floor(vim.o.lines * 0.15)
+                end,
+                max_width = function()
+                    return math.floor(vim.o.columns * 0.25)
+                end,
+                minimum_width = 20,
+                render = "wrapped-compact",
+                stages = "fade_in_slide_out",
+                timeout = 3000,
+                top_down = true,
+            })
+
+            vim.notify = notify
+        end,
+    },
+    {
+        "folke/noice.nvim",
+        event = "VeryLazy",
+        dependencies = {
+            "MunifTanjim/nui.nvim",
+            "rcarriga/nvim-notify",
+        },
+        config = function()
+            require("noice").setup({
+                cmdline = {
+                    enabled = true,
+                },
+                lsp = {
+                    progress = {
+                        enabled = false,
+                    },
+                },
+                messages = {
+                    enabled = true,
+                    view = "mini",
+                },
+                notify = {
+                    enabled = true,
+                    view = "notify",
+                },
+                popupmenu = {
+                    enabled = false,
+                },
+                presets = {
+                    long_message_to_split = true,
+                    lsp_doc_border = true,
+                },
+            })
+        end,
+    },
+    {
+        "folke/which-key.nvim",
+        event = "VeryLazy",
+        config = function()
+            require("which-key").setup({})
+        end,
     },
 
     -- Indent guides for better structure
@@ -213,8 +308,17 @@ require("lazy").setup({
                 },
                 exclude = {
                     filetypes = {
-                        "help", "alpha", "dashboard", "neo-tree", "Trouble", "trouble",
-                        "lazy", "mason", "notify", "toggleterm", "lazyterm",
+                        "help",
+                        "alpha",
+                        "dashboard",
+                        "neo-tree",
+                        "Trouble",
+                        "trouble",
+                        "lazy",
+                        "mason",
+                        "notify",
+                        "toggleterm",
+                        "lazyterm",
                     },
                 },
             })
@@ -225,8 +329,8 @@ require("lazy").setup({
     {
         "karb94/neoscroll.nvim",
         config = function()
-            require('neoscroll').setup({
-                mappings = { '<C-u>', '<C-d>', '<C-b>', '<C-f>', '<C-y>', '<C-e>', 'zt', 'zz', 'zb' },
+            require("neoscroll").setup({
+                mappings = { "<C-u>", "<C-d>", "<C-b>", "<C-f>", "<C-y>", "<C-e>", "zt", "zz", "zb" },
                 hide_cursor = true,
                 stop_eof = true,
                 respect_scrolloff = false,
@@ -240,30 +344,35 @@ require("lazy").setup({
 
     -- Telescope - Essential for file selection
     {
-        'nvim-telescope/telescope.nvim',
-        tag = '0.1.6',
+        "nvim-telescope/telescope.nvim",
+        tag = "0.1.6",
         dependencies = {
-            'nvim-lua/plenary.nvim',
+            "nvim-lua/plenary.nvim",
             {
-                'nvim-telescope/telescope-fzf-native.nvim',
-                build = 'make',
+                "nvim-telescope/telescope-fzf-native.nvim",
+                build = "make",
                 cond = function()
-                    return vim.fn.executable 'make' == 1
+                    return vim.fn.executable("make") == 1
                 end,
             },
         },
         config = function()
-            require('telescope').setup({
+            require("telescope").setup({
                 defaults = {
                     mappings = {
                         i = {
-                            ['<C-u>'] = false,
-                            ['<C-d>'] = false,
+                            ["<C-u>"] = false,
+                            ["<C-d>"] = false,
                         },
                     },
                     file_ignore_patterns = {
-                        "node_modules", ".git/", "dist/", "build/", ".next/",
-                        "%.lock", "package%-lock%.json"
+                        "node_modules",
+                        ".git/",
+                        "dist/",
+                        "build/",
+                        ".next/",
+                        "%.lock",
+                        "package%-lock%.json",
                     },
                     layout_config = {
                         horizontal = {
@@ -284,7 +393,7 @@ require("lazy").setup({
             })
 
             -- Enable telescope fzf native, if installed
-            pcall(require('telescope').load_extension, 'fzf')
+            pcall(require("telescope").load_extension, "fzf")
         end,
     },
 
@@ -339,15 +448,15 @@ require("lazy").setup({
 
     -- Status line for chat context
     {
-        'nvim-lualine/lualine.nvim',
-        dependencies = { 'nvim-tree/nvim-web-devicons' },
+        "nvim-lualine/lualine.nvim",
+        dependencies = { "nvim-tree/nvim-web-devicons" },
         config = function()
-            require('lualine').setup {
+            require("lualine").setup({
                 options = {
                     icons_enabled = true,
-                    theme = 'tokyonight',
-                    component_separators = { left = '', right = '' },
-                    section_separators = { left = '', right = '' },
+                    theme = "tokyonight-night",
+                    component_separators = { left = "", right = "" },
+                    section_separators = { left = "", right = "" },
                     disabled_filetypes = {
                         statusline = {},
                         winbar = {},
@@ -359,50 +468,70 @@ require("lazy").setup({
                         statusline = 1000,
                         tabline = 1000,
                         winbar = 1000,
-                    }
+                    },
                 },
                 sections = {
-                    lualine_a = { 'mode' },
-                    lualine_b = { 'branch', 'diff', 'diagnostics' },
-                    lualine_c = { { 'filename', path = 1 } },
-                    lualine_x = { 'encoding', 'fileformat', 'filetype' },
-                    lualine_y = { 'progress' },
-                    lualine_z = { 'location' }
+                    lualine_a = { "mode" },
+                    lualine_b = { "branch", "diff", "diagnostics" },
+                    lualine_c = { { "filename", path = 1 } },
+                    lualine_x = {
+                        {
+                            function()
+                                return require("kra_agent_ui").statusline()
+                            end,
+                            color = { fg = "#7dcfff", gui = "bold" },
+                        },
+                        "encoding",
+                        "fileformat",
+                        "filetype",
+                    },
+                    lualine_y = { "progress" },
+                    lualine_z = { "location" },
                 },
                 inactive_sections = {
                     lualine_a = {},
                     lualine_b = {},
-                    lualine_c = { 'filename' },
-                    lualine_x = { 'location' },
+                    lualine_c = { "filename" },
+                    lualine_x = { "location" },
                     lualine_y = {},
-                    lualine_z = {}
+                    lualine_z = {},
                 },
                 tabline = {},
                 winbar = {},
                 inactive_winbar = {},
-                extensions = {}
-            }
+                extensions = {},
+            })
+        end,
+    },
+
+    -- Tokyonight colorscheme for lualine
+    {
+        "folke/tokyonight.nvim",
+        lazy = false,
+        priority = 1000,
+        config = function()
+            vim.cmd.colorscheme("tokyonight-night")
         end,
     },
 })
 
 -- Optimized settings for chat experience
-vim.opt.number = false     -- Clean look for chat
+vim.opt.number = false -- Clean look for chat
 vim.opt.relativenumber = false
-vim.opt.wrap = true        -- Better for chat messages
-vim.opt.linebreak = true   -- Wrap at word boundaries
+vim.opt.wrap = true -- Better for chat messages
+vim.opt.linebreak = true -- Wrap at word boundaries
 vim.opt.breakindent = true -- Maintain indentation on wrapped lines
 vim.opt.tabstop = 2
 vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
-vim.opt.conceallevel = 2     -- Essential for markdown rendering
-vim.opt.concealcursor = 'nc' -- Hide markup in normal and command mode
+vim.opt.conceallevel = 2 -- Essential for markdown rendering
+vim.opt.concealcursor = "nc" -- Hide markup in normal and command mode
 vim.opt.termguicolors = true -- Full color support
-vim.opt.pumheight = 15       -- Limit completion menu height
-vim.opt.scrolloff = 8        -- Keep context when scrolling
+vim.opt.pumheight = 15 -- Limit completion menu height
+vim.opt.scrolloff = 8 -- Keep context when scrolling
 vim.opt.sidescrolloff = 8
-vim.opt.cursorline = false   -- Less visual clutter for chat
-vim.opt.signcolumn = "no"    -- Clean chat appearance
+vim.opt.cursorline = false -- Less visual clutter for chat
+vim.opt.signcolumn = "no" -- Clean chat appearance
 vim.opt.foldcolumn = "0"
 vim.opt.cmdheight = 1
 vim.opt.laststatus = 2
@@ -421,15 +550,15 @@ vim.api.nvim_create_autocmd("FileType", {
         vim.opt_local.wrap = true
         vim.opt_local.linebreak = true
         vim.opt_local.conceallevel = 2
-        vim.opt_local.concealcursor = 'nc'
-        vim.opt_local.spell = false             -- Disable spell check for chat
-        vim.opt_local.textwidth = 0             -- No auto line breaks
+        vim.opt_local.concealcursor = "nc"
+        vim.opt_local.spell = false -- Disable spell check for chat
+        vim.opt_local.textwidth = 0 -- No auto line breaks
         vim.opt_local.formatoptions:remove("t") -- Don't auto-wrap text
 
         -- Smooth scrolling keymaps for chat navigation
         local map = vim.keymap.set
-        map('n', 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
-        map('n', 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
+        map("n", "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
+        map("n", "k", "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
     end,
 })
 
@@ -443,21 +572,26 @@ vim.opt.foldtext = ""
 local map = vim.keymap.set
 
 -- Quick navigation
-map('n', 'J', '5gj', { silent = true, desc = 'Move down 5 lines' })
-map('n', 'K', '5gk', { silent = true, desc = 'Move up 5 lines' })
-map('n', '<C-d>', '<C-d>zz', { silent = true, desc = 'Scroll down and center' })
-map('n', '<C-u>', '<C-u>zz', { silent = true, desc = 'Scroll up and center' })
+map("n", "J", "5gj", { silent = true, desc = "Move down 5 lines" })
+map("n", "K", "5gk", { silent = true, desc = "Move up 5 lines" })
+map("n", "<C-d>", "<C-d>zz", { silent = true, desc = "Scroll down and center" })
+map("n", "<C-u>", "<C-u>zz", { silent = true, desc = "Scroll up and center" })
 
 -- Clipboard functionality
-map('n', 'Y', '"+Y', { silent = true, desc = 'Copy line to system clipboard' })
-map('v', 'Y', '"+y', { silent = true, desc = 'Copy selection to system clipboard' })
-map('n', '<leader>y', '"+y', { silent = true, desc = 'Copy to system clipboard' })
-map('v', '<leader>y', '"+y', { silent = true, desc = 'Copy to system clipboard' })
-map('n', '<leader>p', '"+p', { silent = true, desc = 'Paste from system clipboard' })
+map("n", "Y", '"+Y', { silent = true, desc = "Copy line to system clipboard" })
+map("v", "Y", '"+y', { silent = true, desc = "Copy selection to system clipboard" })
+map("n", "<leader>y", '"+y', { silent = true, desc = "Copy to system clipboard" })
+map("v", "<leader>y", '"+y', { silent = true, desc = "Copy to system clipboard" })
+map("n", "<leader>p", '"+p', { silent = true, desc = "Paste from system clipboard" })
 
 -- Quick folding for managing long conversations
-map('n', '<leader>z', 'za', { silent = true, desc = 'Toggle fold' })
-map('n', '<leader>Z', 'zA', { silent = true, desc = 'Toggle fold recursively' })
+map("n", "<leader>z", "za", { silent = true, desc = "Toggle fold" })
+map("n", "<leader>Z", "zA", { silent = true, desc = "Toggle fold recursively" })
+
+-- Toggle agent popups (noice tool notifications + ask_user window) on/off
+map("n", "<Space>t", function()
+    require("kra_agent_ui").toggle_popups()
+end, { silent = true, desc = "Toggle agent popups" })
 
 -- Performance optimizations for large chat logs
 vim.opt.updatetime = 300
@@ -490,26 +624,26 @@ local function setup_markdown_colors()
     -- Balanced color palette with good contrast and differentiation
     local colors = {
         -- Subtle but visible backgrounds
-        bg_h1 = "#2a3441",   -- Distinct blue-gray background
-        bg_h2 = "#2d2a3f",   -- Purple-gray background
-        bg_h3 = "#2a2d35",   -- Neutral gray background
+        bg_h1 = "#2a3441", -- Distinct blue-gray background
+        bg_h2 = "#2d2a3f", -- Purple-gray background
+        bg_h3 = "#2a2d35", -- Neutral gray background
         bg_code = "#1f2937", -- Clear dark background for code
 
         -- Well-contrasted text colors
         heading1 = "#60a5fa", -- Bright blue for H1
         heading2 = "#a78bfa", -- Purple for H2
         heading3 = "#34d399", -- Green for H3
-        heading = "#e2e8f0",  -- Light gray for H4-H6
-        code = "#fbbf24",     -- Amber for code - very readable
-        quote = "#a855f7",    -- Purple for quotes
-        bullet = "#10b981",   -- Green for bullets
-        link = "#06b6d4",     -- Cyan for links
+        heading = "#e2e8f0", -- Light gray for H4-H6
+        code = "#fbbf24", -- Amber for code - very readable
+        quote = "#a855f7", -- Purple for quotes
+        bullet = "#10b981", -- Green for bullets
+        link = "#06b6d4", -- Cyan for links
 
         -- Clear accent colors
         success = "#10b981", -- Green
         warning = "#f59e0b", -- Orange
-        error = "#ef4444",   -- Red
-        info = "#3b82f6",    -- Blue
+        error = "#ef4444", -- Red
+        info = "#3b82f6", -- Blue
     }
 
     -- Apply the colors with better differentiation
@@ -565,8 +699,3 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 
 -- Apply colors immediately
 setup_markdown_colors()
-
--- Add the project directory to Lua package path
-local project_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":p:h")
-package.path = project_root .. "/?.lua;" .. package.path
-package.path = project_root .. "/lua/?.lua;" .. package.path

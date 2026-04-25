@@ -1,4 +1,4 @@
-export const gitAscii =`
+export const gitAscii = `
                                    ______               _____            _________
                                  .' ___  |             |_   _|          |  _   _  |
                                 / .'   \\_|               | |            |_/ | | \\_|

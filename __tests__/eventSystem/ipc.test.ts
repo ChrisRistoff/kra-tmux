@@ -45,7 +45,8 @@ describe('IPC', () => {
 
         mockNet.createServer.mockImplementation((callback: any) => {
             // store the connection callback for later use
-            (mockServer as any).connectionCallback = callback;
+            (mockServer).connectionCallback = callback;
+
             return mockServer;
         });
 
@@ -130,7 +131,7 @@ describe('IPC', () => {
             await server.addListener(handler);
 
             // simulate client connection
-            const connectionCallback = (mockServer as any).connectionCallback;
+            const connectionCallback = (mockServer).connectionCallback;
             connectionCallback(mockSocket);
 
             // simulate data received
@@ -145,7 +146,7 @@ describe('IPC', () => {
 
             await server.addListener(handler);
 
-            const connectionCallback = (mockServer as any).connectionCallback;
+            const connectionCallback = (mockServer).connectionCallback;
             connectionCallback(mockSocket);
 
             const dataCallback = mockSocket.on.mock.calls.find(([event]: [string]) => event === 'data')[1];
@@ -164,7 +165,7 @@ describe('IPC', () => {
 
             await server.addListener(handler);
 
-            const connectionCallback = (mockServer as any).connectionCallback;
+            const connectionCallback = (mockServer).connectionCallback;
             connectionCallback(mockSocket);
 
             // simulate socket error

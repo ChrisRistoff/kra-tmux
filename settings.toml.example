@@ -16,3 +16,111 @@ command = ""
 active = true
 currentSession = "this will update automatically on load/save session"
 timeoutMs = 20000
+
+[ai.agent]
+defaultModel = "gpt-5-mini"
+
+[ai.agent.mcpServers.filesystem]
+active = false
+type = "local"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+tools = ["*"]
+
+# GitHub's native hosted MCP — gives the agent GitHub API tools
+# (search repos/issues/PRs, read files, etc.) without extra setup.
+# Requires a GitHub token with appropriate scopes.
+[ai.agent.mcpServers.github]
+active = false
+type = "http"
+url = "https://api.githubcopilot.com/mcp/"
+tools = ["*"]
+
+[ai.agent.mcpServers.github.headers]
+Authorization = "Bearer YOUR_GITHUB_TOKEN"
+
+# ─── Language servers (used by the lsp_query MCP tool) ────────────────────────
+# Each [lsp.<id>] block declares a language server the agent can talk to.
+# Servers are spawned lazily on first use (per-workspace), kept alive for the
+# lifetime of the file-context MCP server, and shut down on exit.
+#
+# Required fields:
+#   extensions   – file extensions this server handles (with or without leading dot)
+#   cmd          – executable to spawn (must be on PATH or absolute)
+# Optional:
+#   args         – arguments passed to cmd
+#   rootMarkers  – files/dirs that mark the project root; walked up from the file.
+#                  Defaults to [".git"] if omitted.
+#   initOptions  – server-specific initializationOptions (forwarded verbatim)
+#   env          – extra environment variables for the spawned server
+#   spawnTimeoutMs / requestTimeoutMs – override defaults (30s / 10s)
+#   active       – set false to disable the entry without deleting it
+#
+# All entries below are disabled by default (active = false). Flip to true (or
+# delete the line) once you have the corresponding server installed locally.
+# Adding more disabled entries has zero runtime cost — servers are only
+# spawned the first time you query a file with a matching extension.
+
+[lsp.typescript]
+active = true
+extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]
+cmd = "typescript-language-server"
+args = ["--stdio"]
+rootMarkers = ["tsconfig.json", "jsconfig.json", "package.json", ".git"]
+
+[lsp.go]
+active = false
+extensions = [".go"]
+cmd = "gopls"
+rootMarkers = ["go.work", "go.mod", ".git"]
+
+[lsp.python]
+active = false
+extensions = [".py", ".pyi"]
+cmd = "pyright-langserver"
+args = ["--stdio"]
+rootMarkers = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", ".git"]
+
+[lsp.rust]
+active = false
+extensions = [".rs"]
+cmd = "rust-analyzer"
+rootMarkers = ["Cargo.toml", ".git"]
+spawnTimeoutMs = 60000
+
+[lsp.cpp]
+active = false
+extensions = [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp"]
+cmd = "clangd"
+args = ["--background-index"]
+rootMarkers = ["compile_commands.json", "CMakeLists.txt", ".git"]
+
+[lsp.lua]
+active = true
+extensions = [".lua"]
+cmd = "lua-language-server"
+rootMarkers = [".luarc.json", ".luarc.jsonc", ".git"]
+
+[lsp.bash]
+active = true
+extensions = [".sh", ".bash"]
+cmd = "bash-language-server"
+args = ["start"]
+
+[lsp.json]
+active = true
+extensions = [".json", ".jsonc"]
+cmd = "vscode-json-language-server"
+args = ["--stdio"]
+
+[lsp.yaml]
+active = true
+extensions = [".yaml", ".yml"]
+cmd = "yaml-language-server"
+args = ["--stdio"]
+
+[lsp.terraform]
+active = false
+extensions = [".tf", ".tfvars"]
+cmd = "terraform-ls"
+args = ["serve"]
