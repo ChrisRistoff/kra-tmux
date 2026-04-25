@@ -59,14 +59,14 @@ export interface AssistantUsageEvent {
 }
 
 export type AgentSessionEventMap = {
-    'assistant.reasoning_delta':       ReasoningDeltaEvent;
-    'assistant.message_delta':         MessageDeltaEvent;
-    'tool.execution_start':            ToolExecutionStartEvent;
-    'tool.execution_progress':         ToolExecutionProgressEvent;
-    'tool.execution_partial_result':   ToolExecutionPartialResultEvent;
-    'tool.execution_complete':         ToolExecutionCompleteEvent;
-    'session.idle':                    void;
-    'assistant.usage':                 AssistantUsageEvent;
+    'assistant.reasoning_delta': ReasoningDeltaEvent;
+    'assistant.message_delta': MessageDeltaEvent;
+    'tool.execution_start': ToolExecutionStartEvent;
+    'tool.execution_progress': ToolExecutionProgressEvent;
+    'tool.execution_partial_result': ToolExecutionPartialResultEvent;
+    'tool.execution_complete': ToolExecutionCompleteEvent;
+    'session.idle': void;
+    'assistant.usage': AssistantUsageEvent;
 };
 
 // ─── Provider-neutral session/client interfaces ──────────────────────────────
@@ -106,6 +106,7 @@ export interface AgentSessionOptions {
     additionalMcpServers?: Record<string, MCPServerConfig>;
     excludedTools?: string[];
     systemMessage?: { mode?: 'append' | 'replace'; content: string };
+    contextWindow?: number;
     onPreToolUse: (input: AgentPreToolUseHookInput) => Promise<AgentPreToolUseHookOutput>;
     onPostToolUse: (input: AgentPostToolUseHookInput) => Promise<AgentPostToolUseHookOutput | void>;
     onUserInputRequest?: (request: AgentUserInputRequest) => Promise<AgentUserInputResponse>;
@@ -117,8 +118,8 @@ export interface AgentConversationOptions {
     client: AgentClient;
     model: string;
     additionalMcpServers?: Record<string, MCPServerConfig>;
+    contextWindow?: number;
 }
-
 
 export interface AgentUserInputResponse {
     answer: string;
@@ -170,11 +171,11 @@ export interface AgentPreToolUseHookOutput {
 
 export interface AgentPostToolUseHookInput {
     toolName: string;
-    toolResult: { textResultForLlm: string; [key: string]: unknown };
+    toolResult: { textResultForLlm: string;[key: string]: unknown };
 }
 
 export interface AgentPostToolUseHookOutput {
-    modifiedResult?: { textResultForLlm: string; [key: string]: unknown };
+    modifiedResult?: { textResultForLlm: string;[key: string]: unknown };
 }
 
 // ─── MessageOptions (replaces import from copilot-sdk in agentPromptActions) ─

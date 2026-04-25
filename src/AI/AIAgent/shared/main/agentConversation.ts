@@ -82,7 +82,8 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         model: options.model,
         workingDirectory: proposalWorkspace.workspacePath,
         mcpServers: mergedMcpServers,
-        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob'],
+        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create'],
+        ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
         onPreToolUse: async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
             if (!stateRef.current) {
                 return {

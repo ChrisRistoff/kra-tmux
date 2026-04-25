@@ -35,7 +35,7 @@ import {
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
-import { compactMessages, isContextLengthError } from '@/AI/AIAgent/providers/byok/byokCompactor';
+import { compactMessages, estimateTokens, isContextLengthError } from '@/AI/AIAgent/providers/byok/byokCompactor';
 
 const DEFAULT_SYSTEM_PROMPT = [
     'You are an autonomous coding agent operating inside a proposal workspace.',
@@ -131,6 +131,40 @@ export class OpenAICompatibleSession implements AgentSession {
         return `${DEFAULT_SYSTEM_PROMPT}\n\n${sm.content}`;
     }
 
+    private async maybeProactiveCompact(): Promise<void> {
+        if (this.compactedThisTurn) {
+            return;
+        }
+
+        const ctx = this.opts.contextWindow;
+
+        if (!ctx || ctx <= 0) {
+            return;
+        }
+
+        const thresholdEnv = Number(process.env['KRA_BYOK_COMPACT_THRESHOLD']);
+        const threshold = Number.isFinite(thresholdEnv) && thresholdEnv > 0 && thresholdEnv < 1
+            ? thresholdEnv
+            : 0.70;
+
+        const estimated = estimateTokens(this.messages);
+
+        if (estimated < ctx * threshold) {
+            return;
+        }
+
+        if (process.env['KRA_BYOK_DEBUG'] === '1') {
+            console.error(`[byok] proactive compaction: ~${estimated} tokens > ${Math.round(ctx * threshold)} (${Math.round(threshold * 100)}% of ${ctx})`);
+        }
+
+        this.compactedThisTurn = true;
+        this.messages = await compactMessages({
+            openai: this.openai,
+            model: this.opts.model,
+            messages: this.messages,
+        });
+    }
+
     public send: AgentSession['send'] = async (options: AgentSendOptions) => {
         this.compactedThisTurn = false;
         this.abortController = new AbortController();
@@ -148,7 +182,7 @@ export class OpenAICompatibleSession implements AgentSession {
     };
 
     private async runTurnLoop(): Promise<void> {
-        for (;;) {
+        for (; ;) {
             const toolCalls = await this.streamOnePass();
 
             if (toolCalls.length === 0) {
@@ -166,6 +200,8 @@ export class OpenAICompatibleSession implements AgentSession {
     }
 
     private async streamOnePass(): Promise<InternalToolCall[]> {
+        await this.maybeProactiveCompact();
+
         let stream: Stream<ChatCompletionChunk>;
 
         try {
@@ -238,10 +274,6 @@ export class OpenAICompatibleSession implements AgentSession {
                     accumulatedToolCalls.set(tc.index, existing);
                 }
             }
-
-            // Token usage is not currently part of AssistantUsageEvent's quota-shaped contract;
-            // dropped intentionally. If the contract is widened to include token counts later,
-            // wire `chunk.usage` (prompt_tokens / completion_tokens / total_tokens) through here.
         }
 
         if (debug) {
@@ -334,7 +366,7 @@ export class OpenAICompatibleSession implements AgentSession {
 
             toolText = contentArray
                 .filter((p) => p.type === 'text' && typeof p.text === 'string')
-                .map((p) => p.text!)
+                .map((p) => p.text)
                 .join('\n');
 
             isError = Boolean(result.isError);
@@ -343,10 +375,10 @@ export class OpenAICompatibleSession implements AgentSession {
                 toolText = `${preHook.additionalContext}\n\n${toolText}`;
             }
 
-            const postHook = (await this.opts.onPostToolUse({
+            const postHook = await this.opts.onPostToolUse({
                 toolName: tool.originalName,
                 toolResult: { textResultForLlm: toolText, raw: result },
-            })) ?? undefined;
+            })
 
             if (postHook?.modifiedResult?.textResultForLlm) {
                 toolText = postHook.modifiedResult.textResultForLlm;

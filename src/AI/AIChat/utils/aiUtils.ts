@@ -1,8 +1,9 @@
 import * as ui from '@/UI/generalUI';
 import { ChatModelDetails } from '@/AI/shared/types/aiTypes';
-import { providers } from '@/AI/AIChat/data/models';
+import { SUPPORTED_PROVIDERS } from '@/AI/shared/data/providers';
+import { getModelCatalog, formatModelInfoForPicker, type ModelInfo } from '@/AI/shared/data/modelCatalog';
 
-export async function promptUserForTemperature(model: string) {
+export async function promptUserForTemperature(model: string): Promise<number> {
     const maxTemp = model.startsWith('gemini') ? 20 : 10;
     const optionsArray: string[] = [];
 
@@ -31,17 +32,36 @@ export function formatChatEntry(role: string, content: string, topLevel = false)
 
 export async function pickProviderAndModel(): Promise<ChatModelDetails> {
     const provider = await ui.searchSelectAndReturnFromArray({
-        itemsArray: Object.keys(providers),
+        itemsArray: [...SUPPORTED_PROVIDERS],
         prompt: 'Select a provider',
     });
 
-    const model = await ui.searchSelectAndReturnFromArray({
-        itemsArray: Object.keys(providers[provider]),
-        prompt: 'Select a model',
+    const models = await getModelCatalog(provider as typeof SUPPORTED_PROVIDERS[number]);
+
+    if (models.length === 0) {
+        throw new Error(`No models returned for provider '${provider}'.`);
+    }
+
+    const sorted = [...models].sort((a, b) => a.label.localeCompare(b.label));
+    const labelToModel = new Map<string, ModelInfo>();
+
+    for (const m of sorted) {
+        labelToModel.set(formatModelInfoForPicker(m), m);
+    }
+
+    const selectedLabel = await ui.searchSelectAndReturnFromArray({
+        itemsArray: [...labelToModel.keys()],
+        prompt: `Select a ${provider} model`,
     });
+
+    const picked = labelToModel.get(selectedLabel);
+
+    if (!picked) {
+        throw new Error(`Model selection '${selectedLabel}' could not be resolved.`);
+    }
 
     return {
         provider,
-        model: providers[provider][model]
-    }
+        model: picked.id,
+    };
 }

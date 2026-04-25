@@ -1,14 +1,28 @@
 /**
- * Maps AIChat provider names to their OpenAI-compatible base URLs.
+ * Provider registry shared between AIChat and AIAgent (BYOK).
  *
- * Mirrors the switch in `src/AI/AIChat/utils/promptModel.ts` but only lists
- * providers that:
- *   1. Speak the OpenAI Chat Completions wire format, AND
- *   2. Have models suitable for tool-calling agents.
+ * All listed providers speak the OpenAI Chat Completions wire format.
+ * Mistral exposes an OpenAI-compatible endpoint at https://api.mistral.ai/v1,
+ * so it lives here too — no separate SDK path is needed.
  *
- * Mistral is intentionally excluded — it uses its own SDK in promptModel.ts.
- * Copilot is excluded — that path is the dedicated providers/copilot/ flow.
+ * Adding a new provider: add it to SUPPORTED_PROVIDERS, add a baseURL case
+ * in getProviderBaseURL, an apiKey case in getProviderApiKey, and (optionally)
+ * a live fetcher branch in modelCatalog.ts.
  */
+
+import * as keys from '@/AI/AIChat/data/keys';
+
+export const SUPPORTED_PROVIDERS = [
+    'deep-infra',
+    'deep-seek',
+    'open-router',
+    'gemini',
+    'open-ai',
+    'mistral',
+] as const;
+
+export type SupportedProvider = typeof SUPPORTED_PROVIDERS[number];
+
 export function getProviderBaseURL(provider: string): string {
     switch (provider) {
         case 'deep-infra':
@@ -21,12 +35,12 @@ export function getProviderBaseURL(provider: string): string {
             return 'https://generativelanguage.googleapis.com/v1beta/openai/';
         case 'open-ai':
             return 'https://api.openai.com/v1';
+        case 'mistral':
+            return 'https://api.mistral.ai/v1';
         default:
-            throw new Error(`BYOK provider '${provider}' has no configured baseURL.`);
+            throw new Error(`Provider '${provider}' has no configured baseURL.`);
     }
 }
-
-import * as keys from '@/AI/AIChat/data/keys';
 
 export function getProviderApiKey(provider: string): string {
     switch (provider) {
@@ -38,6 +52,8 @@ export function getProviderApiKey(provider: string): string {
             return keys.getOpenRouterKey();
         case 'gemini':
             return keys.getGeminiKey();
+        case 'mistral':
+            return keys.getMistralKey();
         case 'open-ai': {
             const fromEnv = process.env['OPENAI_API_KEY'];
 
@@ -48,16 +64,6 @@ export function getProviderApiKey(provider: string): string {
             return fromEnv;
         }
         default:
-            throw new Error(`BYOK provider '${provider}' has no configured API key getter.`);
+            throw new Error(`Provider '${provider}' has no configured API key getter.`);
     }
 }
-
-export const SUPPORTED_BYOK_PROVIDERS = [
-    'deep-infra',
-    'deep-seek',
-    'open-router',
-    'gemini',
-    'open-ai',
-] as const;
-
-export type SupportedByokProvider = typeof SUPPORTED_BYOK_PROVIDERS[number];

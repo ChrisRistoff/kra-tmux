@@ -1,65 +1,71 @@
 /**
  * BYOK entry-point flow.
  *
- * 1. Pick a provider (filtered subset of AIChat's `providers` registry that
- *    speaks OpenAI-compatible Chat Completions and is suitable for tool use).
- * 2. Pick a model from that provider's registry.
- * 3. Resolve baseURL + API key from env (via byokProviders).
+ * 1. Pick a provider from the BYOK-supported set.
+ *    via the shared modelCatalog and present a picker that surfaces context
+ *    window and per-token pricing alongside each model.
+ * 3. Resolve baseURL + API key (via the shared providers helper).
  * 4. Declare extra MCP servers (kra-bash + kra-web) via `additionalMcpServers`
- *    and hand off to the shared `converseAgent` runner.
+ *    and hand off to the shared `converseAgent` runner, plumbing the chosen
+ *    model's context window through so byokSession can compact proactively.
  *
- * Adding/removing providers or models is done in `src/AI/AIChat/data/models.ts`
- * (registry) and `byokProviders.ts` (baseURL/key wiring) — same pattern as
- * AIChat, no duplication.
+ * Adding a new BYOK provider: extend `SUPPORTED_PROVIDERS` in
+ * `src/AI/shared/data/providers.ts`, add a baseURL + key getter there, and
+ * add a live fetcher branch in `src/AI/shared/data/modelCatalog.ts`.
  */
 
 import path from 'path';
-import { providers as allProviders } from '@/AI/AIChat/data/models';
 import * as conversation from '@/AI/AIAgent/shared/main/agentConversation';
 import * as ui from '@/UI/generalUI';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import {
-    SUPPORTED_BYOK_PROVIDERS,
+    SUPPORTED_PROVIDERS,
+    type SupportedProvider,
     getProviderApiKey,
     getProviderBaseURL,
-} from '@/AI/AIAgent/providers/byok/byokProviders';
+} from '@/AI/shared/data/providers';
 import { OpenAICompatibleClient } from '@/AI/AIAgent/providers/byok/byokClient';
+import {
+    type ModelInfo,
+    formatModelInfoForPicker,
+    getModelCatalog,
+} from '@/AI/shared/data/modelCatalog';
 
-async function pickProvider(): Promise<string> {
-    const available = SUPPORTED_BYOK_PROVIDERS.filter((p) => allProviders[p]);
-
-    if (available.length === 0) {
-        throw new Error('No BYOK-compatible providers found in src/AI/AIChat/data/models.ts');
-    }
-
+async function pickProvider(): Promise<SupportedProvider> {
     const selected = await ui.searchSelectAndReturnFromArray({
-        itemsArray: [...available],
+        itemsArray: [...SUPPORTED_PROVIDERS],
         prompt: 'Select a BYOK provider',
     });
 
-    return selected;
+    return selected as SupportedProvider;
 }
 
-async function pickModel(provider: string): Promise<string> {
-    const models = allProviders[provider];
+async function pickModel(provider: SupportedProvider): Promise<ModelInfo> {
+    const models = await getModelCatalog(provider);
 
-    if (!models) {
-        throw new Error(`Provider '${provider}' has no model registry entry.`);
+    if (models.length === 0) {
+        throw new Error(`No models returned for provider '${provider}'.`);
     }
 
-    const labels = Object.keys(models);
+    const sorted = [...models].sort((a, b) => a.label.localeCompare(b.label));
+    const labelToModel = new Map<string, ModelInfo>();
+
+    for (const m of sorted) {
+        labelToModel.set(formatModelInfoForPicker(m), m);
+    }
+
     const selectedLabel = await ui.searchSelectAndReturnFromArray({
-        itemsArray: labels,
+        itemsArray: [...labelToModel.keys()],
         prompt: `Select a ${provider} model`,
     });
 
-    const modelId = models[selectedLabel];
+    const picked = labelToModel.get(selectedLabel);
 
-    if (!modelId) {
-        throw new Error(`Model '${selectedLabel}' not found for provider '${provider}'.`);
+    if (!picked) {
+        throw new Error(`Model selection '${selectedLabel}' could not be resolved.`);
     }
 
-    return modelId;
+    return picked;
 }
 
 function buildAdditionalMcpServers(): Record<string, MCPServerConfig> {
@@ -84,7 +90,7 @@ function buildAdditionalMcpServers(): Record<string, MCPServerConfig> {
 
 export async function startByokFlow(): Promise<void> {
     const provider = await pickProvider();
-    const modelId = await pickModel(provider);
+    const model = await pickModel(provider);
     const baseURL = getProviderBaseURL(provider);
     const apiKey = getProviderApiKey(provider);
 
@@ -93,8 +99,9 @@ export async function startByokFlow(): Promise<void> {
     try {
         await conversation.converseAgent({
             client,
-            model: modelId,
+            model: model.id,
             additionalMcpServers: buildAdditionalMcpServers(),
+            ...(model.contextWindow > 0 ? { contextWindow: model.contextWindow } : {}),
         });
     } catch (error) {
         await client.forceStop();
