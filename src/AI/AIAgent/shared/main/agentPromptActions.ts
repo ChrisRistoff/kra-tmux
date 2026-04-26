@@ -225,6 +225,33 @@ export async function setupEventHandlers(state: AgentConversationState): Promise
                 case 'set_memory_status':
                     await handleSetMemoryStatus(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
                     break;
+                case 'execute_tool': {
+                    const payload = (args[1] ?? {}) as { title?: unknown; args_json?: unknown };
+                    const title = String(payload.title ?? '');
+                    const argsJson = String(payload.args_json ?? '{}');
+                    if (!title) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', 'Missing tool title', '']);
+                        break;
+                    }
+                    if (!state.session.executeTool) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', 'Tool re-execution not supported by current provider', title]);
+                        break;
+                    }
+                    let parsedArgs: Record<string, unknown>;
+                    try {
+                        parsedArgs = JSON.parse(argsJson) as Record<string, unknown>;
+                    } catch (err) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', `Invalid JSON: ${getErrorMessage(err)}`, title]);
+                        break;
+                    }
+                    try {
+                        const result = await state.session.executeTool(title, parsedArgs);
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', [result, '', title]);
+                    } catch (err) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', getErrorMessage(err), title]);
+                    }
+                    break;
+                }
                 default:
                     console.log('Unknown action:', action);
             }

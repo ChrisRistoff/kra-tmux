@@ -7,6 +7,8 @@ import type {
     ReasoningEffort,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
+import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
+import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
 
 export interface CopilotClientWrapperOptions {
     githubToken?: string;
@@ -78,7 +80,57 @@ export class CopilotClientWrapper implements AgentClient {
             ...(options.systemMessage ? { systemMessage: options.systemMessage } : {}),
         } as unknown as Parameters<CopilotClient['createSession']>[0]);
 
-        return sdkSession as unknown as AgentSession;
+        // Side channel MCP pool restricted to kra-* servers so the user can
+        // re-execute our own tools from the agent UI even when the active
+        // provider is Copilot (whose SDK does not expose its internal MCP
+        // clients).
+        const kraServers: Record<string, MCPServerConfig> = {};
+        for (const [name, cfg] of Object.entries(options.mcpServers ?? {})) {
+            if (name.startsWith('kra-')) {
+                kraServers[name] = cfg as MCPServerConfig;
+            }
+        }
+
+        let sidePool: McpClientPool | undefined;
+        if (Object.keys(kraServers).length > 0) {
+            try {
+                sidePool = await buildMcpClientPool({
+                    servers: kraServers,
+                    workingDirectory: options.workingDirectory,
+                });
+            } catch {
+                // Side pool is best-effort; failure just disables re-execution.
+                sidePool = undefined;
+            }
+        }
+
+        const session = sdkSession as unknown as AgentSession;
+        if (sidePool) {
+            session.listExecutableTools = () => Array.from(sidePool!.tools.values()).map((t) => ({
+                title: `${t.server}:${t.originalName}`,
+                server: t.server,
+                name: t.originalName,
+            }));
+            session.executeTool = async (title, args) => {
+                const tool = Array.from(sidePool!.tools.values()).find(
+                    (t) => `${t.server}:${t.originalName}` === title
+                );
+                if (!tool) throw new Error(`Unknown tool: ${title}`);
+                const result = await tool.client.callTool({ name: tool.originalName, arguments: args });
+                const contentArray = (result.content ?? []) as Array<{ type: string; text?: string }>;
+                return contentArray
+                    .filter((p) => p.type === 'text' && typeof p.text === 'string')
+                    .map((p) => p.text)
+                    .join('\n');
+            };
+            const originalDisconnect = session.disconnect.bind(session);
+            session.disconnect = async () => {
+                try { await sidePool!.disconnect(); } catch { /* swallow */ }
+                await originalDisconnect();
+            };
+        }
+
+        return session;
     }
 
     public async stop(): Promise<void> {

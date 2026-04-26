@@ -150,15 +150,22 @@ export interface CodeChunkRow {
     vector: number[];
 }
 
-export interface CodeChunkHit {
-    id: string;
-    path: string;
+export interface SemanticOutlineEntry {
+    name: string;
+    kind: string;
     startLine: number;
     endLine: number;
-    symbol: string | null;
+    matched: boolean;
+}
+
+export interface CodeFileHitData {
+    path: string;
     language: string;
-    snippet: string;
-    score: number;
+    lineCount: number;
+    startLines: number[];
+    endLines: number[];
+    outline?: SemanticOutlineEntry[];
+    outlineAccurate?: boolean;
 }
 
 export interface SemanticSearchInput {
@@ -172,7 +179,7 @@ export interface SemanticSearchInput {
 export interface SemanticSearchHit {
     type: 'code' | 'memory';
     score: number;
-    code?: CodeChunkHit;
+    code?: CodeFileHitData;
     memory?: MemoryEntry;
 }
 

@@ -445,4 +445,27 @@ export class OpenAICompatibleSession implements AgentSession {
         this.abortController?.abort();
         await this.mcp?.disconnect();
     };
+
+    public listExecutableTools: NonNullable<AgentSession['listExecutableTools']> = () => {
+        if (!this.mcp) return [];
+        return Array.from(this.mcp.tools.values()).map((t) => ({
+            title: `${t.server}:${t.originalName}`,
+            server: t.server,
+            name: t.originalName,
+        }));
+    };
+
+    public executeTool: NonNullable<AgentSession['executeTool']> = async (title, args) => {
+        if (!this.mcp) throw new Error('MCP pool not initialized');
+        const tool = Array.from(this.mcp.tools.values()).find(
+            (t) => `${t.server}:${t.originalName}` === title
+        );
+        if (!tool) throw new Error(`Unknown tool: ${title}`);
+        const result = await tool.client.callTool({ name: tool.originalName, arguments: args });
+        const contentArray = (result.content ?? []) as Array<{ type: string; text?: string }>;
+        return contentArray
+            .filter((p) => p.type === 'text' && typeof p.text === 'string')
+            .map((p) => p.text)
+            .join('\n');
+    };
 }

@@ -9,6 +9,7 @@
  */
 
 import readline from 'readline';
+import 'module-alias/register';
 import { editMemory, recall, remember, updateMemory } from '../memory/notes';
 import { semanticSearch } from '../memory/search';
 import { MEMORY_KINDS, MEMORY_STATUSES } from '../memory/types';
@@ -105,7 +106,7 @@ const SEMANTIC_SEARCH_TOOL = {
         'Conceptual vector search over the indexed codebase (and optionally memory entries).',
         'Use for "where does X happen" / "what handles Y" queries when you don\'t know the exact symbol.',
         'For known string/symbol lookups prefer the file-context `search` tool (ripgrep) — they are complementary.',
-        'Returns code snippets ranked by semantic similarity; follow up with `read_lines` / `get_outline` for full context.',
+        'Returns ONE entry per matched file (deduped) with parallel `startLines` / `endLines` arrays of the matched ranges (already merged), plus an annotated `outline` whose entries carry a `matched` flag indicating which symbols overlap those ranges. No source code is returned — follow up with `read_lines` (you can pass `startLines`/`endLines` straight from the response) or `read_function` for the actual content.',
         'When scope includes "memory", you MUST also pass `memoryKind` to choose which memory table to search (findings or revisits).',
     ].join(' '),
     inputSchema: {

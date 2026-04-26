@@ -239,7 +239,7 @@ Include enough detail in \`body\` that a future session can act without re-inves
 **\`semantic_search\` — conceptual search across the codebase (and optionally memory):**
 - \`semantic_search({ query, scope?, memoryKind?, pathGlob?, k? })\`
 - \`scope\` is \`code\` (default), \`memory\`, or \`both\`. **When \`scope\` includes memory, \`memoryKind\` is required** (which table to search).
-- Use it for "where does X happen" / "what handles Y" when you don't know the exact symbol — it returns ranked snippets with file/line/language. Pair with \`read_lines\` / \`get_outline\` for full context.
+- Use it for "where does X happen" / "what handles Y" when you don't know the exact symbol. **No source code is ever returned.** Each code hit is ONE entry per matched file with parallel \`startLines\` / \`endLines\` arrays of merged matched ranges, plus an annotated \`outline\` whose entries carry a \`matched: true\` flag indicating which symbols overlap those ranges. Pipe \`startLines\`/\`endLines\` straight into \`read_lines\`, or read just the symbols flagged \`matched\` via \`read_function\`.
 - For known string/symbol lookups, prefer \`kra-file-context:search\` (ripgrep). The two are complementary.
 
 **Editing & lifecycle:**
@@ -282,6 +282,9 @@ Reminder: Always call confirm_task_complete before ending your turn.`,
         await aiNeovimHelper.updateNvimAndGoToLastLine(nvimClient);
         await setupSessionEventHandlers(state);
         await setupEventHandlers(state);
+
+        const executableTools = state.session.listExecutableTools?.() ?? [];
+        await updateAgentUi(nvimClient, 'set_executable_tools', [executableTools]);
 
         let cleaningUp = false;
         const runCleanup = (): void => {

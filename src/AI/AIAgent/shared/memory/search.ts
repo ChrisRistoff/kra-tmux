@@ -1,9 +1,10 @@
 /**
  * Vector search across the kra-memory code_chunks (and optionally memory)
- * tables. Results are scored by cosine similarity (LanceDB default for
- * BGE-small) and merged across collections when `scope === 'both'`.
+ * tables. Code hits are aggregated per file: one entry per matched path with
+ * merged matched line ranges (parallel `startLines` / `endLines` arrays
+ * matching the read_lines tool shape) and an annotated file outline so the
+ * agent can navigate without us shipping any source code in the response.
  */
-
 import { embedOne } from './embedder';
 import { getCodeChunksTable, getFindingsTable, getRevisitsTable } from './db';
 import { matchGlob } from './indexer';
@@ -11,11 +12,24 @@ import {
     decodeRow,
     isRevisitKind,
     type CodeChunkRow,
+    type CodeFileHitData,
     type MemoryKind,
     type MemoryRow,
     type SemanticSearchHit,
     type SemanticSearchInput,
 } from './types';
+
+interface RawCodeChunkHit {
+    path: string;
+    language: string;
+    startLine: number;
+    endLine: number;
+    score: number;
+}
+
+// Drop low-confidence semantic hits before returning to the caller. Anything
+// below this score is noise in practice and just bloats the agent's context.
+const MIN_SCORE = 0.55;
 
 export async function semanticSearch(input: SemanticSearchInput): Promise<SemanticSearchHit[]> {
     if (typeof input.query !== 'string' || input.query.trim() === '') {
@@ -38,9 +52,10 @@ export async function semanticSearch(input: SemanticSearchInput): Promise<Semant
         hits.push(...await searchMemory(queryVector, k, input.memoryKind));
     }
 
-    hits.sort((a, b) => b.score - a.score);
+    const filtered = hits.filter((h) => h.score >= MIN_SCORE);
+    filtered.sort((a, b) => b.score - a.score);
 
-    return hits.slice(0, k);
+    return filtered.slice(0, k);
 }
 
 async function searchCode(vector: number[], k: number, pathGlob?: string): Promise<SemanticSearchHit[]> {
@@ -48,14 +63,33 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
 
     if (!table) return [];
 
-    // Pull a wider net when filtering by glob so post-filter still yields k hits.
-    const fetchK = pathGlob ? Math.min(k * 5, 200) : k;
+    // Pull a wide net so deduping by path still leaves us with k distinct files.
+    // Files commonly own multiple matching chunks; an unfiltered fetch of `k`
+    // would routinely yield <k unique paths after grouping.
+    const fetchK = Math.min(Math.max(k * 8, 40), 400);
     const rows = await table.search(vector).limit(fetchK).toArray();
 
-    return rows
-        .map(toCodeHit)
-        .filter((hit) => !pathGlob || (hit.code ? matchGlob(hit.code.path, pathGlob) : false))
+    const rawHits: RawCodeChunkHit[] = rows
+        .map(toRawCodeHit)
+        .filter((hit) => !pathGlob || matchGlob(hit.path, pathGlob));
+
+    const grouped = groupByPath(rawHits);
+    const topPaths = [...grouped.values()]
+        .sort((a, b) => b.score - a.score)
         .slice(0, k);
+
+    return Promise.all(topPaths.map(async (group) => {
+        const merged = mergeRanges(group.ranges);
+        const code: CodeFileHitData = {
+            path: group.path,
+            language: group.language,
+            lineCount: 0,
+            startLines: merged.map((r) => r.start),
+            endLines: merged.map((r) => r.end),
+        };
+
+        return { type: 'code', score: group.score, code } satisfies SemanticSearchHit;
+    }));
 }
 
 async function searchMemory(vector: number[], k: number, kind: MemoryKind): Promise<SemanticSearchHit[]> {
@@ -75,24 +109,60 @@ async function searchMemory(vector: number[], k: number, kind: MemoryKind): Prom
         .slice(0, k);
 }
 
-function toCodeHit(raw: Record<string, unknown>): SemanticSearchHit {
+function toRawCodeHit(raw: Record<string, unknown>): RawCodeChunkHit {
     const row = raw as unknown as CodeChunkRow & { _distance?: number };
-    const score = distanceToScore(row._distance);
 
     return {
-        type: 'code',
-        score,
-        code: {
-            id: row.id,
-            path: row.path,
-            startLine: row.startLine,
-            endLine: row.endLine,
-            symbol: row.symbol === '' ? null : row.symbol,
-            language: row.language,
-            snippet: row.content,
-            score,
-        },
+        path: row.path,
+        language: row.language,
+        startLine: row.startLine,
+        endLine: row.endLine,
+        score: distanceToScore(row._distance),
     };
+}
+
+interface PathGroup {
+    path: string;
+    language: string;
+    score: number;
+    ranges: { start: number; end: number }[];
+}
+
+function groupByPath(hits: RawCodeChunkHit[]): Map<string, PathGroup> {
+    const groups = new Map<string, PathGroup>();
+    for (const hit of hits) {
+        const existing = groups.get(hit.path);
+        if (existing) {
+            existing.ranges.push({ start: hit.startLine, end: hit.endLine });
+            if (hit.score > existing.score) existing.score = hit.score;
+        } else {
+            groups.set(hit.path, {
+                path: hit.path,
+                language: hit.language,
+                score: hit.score,
+                ranges: [{ start: hit.startLine, end: hit.endLine }],
+            });
+        }
+    }
+
+    return groups;
+}
+
+function mergeRanges(ranges: { start: number; end: number }[]): { start: number; end: number }[] {
+    if (ranges.length === 0) return [];
+    const sorted = [...ranges].sort((a, b) => a.start - b.start);
+    const out: { start: number; end: number }[] = [{ ...sorted[0] }];
+    for (let i = 1; i < sorted.length; i++) {
+        const cur = sorted[i];
+        const tail = out[out.length - 1];
+        if (cur.start <= tail.end + 1) {
+            if (cur.end > tail.end) tail.end = cur.end;
+        } else {
+            out.push({ ...cur });
+        }
+    }
+
+    return out;
 }
 
 function toMemoryHit(raw: Record<string, unknown>): SemanticSearchHit {

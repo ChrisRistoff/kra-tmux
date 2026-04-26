@@ -10,7 +10,7 @@ local state = {
     active_entry_index = nil,
     body = "Ready",
     history = {},
-    icon = "󰚩",
+    icon = "󱚩",
     level = vim.log.levels.INFO,
     notification = nil,
     popups_hidden = false,
@@ -19,7 +19,12 @@ local state = {
     statusline = "Ready",
     timer = nil,
     title = "Copilot Agent",
+    executable_tools = {},
+    tool_result_win = nil,
+    tool_result_buf = nil,
 }
+
+local send_action  -- forward decl; assigned below before any user keypress can fire
 
 local function redraw_statusline()
     pcall(vim.cmd, "redrawstatus")
@@ -44,6 +49,16 @@ local function render_notification(timeout)
         icon = current_icon(),
     })
     redraw_statusline()
+end
+
+-- Pretty-print JSON via `jq` if available; pass-through on non-JSON or jq error.
+local function pretty_json(text)
+    if type(text) ~= "string" or text == "" then return text or "" end
+    local first = text:match("^%s*(.)")
+    if first ~= "{" and first ~= "[" then return text end
+    local out = vim.fn.system({ "jq", "." }, text)
+    if vim.v.shell_error ~= 0 then return text end
+    return (out:gsub("\n$", ""))
 end
 
 local function dismiss_notification()
@@ -86,8 +101,12 @@ local function upsert_history(tool_name, details, args_json)
         local entry = state.history[state.active_entry_index]
         entry.details = details
         entry.updated_at = timestamp
+        if args_json and args_json ~= "" and (entry.args_json == nil or entry.args_json == "") then
+            entry.args_json = args_json
+        end
         return entry
     end
+
 
     local entry = {
         args_json = args_json or "",
@@ -102,7 +121,7 @@ local function upsert_history(tool_name, details, args_json)
     return entry
 end
 
-local function complete_history(tool_name, details, success)
+local function complete_history(tool_name, details, success, full_result)
     local entry
     if state.active_entry_index and state.history[state.active_entry_index] then
         entry = state.history[state.active_entry_index]
@@ -112,6 +131,7 @@ local function complete_history(tool_name, details, success)
 
     entry.title = tool_name
     entry.result = details
+    entry.full_result = (full_result and full_result ~= "") and full_result or details
     entry.details = details
     entry.status = success and "done" or "failed"
     entry.updated_at = os.date("%H:%M:%S")
@@ -146,25 +166,28 @@ local function open_history_view(entry)
     vim.cmd("tabnew")
     local view_tab = vim.api.nvim_get_current_tabpage()
 
-    local args_text = (entry.args_json and entry.args_json ~= "") and entry.args_json or "{}"
-    local result_text = entry.result or entry.details or "(no result recorded)"
+    local args_text = pretty_json((entry.args_json and entry.args_json ~= "") and entry.args_json or "{}")
+    local result_text = pretty_json(entry.full_result or entry.result or entry.details or "(no result recorded)")
+    local is_executable = state.executable_tools[entry.title] ~= nil
 
-    -- LEFT: args JSON
+    -- LEFT (visually right after vsplit): args JSON. Editable when the tool is
+    -- in our executable map so the user can tweak args and re-run.
     local left_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, vim.split(args_text, "\n", { plain = true }))
     vim.bo[left_buf].buftype = "nofile"
     vim.bo[left_buf].bufhidden = "wipe"
     vim.bo[left_buf].swapfile = false
     vim.bo[left_buf].filetype = "json"
-    vim.bo[left_buf].modifiable = false
+    vim.bo[left_buf].modifiable = is_executable
     vim.bo[left_buf].modified = false
     local left_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(left_win, left_buf)
     vim.wo[left_win].number = true
     vim.wo[left_win].wrap = false
-    vim.wo[left_win].winbar = string.format(" 󰘦 ARGS  %s  [%s] ", entry.title or "tool", entry.status or "?")
+    local args_hint = is_executable and "  (<leader>a run, <leader>q close)" or ""
+    vim.wo[left_win].winbar = string.format(" 󰘦 ARGS  %s  [%s]%s ", entry.title or "tool", entry.status or "?", args_hint)
 
-    -- RIGHT: result
+    -- RIGHT (visually left after vsplit): last recorded result.
     vim.cmd("vsplit")
     local right_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(right_buf, 0, -1, false, vim.split(result_text, "\n", { plain = true }))
@@ -197,8 +220,24 @@ local function open_history_view(entry)
     for _, buf in ipairs({ left_buf, right_buf }) do
         local o = vim.tbl_extend("force", base, { buffer = buf })
         vim.keymap.set("n", "q", close_view, vim.tbl_extend("force", o, { desc = "Close tool view" }))
+        vim.keymap.set("n", "<leader>q", close_view, vim.tbl_extend("force", o, { desc = "Close tool view" }))
         vim.keymap.set("n", "<Tab>", "<C-w>w", vim.tbl_extend("force", o, { desc = "Next pane" }))
         vim.keymap.set("n", "<S-Tab>", "<C-w>W", vim.tbl_extend("force", o, { desc = "Prev pane" }))
+    end
+
+    if is_executable then
+        local run_opts = vim.tbl_extend("force", base, { buffer = left_buf, desc = "Run tool with edited args" })
+        vim.keymap.set("n", "<leader>a", function()
+            local lines = vim.api.nvim_buf_get_lines(left_buf, 0, -1, false)
+            local text = table.concat(lines, "\n")
+            local ok, _ = pcall(vim.json.decode, text)
+            if not ok then
+                vim.notify("Invalid JSON in args buffer", vim.log.levels.WARN, { title = "kra-agent" })
+                return
+            end
+            send_action("execute_tool", { title = entry.title, args_json = text })
+            vim.notify("Running " .. entry.title .. "...", vim.log.levels.INFO, { title = "kra-agent" })
+        end, run_opts)
     end
 
     vim.api.nvim_set_current_win(left_win)
@@ -245,8 +284,8 @@ function M.update_tool(tool_name, details)
     })
 end
 
-function M.complete_tool(tool_name, details, success)
-    complete_history(tool_name, details, success)
+function M.complete_tool(tool_name, details, success, full_result)
+    complete_history(tool_name, details, success, full_result)
     set_state({
         title = string.format("Tool · %s", tool_name),
         body = string.format("%s\n\nPress <Space>h for tool history.", details),
@@ -353,10 +392,20 @@ function M.show_history()
                     end,
                 }),
                 previewer = previewers.new_buffer_previewer({
-                    title = "Tool result",
+                    title = "Tool args + result",
                     define_preview = function(self, entry)
                         local item = entry.value
-                        local text = item.result or item.details or "(no result)"
+                        local args = pretty_json((item.args_json and item.args_json ~= "") and item.args_json or "(none)")
+                        local result = pretty_json(item.result or item.details or "(no result)")
+                        local sep = string.rep("─", 60)
+                        local text = table.concat({
+                            "── ARGS " .. string.rep("─", 54),
+                            args,
+                            "",
+                            "── RESULT " .. string.rep("─", 52),
+                            result,
+                            sep,
+                        }, "\n")
                         vim.api.nvim_buf_set_lines(
                             self.state.bufnr,
                             0,
@@ -414,7 +463,7 @@ function M.show_diff_history()
     diff.open_diff_history()
 end
 
-local function send_action(action, args)
+send_action = function(action, args)
     local channel = vim.g.kra_agent_channel
     if not channel or channel == 0 then
         vim.notify('kra-memory: agent channel not registered', vim.log.levels.ERROR)
@@ -701,6 +750,71 @@ function M.open_memory_buffer(item, view)
     end, vim.tbl_extend('force', opts, { desc = 'Dismiss revisit' }))
 
     vim.keymap.set('n', 'q', '<Cmd>bwipeout!<CR>', vim.tbl_extend('force', opts, { desc = 'Close memory buffer' }))
+end
+
+function M.set_executable_tools(list)
+    local map = {}
+    if type(list) == "table" then
+        for _, t in ipairs(list) do
+            if type(t) == "table" and t.title then
+                map[t.title] = { server = t.server, name = t.name }
+            end
+        end
+    end
+    state.executable_tools = map
+end
+
+function M.show_tool_execution_result(result_text, error_msg, title)
+    local lines = {}
+    if error_msg and error_msg ~= "" then
+        table.insert(lines, "ERROR: " .. error_msg)
+    else
+        local pretty = pretty_json(result_text or "")
+        for _, l in ipairs(vim.split(pretty, "\n", { plain = true })) do
+            table.insert(lines, l)
+        end
+    end
+
+    -- Reuse existing popup if still open.
+    if state.tool_result_win and vim.api.nvim_win_is_valid(state.tool_result_win) then
+        pcall(vim.api.nvim_win_close, state.tool_result_win, true)
+    end
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].swapfile = false
+    vim.bo[buf].filetype = (error_msg and error_msg ~= "") and "text" or "json"
+    vim.bo[buf].modifiable = false
+
+    local width = math.floor(vim.o.columns * 0.8)
+    local height = math.floor(vim.o.lines * 0.7)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+    local win = vim.api.nvim_open_win(buf, true, {
+        relative = "editor",
+        width = width,
+        height = height,
+        row = row,
+        col = col,
+        style = "minimal",
+        border = "rounded",
+        title = " Tool result: " .. tostring(title or "") .. " ",
+        title_pos = "center",
+    })
+    vim.wo[win].number = true
+    vim.wo[win].wrap = true
+    state.tool_result_win = win
+    state.tool_result_buf = buf
+
+    local close = function()
+        if vim.api.nvim_win_is_valid(win) then pcall(vim.api.nvim_win_close, win, true) end
+        state.tool_result_win = nil
+        state.tool_result_buf = nil
+    end
+    vim.keymap.set("n", "q", close, { buffer = buf, silent = true, nowait = true, desc = "Close result popup" })
+    vim.keymap.set("n", "<leader>q", close, { buffer = buf, silent = true, nowait = true, desc = "Close result popup" })
 end
 
 return M

@@ -312,7 +312,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         }
 
         const details = `Running ${toolName}\n\nArguments:\n${formatToolArguments(event.data.arguments)}`;
-        const argsJson = JSON.stringify(event.data.arguments, null, 2);
+        const argsJson = JSON.stringify(event.data.arguments ?? {}, null, 2);
         void updateAgentUi(state.nvim, 'start_tool', [toolName, details, argsJson]);
     });
 
@@ -346,10 +346,14 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         write(formatToolLine(toolSummary, event.data.success));
 
         const details = formatToolCompletion(event.data.success, event.data.result, event.data.error);
+        const fullResult = event.data.success
+            ? (event.data.result?.detailedContent ?? event.data.result?.content ?? '')
+            : (event.data.error ? String(event.data.error) : '');
         void updateAgentUi(state.nvim, 'complete_tool', [
             toolName,
             details,
             event.data.success,
+            fullResult,
         ]);
 
         // Notify the diff module so any pending diff entry queued by an approved
