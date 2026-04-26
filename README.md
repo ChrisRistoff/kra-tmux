@@ -27,7 +27,7 @@
 - **📜 Per-file revert** — session diff history with one `ORIG` entry per file lets you roll back any single file to its pre-session baseline
 - **🛡️ Tool approval** — approve each tool call, allow by family, or go YOLO
 - **🔌 MCP server support** — extend either provider with custom tools via `settings.toml`; BYOK auto-loads `kra-bash` + `kra-web`
-- **🧠 Persistent project memory + semantic codebase search (`kra-memory` MCP)** — local LanceDB + on-device fastembed (BGE-small int8); the agent calls `remember` / `recall` / `update_memory` so design decisions, gotchas, and follow-ups survive across sessions and compaction, and `semantic_search` lets it find code by concept ("where does X happen") not just exact symbol. Build the index with `kra ai index`, or flip `indexCodeOnSave = true` to keep it fresh in the background
+- **🧠 Persistent project memory + multi-codebase semantic search (`kra-memory` MCP)** — local LanceDB + on-device fastembed, `remember` / `recall` / `update_memory` carry design decisions, gotchas, and follow-ups across sessions and compaction. `semantic_search` finds code by concept ("where does X happen"), opt-in per launch via a Neovim Yes/No prompt and tracked in a central registry (`~/.kra-memory/registry.json`) keyed by git origin so identity survives renames and re-clones. Catch-up reindex on launch (`git diff` + `status` union) covers edits made between sessions; `kra ai memory` is a blessed UI to manage memories and every indexed repo from one place
 - **📊 Copilot quota monitoring** — live monthly usage + cached weekly/session limits with terminal warnings at 50%/25%/10%
 ---
 

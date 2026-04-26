@@ -10,6 +10,7 @@ import path from 'path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { indexFile, isIndexable, removeFile, workspaceRoot } from './indexer';
 import { loadMemorySettings } from './settings';
+import { getRepoIdentity, upsertRegistryEntry, getRegistryEntry } from './registry';
 import type { MemorySettings } from './types';
 
 export interface WatcherHandle {
@@ -87,14 +88,35 @@ export async function startWatcher(): Promise<WatcherHandle | null> {
 
 async function run(kind: 'index' | 'remove', rel: string, settings: MemorySettings): Promise<void> {
     try {
+        // Only the repos the user has explicitly opted into (i.e. a registry
+        // entry exists) participate in incremental indexing. Without this
+        // guard, any file save in an opted-out repo would silently recreate
+        // the code_chunks table.
+        const root = workspaceRoot();
+        const identity = await getRepoIdentity(root);
+        const existing = await getRegistryEntry(identity.id);
+        if (!existing) return;
+
         if (kind === 'remove') {
             await removeFile(rel);
-
-            return;
+        } else {
+            await indexFile(rel, { settings });
         }
-        await indexFile(rel, { settings });
+        await touchRegistryLastIndexed();
     } catch (err) {
         process.stderr.write(`[kra-memory] watcher ${kind} failed for ${rel}: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
+}
+
+async function touchRegistryLastIndexed(): Promise<void> {
+    try {
+        const root = workspaceRoot();
+        const identity = await getRepoIdentity(root);
+        const existing = await getRegistryEntry(identity.id);
+        if (!existing) return; // Only bump for repos the user explicitly opted into.
+        await upsertRegistryEntry(identity.id, { lastIndexedAt: Date.now() });
+    } catch {
+        // Registry update is best-effort; never block the watcher on it.
     }
 }
 

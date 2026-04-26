@@ -1,7 +1,6 @@
 import * as ui from '@/UI/generalUI';
 import { startCopilotFlow } from '@/AI/AIAgent/providers/copilot';
 import { startByokFlow } from '@/AI/AIAgent/providers/byok';
-import { reindexAll } from '@/AI/AIAgent/shared/memory/indexer';
 import { loadMemorySettings } from '@/AI/AIAgent/shared/memory/settings';
 import { startWatcher, type WatcherHandle } from '@/AI/AIAgent/shared/memory/watcher';
 
@@ -15,17 +14,10 @@ export async function startAgentChat(): Promise<void> {
     let watcher: WatcherHandle | null = null;
 
     if (memorySettings.enabled) {
-        if (memorySettings.indexCodeOnStart) {
-            try {
-                console.log('kra-memory: running startup code reindex…');
-                const result = await reindexAll();
-
-                console.log(`kra-memory: indexed ${result.filesScanned} files (${result.chunksWritten} new, ${result.chunksSkipped} unchanged) in ${(result.elapsedMs / 1000).toFixed(1)}s`);
-            } catch (err) {
-                console.warn(`kra-memory: startup index failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-        }
-
+        // The interactive Yes/No prompt + initial reindex is now handled inside
+        // runStartupIndexingFlow (called from agentConversation). The legacy
+        // unconditional `reindexAll()` was removed because it would silently
+        // recreate the code_chunks table even after the user opted out.
         if (memorySettings.indexCodeOnSave) {
             try {
                 watcher = await startWatcher();

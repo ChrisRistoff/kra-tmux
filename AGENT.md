@@ -457,6 +457,8 @@ The agent isn't the only one allowed to write to the memory store. Inside the ag
 
 Each action re-opens the picker on the same view so you can chain operations. The same `notes.ts` helpers back both the picker and the MCP tools, so user-edited and agent-edited memories are indistinguishable to `recall` / `semantic_search`.
 
+For a CLI-side equivalent (no agent session needed), run `kra ai memory`. It's a blessed wizard that operates over the **central registry at `~/.kra-memory/registry.json`**, so it manages **every repo you've ever indexed** — not just the cwd. Two branches: **Indexed codebases** (list every registered repo with alias, path, last-indexed commit and chunk count; pick any one to view details, drop its `code_chunks` table, reset its indexing baseline so the next agent launch in that repo does a fresh full index, or rename its alias) and **Long-term memories** (scope to All / Findings / Revisits, view body in a scrollable blessed modal, edit body in Neovim — round-trips through a temp file and re-embeds the vector — change status, delete, or add a brand-new entry). Useful when you want to clean house across multiple projects without launching the agent in each one.
+
 ### Tools exposed (5, intentionally minimal)
 
 The surface is intentionally compact so the model doesn't have to choose between near-duplicate tools. Two writes (`remember` + `edit_memory`), one read (`recall`), one mutation (`update_memory`), and one cross-table search (`semantic_search`).
@@ -466,7 +468,7 @@ The surface is intentionally compact so the model doesn't have to choose between
 | `remember` | `({ kind, title, body, tags?, paths? })` | Store a long-term entry. `kind` is `note \| bug-fix \| gotcha \| decision \| investigation` (written to `memory_findings`) **or** `revisit` (written to `memory_revisits`). `revisit` is for ideas you discussed but deferred — they default to `status: open` so they show up in `recall({ kind: 'revisit', status: 'open' })`. |
 | `recall` | `({ kind, query?, k?, tagsAny?, status? })` | Vector search across stored entries. **`kind` is required** — it picks which table to query (findings vs revisits). Omit `query` to list everything matching the filters (useful for `recall({ kind: 'revisit', status: 'open' })`). |
 | `update_memory` | `({ id, status, resolution? })` | Mutate a **revisit's** `status` (`resolved` or `dismissed`) and optionally attach a resolution note. The original `body` is preserved. Findings have no status concept; use `edit_memory` to amend them. |
-| `semantic_search` | `({ query, k?, scope?, memoryKind?, pathGlob? })` | Conceptual vector search across the **indexed codebase** (Phase 2). `scope` is `code` (default), `memory`, or `both`. When `scope` includes memory, `memoryKind` is **required** so the query targets the correct table. Returns ranked snippets with `path`, `startLine`/`endLine`, `language`, `snippet`. Pair with the file-context `read_lines` / `get_outline` for full context. Use ripgrep `search` for known symbols/strings; the two are complementary. |
+| `semantic_search` | `({ query, k?, scope?, memoryKind?, pathGlob? })` | Conceptual vector search across the **indexed codebase** (Phase 2). `scope` is `code` (default), `memory`, or `both`. When `scope` includes memory, `memoryKind` is **required** so the query targets the correct table. Returns ranked snippets with `path`, `startLine`/`endLine`, `language`, `snippet`. Pair with the file-context `read_lines` / `get_outline` for full context. Use ripgrep `search` for known symbols/strings; the two are complementary. **Only exposed when the user opts the current repo into code search at launch** (see *Codebase indexing* below) — if you opt out, this tool is filtered out of `tools/list` for the session. |
 | `edit_memory` | `({ id, title?, body?, tags?, paths? })` | Edit an existing entry's user-visible fields. Re-embeds the vector when `title` or `body` changes. Works on entries in either table. |
 ### Agent prompt (built-in)
 
@@ -481,8 +483,7 @@ The agent is told to:
 ```toml
 [ai.agent.memory]
 enabled = true                    # master switch for the whole memory layer
-indexCodeOnStart = false          # full code reindex when the agent session starts
-indexCodeOnSave = false           # background watcher reindexes files on save (chokidar)
+indexCodeOnSave = false           # background watcher reindexes files on save (opted-in repos only)
 autoSurfaceOnStart = false        # quietly seed recall() / open-revisit list into the session preamble
 gitignoreMemory = true            # whether .kra-memory/ should be added to gitignore by default
 # Tuning knobs (defaults are good for most repos):
@@ -494,11 +495,22 @@ gitignoreMemory = true            # whether .kra-memory/ should be added to giti
 
 ### Codebase indexing (Phase 2)
 
-`semantic_search` is only useful once you've built the index. Three ways to keep it fresh:
+Code search is **multi-codebase and opt-in per launch**. A central registry at `~/.kra-memory/registry.json` keyed by `git remote get-url origin` (with a top-level path fallback for non-git repos) tracks every workspace you've indexed: alias, root path, last-indexed commit, last-index timestamp, chunk count. Identity is the origin URL, not the directory, so reindex status survives renames and re-clones.
 
-1. **One-off / on demand:** `kra ai index` runs a full reindex from the terminal. Safe to re-run; chunks whose content hasn't changed are skipped (~30–150 ms per file, content-hashed).
-2. **On agent start:** flip `indexCodeOnStart = true` and every `kra ai agent` session does an incremental reindex before the prompt comes up.
-3. **On save (background):** flip `indexCodeOnSave = true` and a `chokidar` watcher reindexes files in the background as you edit (debounced 500 ms per path; deletes remove the file's chunks).
+**On every `kra ai agent` launch:** a Yes/No modal appears in Neovim. Pick **No** and the session starts immediately with `semantic_search` removed from both the agent's tool list and the kra-memory MCP child's `tools/list` schema (gated by `KRA_MEMORY_SEMANTIC_SEARCH_ENABLED`) — the model can't even see the tool. Pick **Yes** and the agent brings the index up to date before the prompt:
+
+- First time on this repo → full `reindexAll`.
+- Already indexed → catch-up only. The change set is the union of `git diff --name-only $lastIndexedCommit HEAD` (committed since last index, including pulls and branch switches) and `git status --porcelain` (uncommitted edits, *including* edits made outside the agent between sessions). Deletions are removed from the index; everything else is reindexed. Above 500 changed files a secondary prompt offers a full reindex instead.
+- Non-git workspaces → mtime > `lastIndexedAt` fallback.
+
+Progress streams live to a Neovim floating tab — one line per file as it's indexed. The modal stays open until you dismiss it (`q` / `<Esc>`). After indexing finishes, the registry is updated with the new `lastIndexedCommit` / `lastIndexedAt` / `chunksCount`.
+
+Other ways to keep the index fresh once a repo is opted in:
+
+1. **One-off / on demand:** `kra ai index` runs a full reindex of the cwd from the terminal. Safe to re-run — chunks whose content hasn't changed are skipped (~30–150 ms per file, content-hashed). Updates the registry baseline so the next agent launch can do a tight catch-up.
+2. **On save (background):** flip `indexCodeOnSave = true` and a `chokidar` watcher reindexes files in the background as you edit (debounced 500 ms per path; deletes remove the file's chunks). The watcher only fires for repos that are already in the registry — it will not silently recreate `code_chunks` in opted-out repos.
+
+To manage indexes across all your repos from one place — view details, drop a repo's `code_chunks` table, reset its baseline, or rename its alias — use `kra ai memory` → *Indexed codebases*.
 
 Under the hood:
 - File enumeration uses `git ls-files -co --exclude-standard` so your `.gitignore` is honoured for free.

@@ -15,6 +15,7 @@ import type {
 } from '@/AI/AIAgent/shared/types/agentTypes';
 
 import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
+import { runStartupIndexingFlow } from '@/AI/AIAgent/shared/main/agentIndexingFlow';
 import { setupSessionEventHandlers, updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import {
     addAgentCommands,
@@ -51,6 +52,9 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
     await createAgentChatFile(chatFile);
 
     const nvimClient = await openAgentNeovim(chatFile);
+    const indexingResult = await runStartupIndexingFlow(nvimClient, cwd);
+    const semanticSearchEnabled = indexingResult.semanticSearchEnabled;
+
     const userMcpServers = await getConfiguredMcpServers();
     const mcpServers = {
         ...userMcpServers,
@@ -70,7 +74,17 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             type: 'stdio' as const,
             command: process.execPath,
             args: [path.join(__dirname, '..', 'utils', 'memoryMcpServer.js')],
-            tools: ['remember', 'recall', 'update_memory', 'edit_memory', 'semantic_search'],
+            tools: [
+                'remember',
+                'recall',
+                'update_memory',
+                'edit_memory',
+                ...(semanticSearchEnabled ? ['semantic_search'] : []),
+            ],
+            env: {
+                ...process.env,
+                KRA_MEMORY_SEMANTIC_SEARCH_ENABLED: semanticSearchEnabled ? '1' : '0',
+            },
         },
     };
     const stateRef: { current?: AgentConversationState } = {};

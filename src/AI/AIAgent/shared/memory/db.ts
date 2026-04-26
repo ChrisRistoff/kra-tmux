@@ -193,3 +193,19 @@ export async function getCodeChunksTable(seedRow: CodeChunkRow | null): Promise<
 
     return next;
 }
+
+/**
+ * Total number of code chunks currently stored. Returns 0 if the table has
+ * never been created.
+ */
+export async function countCodeChunks(): Promise<number> {
+    const { table } = await getCodeChunksTable(null);
+
+    if (!table) return 0;
+
+    try {
+        return await table.countRows();
+    } catch {
+        return 0;
+    }
+}

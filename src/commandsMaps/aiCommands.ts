@@ -9,6 +9,7 @@ export const aiCommands : AiCommands = {
     'delete': ai.deleteChats,
     'quota-agent': ai.showQuota,
     'index': ai.indexCodebase,
+    'memory': ai.manageMemory,
 };
 
 export function handleAiCommandNotExist(commandName: string): void {

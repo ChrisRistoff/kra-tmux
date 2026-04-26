@@ -141,12 +141,14 @@ const EDIT_MEMORY_TOOL = {
         required: ['id'],
     },
 };
+const SEMANTIC_SEARCH_ENABLED = process.env['KRA_MEMORY_SEMANTIC_SEARCH_ENABLED'] === '1';
+
 const TOOLS = [
     REMEMBER_TOOL,
     RECALL_TOOL,
     UPDATE_MEMORY_TOOL,
     EDIT_MEMORY_TOOL,
-    SEMANTIC_SEARCH_TOOL,
+    ...(SEMANTIC_SEARCH_ENABLED ? [SEMANTIC_SEARCH_TOOL] : []),
 ];
 
 type ToolName = (typeof TOOLS)[number]['name'];
