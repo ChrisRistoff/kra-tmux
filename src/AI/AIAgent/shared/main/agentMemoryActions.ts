@@ -144,18 +144,6 @@ export async function handleSetMemoryStatus(
         return;
     }
 
-    if (statusRaw === 'open') {
-        // Re-opening a previously resolved/dismissed revisit isn't part of
-        // updateMemory's contract; do it via editMemory by writing the status
-        // field directly through a small extension. For now, expose a notice.
-        await nvim.executeLua(
-            `vim.notify('Re-opening revisits not supported yet', vim.log.levels.WARN, { title = 'kra-memory' })`,
-            [],
-        );
-
-        return;
-    }
-
     const resolution = typeof args['resolution'] === 'string' ? (args['resolution']) : undefined;
     const updateInput: Parameters<typeof updateMemory>[0] =
         resolution !== undefined
@@ -164,4 +152,5 @@ export async function handleSetMemoryStatus(
     await updateMemory(updateInput);
 
     await openMemoryBrowser(nvim, view);
+    return;
 }

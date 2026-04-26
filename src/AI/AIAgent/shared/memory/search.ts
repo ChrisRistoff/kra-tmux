@@ -2,8 +2,8 @@
  * Vector search across the kra-memory code_chunks (and optionally memory)
  * tables. Code hits are aggregated per file: one entry per matched path with
  * merged matched line ranges (parallel `startLines` / `endLines` arrays
- * matching the read_lines tool shape) and an annotated file outline so the
- * agent can navigate without us shipping any source code in the response.
+ * matching the read_lines tool shape) so the agent knows where to look
+ * without us shipping any source code in the response.
  */
 import { embedOne } from './embedder';
 import { getCodeChunksTable, getFindingsTable, getRevisitsTable } from './db';

@@ -639,7 +639,7 @@ end
 
 --- Open a single memory entry in a scratch buffer for editing.
 --- Buffer keymaps: <leader>w save, <leader>d delete,
---- <leader>r resolve, <leader>x dismiss (revisits only), q close.
+--- <leader>r resolve, <leader>x dismiss, <leader>o reopen (revisits only), q close.
 function M.open_memory_buffer(item, view)
     if not item or not item.id then return end
     view = view or 'all'
@@ -670,7 +670,7 @@ function M.open_memory_buffer(item, view)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.api.nvim_buf_set_option(buf, 'modified', false)
 
-    vim.cmd('belowright split')
+    vim.cmd('tabnew')
     vim.api.nvim_win_set_buf(0, buf)
 
     local function parse_buffer()
@@ -748,6 +748,17 @@ function M.open_memory_buffer(item, view)
             vim.cmd('bwipeout!')
         end)
     end, vim.tbl_extend('force', opts, { desc = 'Dismiss revisit' }))
+
+    vim.keymap.set('n', '<leader>o', function()
+        if item.kind ~= 'revisit' then
+            vim.notify('Reopen only applies to revisits', vim.log.levels.WARN, { title = 'kra-memory' })
+            return
+        end
+        send_action('set_memory_status', {
+            id = item.id, status = 'open', resolution = '', view = view,
+        })
+        vim.cmd('bwipeout!')
+    end, vim.tbl_extend('force', opts, { desc = 'Reopen revisit' }))
 
     vim.keymap.set('n', 'q', '<Cmd>bwipeout!<CR>', vim.tbl_extend('force', opts, { desc = 'Close memory buffer' }))
 end

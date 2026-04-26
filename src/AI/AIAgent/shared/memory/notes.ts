@@ -261,8 +261,8 @@ export async function updateMemory(input: UpdateMemoryInput): Promise<{ ok: true
 
     const status = input.status as string;
 
-    if (status !== 'resolved' && status !== 'dismissed') {
-        throw new Error(`update_memory: status must be 'resolved' or 'dismissed', got '${status}'`);
+    if (status !== 'open' && status !== 'resolved' && status !== 'dismissed') {
+        throw new Error(`update_memory: status must be 'open', 'resolved' or 'dismissed', got '${status}'`);
     }
 
     const { table } = await getRevisitsTable(null);
@@ -277,7 +277,11 @@ export async function updateMemory(input: UpdateMemoryInput): Promise<{ ok: true
         updatedAt: Date.now(),
     };
 
-    if (input.resolution !== undefined) {
+    if (status === 'open') {
+        // Reopening clears any prior resolution note so the entry is back to a
+        // pristine "awaiting human input" state.
+        updateValues['resolution'] = '';
+    } else if (input.resolution !== undefined) {
         updateValues['resolution'] = input.resolution;
     }
 

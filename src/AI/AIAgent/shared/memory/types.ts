@@ -115,7 +115,7 @@ export interface RecallInput {
 
 export interface UpdateMemoryInput {
     id: string;
-    status: 'resolved' | 'dismissed';
+    status: 'open' | 'resolved' | 'dismissed';
     resolution?: string;
 }
 
