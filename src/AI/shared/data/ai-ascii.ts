@@ -25,5 +25,9 @@ export const aiAscii = `
         | delete      | 🧽  Select and delete any saved chat from a presented list.                                                              |
         |-------------|--------------------------------------------------------------------------------------------------------------------------|
         | quota-agent | ℹ️  Display copilot session/weekly/monthly quotas.                                                                       |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | index       | 🗂️  Index the current codebase for semantic search (writes to per-repo .kra-memory + global registry).                  |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | memory      | 🧰 Manage indexed codebases and long-term memories (findings/revisits) interactively.                                    |
         +----------+-----------------------------------------------------------------------------------------------------------------------------+
 `

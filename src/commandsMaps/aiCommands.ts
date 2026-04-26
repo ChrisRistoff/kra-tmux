@@ -8,6 +8,8 @@ export const aiCommands : AiCommands = {
     'load': ai.loadChat,
     'delete': ai.deleteChats,
     'quota-agent': ai.showQuota,
+    'index': ai.indexCodebase,
+    'memory': ai.manageMemory,
 };
 
 export function handleAiCommandNotExist(commandName: string): void {

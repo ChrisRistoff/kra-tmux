@@ -20,6 +20,26 @@ timeoutMs = 20000
 [ai.agent]
 defaultModel = "gpt-5-mini"
 
+# ─── Persistent project memory (kra-memory MCP) ───────────────────────────────
+# The kra-memory layer gives the agent persistent notes (`remember` / `recall`
+# / `update_memory`) and conceptual codebase search (`semantic_search`) backed
+# by a local LanceDB + bundled BGE-small embedder. Storage lives in
+# <repo>/.kra-memory/ and is gitignored by default.
+#
+# Run `kra ai index` once per repo to build the initial code index, then
+# enable `indexCodeOnSave` to keep it fresh in the background.
+[ai.agent.memory]
+enabled = true              # master switch for the whole memory layer
+indexCodeOnStart = false    # full reindex when an agent session starts
+indexCodeOnSave = false     # background watcher that reindexes files on save
+autoSurfaceOnStart = false  # auto-recall relevant notes / open revisits at session preamble
+gitignoreMemory = true      # documentation-only: whether you keep .kra-memory/ in .gitignore
+# Tune the chunker (defaults are good for most repos):
+# chunkLines = 80
+# chunkOverlap = 5
+# includeExtensions = [".ts", ".js", ".py", ".go", ".rs", ".md"]
+# excludeGlobs = ["node_modules/**", "dest/**", "coverage/**", ".kra-memory/**"]
+
 [ai.agent.mcpServers.filesystem]
 active = false
 type = "local"

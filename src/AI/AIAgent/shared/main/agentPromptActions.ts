@@ -18,6 +18,13 @@ import {
     showProposalReview,
     updateAgentUi,
 } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
+import {
+    handleAddMemory,
+    handleDeleteMemory,
+    handleEditMemory,
+    handleSetMemoryStatus,
+    openMemoryBrowser,
+} from '@/AI/AIAgent/shared/main/agentMemoryActions';
 
 export function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -199,6 +206,52 @@ export async function setupEventHandlers(state: AgentConversationState): Promise
                     state.allowedToolFamilies.clear();
                     await updateAgentUi(state.nvim, 'show_error', ['Approval mode', 'Reset remembered approvals.']);
                     break;
+                case 'browse_memory': {
+                    const params = (args[1] ?? {}) as { view?: unknown };
+                    const v = String(params.view ?? 'all');
+                    const view = v === 'findings' || v === 'revisits' ? v : 'all';
+                    await openMemoryBrowser(state.nvim, view);
+                    break;
+                }
+                case 'add_memory':
+                    await handleAddMemory(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
+                    break;
+                case 'delete_memory':
+                    await handleDeleteMemory(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
+                    break;
+                case 'edit_memory':
+                    await handleEditMemory(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
+                    break;
+                case 'set_memory_status':
+                    await handleSetMemoryStatus(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
+                    break;
+                case 'execute_tool': {
+                    const payload = (args[1] ?? {}) as { title?: unknown; args_json?: unknown };
+                    const title = String(payload.title ?? '');
+                    const argsJson = String(payload.args_json ?? '{}');
+                    if (!title) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', 'Missing tool title', '']);
+                        break;
+                    }
+                    if (!state.session.executeTool) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', 'Tool re-execution not supported by current provider', title]);
+                        break;
+                    }
+                    let parsedArgs: Record<string, unknown>;
+                    try {
+                        parsedArgs = JSON.parse(argsJson) as Record<string, unknown>;
+                    } catch (err) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', `Invalid JSON: ${getErrorMessage(err)}`, title]);
+                        break;
+                    }
+                    try {
+                        const result = await state.session.executeTool(title, parsedArgs);
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', [result, '', title]);
+                    } catch (err) {
+                        await updateAgentUi(state.nvim, 'show_tool_execution_result', ['', getErrorMessage(err), title]);
+                    }
+                    break;
+                }
                 default:
                     console.log('Unknown action:', action);
             }

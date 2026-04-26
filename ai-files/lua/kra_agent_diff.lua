@@ -624,7 +624,17 @@ function M.open_write_diff_editor(channel_id, payload, send_fn)
             end
         end
         if vim.api.nvim_tabpage_is_valid(diff_tab) then
-            vim.cmd("tabclose")
+            -- We've already captured `approved_text` (and `current_text`)
+            -- from the buffers before reaching close_diff, so any unsaved
+            -- modifications in proposed_buf are irrelevant by this point.
+            -- Force the close so we don't hit `E445: Other window contains
+            -- changes` when the user has edited the middle pane.
+            for _, buf in ipairs({ current_buf, proposed_buf, reference_buf }) do
+                if buf and vim.api.nvim_buf_is_valid(buf) then
+                    pcall(vim.api.nvim_set_option_value, "modified", false, { buf = buf })
+                end
+            end
+            pcall(vim.cmd, "tabclose!")
         end
         if vim.api.nvim_tabpage_is_valid(original_tab) then
             vim.api.nvim_set_current_tabpage(original_tab)
@@ -670,23 +680,26 @@ function M.open_write_diff_editor(channel_id, payload, send_fn)
                 -- __userFinalContent so the TS side knows to transform the
                 -- edit_lines call accordingly.
                 decoded.__userFinalContent = approved_text
-                vim.ui.select(
-                    {
-                        "Notify AI: include the new lines in the tool result",
-                        "Don't notify: trust LSP if no errors",
-                    },
-                    { prompt = "You edited the proposed change. Notify AI of your edits?" },
-                    function(choice)
-                        decoded.__userEditNotify = choice ~= nil
-                            and choice:sub(1, 6) == "Notify"
-                        if history_entry then
-                            history_entry.applied_lines = vim.split(approved_text, "\n", { plain = true })
-                            table.insert(pending_diff_entries, history_entry)
-                        end
-                        close_diff()
-                        send_fn("edited", vim.json.encode(decoded))
-                    end
+                -- vim.ui.select is overridden by various UI plugins
+                -- (dressing.nvim, fzf-lua, telescope-ui-select, ...) and
+                -- those overrides have bugs that intermittently swallow the
+                -- popup or break arrow-key navigation. vim.fn.confirm is the
+                -- built-in modal prompt: deterministic, no plugin in the
+                -- path, supports number-key selection (which the user has
+                -- confirmed works reliably even in the buggy UIs).
+                local choice = vim.fn.confirm(
+                    "You edited the proposed change. Notify AI of your edits?",
+                    "&Notify AI: include the new lines in the tool result\n"
+                        .. "&Don't notify: trust LSP if no errors",
+                    1
                 )
+                decoded.__userEditNotify = choice == 1
+                if history_entry then
+                    history_entry.applied_lines = vim.split(approved_text, "\n", { plain = true })
+                    table.insert(pending_diff_entries, history_entry)
+                end
+                close_diff()
+                send_fn("edited", vim.json.encode(decoded))
                 return
             end
             -- Plain accept (no user edits): leave decoded unchanged so the TS

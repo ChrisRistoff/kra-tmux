@@ -85,6 +85,8 @@ export interface AgentSession {
     send: (options: AgentSendOptions) => Promise<void>;
     abort: () => Promise<void>;
     disconnect: () => Promise<void>;
+    listExecutableTools?: () => Array<{ title: string; server: string; name: string }>;
+    executeTool?: (title: string, args: Record<string, unknown>) => Promise<string>;
 }
 
 

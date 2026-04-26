@@ -10,7 +10,7 @@ local state = {
     active_entry_index = nil,
     body = "Ready",
     history = {},
-    icon = "󰚩",
+    icon = "󱚩",
     level = vim.log.levels.INFO,
     notification = nil,
     popups_hidden = false,
@@ -19,7 +19,21 @@ local state = {
     statusline = "Ready",
     timer = nil,
     title = "Copilot Agent",
+    executable_tools = {},
+    tool_result_win = nil,
+    tool_result_buf = nil,
+    index_progress_buf = nil,
+    index_progress_win = nil,
+    index_progress_alias = "",
+    index_progress_total = 0,
+    index_progress_done = 0,
+    index_progress_started_at = nil,
+    index_progress_channel = nil,
+    index_progress_finished = false,
+    index_progress_summary = nil,
 }
+
+local send_action  -- forward decl; assigned below before any user keypress can fire
 
 local function redraw_statusline()
     pcall(vim.cmd, "redrawstatus")
@@ -44,6 +58,16 @@ local function render_notification(timeout)
         icon = current_icon(),
     })
     redraw_statusline()
+end
+
+-- Pretty-print JSON via `jq` if available; pass-through on non-JSON or jq error.
+local function pretty_json(text)
+    if type(text) ~= "string" or text == "" then return text or "" end
+    local first = text:match("^%s*(.)")
+    if first ~= "{" and first ~= "[" then return text end
+    local out = vim.fn.system({ "jq", "." }, text)
+    if vim.v.shell_error ~= 0 then return text end
+    return (out:gsub("\n$", ""))
 end
 
 local function dismiss_notification()
@@ -86,8 +110,12 @@ local function upsert_history(tool_name, details, args_json)
         local entry = state.history[state.active_entry_index]
         entry.details = details
         entry.updated_at = timestamp
+        if args_json and args_json ~= "" and (entry.args_json == nil or entry.args_json == "") then
+            entry.args_json = args_json
+        end
         return entry
     end
+
 
     local entry = {
         args_json = args_json or "",
@@ -102,7 +130,7 @@ local function upsert_history(tool_name, details, args_json)
     return entry
 end
 
-local function complete_history(tool_name, details, success)
+local function complete_history(tool_name, details, success, full_result)
     local entry
     if state.active_entry_index and state.history[state.active_entry_index] then
         entry = state.history[state.active_entry_index]
@@ -112,6 +140,7 @@ local function complete_history(tool_name, details, success)
 
     entry.title = tool_name
     entry.result = details
+    entry.full_result = (full_result and full_result ~= "") and full_result or details
     entry.details = details
     entry.status = success and "done" or "failed"
     entry.updated_at = os.date("%H:%M:%S")
@@ -146,25 +175,28 @@ local function open_history_view(entry)
     vim.cmd("tabnew")
     local view_tab = vim.api.nvim_get_current_tabpage()
 
-    local args_text = (entry.args_json and entry.args_json ~= "") and entry.args_json or "{}"
-    local result_text = entry.result or entry.details or "(no result recorded)"
+    local args_text = pretty_json((entry.args_json and entry.args_json ~= "") and entry.args_json or "{}")
+    local result_text = pretty_json(entry.full_result or entry.result or entry.details or "(no result recorded)")
+    local is_executable = state.executable_tools[entry.title] ~= nil
 
-    -- LEFT: args JSON
+    -- LEFT (visually right after vsplit): args JSON. Editable when the tool is
+    -- in our executable map so the user can tweak args and re-run.
     local left_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, vim.split(args_text, "\n", { plain = true }))
     vim.bo[left_buf].buftype = "nofile"
     vim.bo[left_buf].bufhidden = "wipe"
     vim.bo[left_buf].swapfile = false
     vim.bo[left_buf].filetype = "json"
-    vim.bo[left_buf].modifiable = false
+    vim.bo[left_buf].modifiable = is_executable
     vim.bo[left_buf].modified = false
     local left_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(left_win, left_buf)
     vim.wo[left_win].number = true
     vim.wo[left_win].wrap = false
-    vim.wo[left_win].winbar = string.format(" 󰘦 ARGS  %s  [%s] ", entry.title or "tool", entry.status or "?")
+    local args_hint = is_executable and "  (<leader>a run, <leader>q close)" or ""
+    vim.wo[left_win].winbar = string.format(" 󰘦 ARGS  %s  [%s]%s ", entry.title or "tool", entry.status or "?", args_hint)
 
-    -- RIGHT: result
+    -- RIGHT (visually left after vsplit): last recorded result.
     vim.cmd("vsplit")
     local right_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(right_buf, 0, -1, false, vim.split(result_text, "\n", { plain = true }))
@@ -197,8 +229,24 @@ local function open_history_view(entry)
     for _, buf in ipairs({ left_buf, right_buf }) do
         local o = vim.tbl_extend("force", base, { buffer = buf })
         vim.keymap.set("n", "q", close_view, vim.tbl_extend("force", o, { desc = "Close tool view" }))
+        vim.keymap.set("n", "<leader>q", close_view, vim.tbl_extend("force", o, { desc = "Close tool view" }))
         vim.keymap.set("n", "<Tab>", "<C-w>w", vim.tbl_extend("force", o, { desc = "Next pane" }))
         vim.keymap.set("n", "<S-Tab>", "<C-w>W", vim.tbl_extend("force", o, { desc = "Prev pane" }))
+    end
+
+    if is_executable then
+        local run_opts = vim.tbl_extend("force", base, { buffer = left_buf, desc = "Run tool with edited args" })
+        vim.keymap.set("n", "<leader>a", function()
+            local lines = vim.api.nvim_buf_get_lines(left_buf, 0, -1, false)
+            local text = table.concat(lines, "\n")
+            local ok, _ = pcall(vim.json.decode, text)
+            if not ok then
+                vim.notify("Invalid JSON in args buffer", vim.log.levels.WARN, { title = "kra-agent" })
+                return
+            end
+            send_action("execute_tool", { title = entry.title, args_json = text })
+            vim.notify("Running " .. entry.title .. "...", vim.log.levels.INFO, { title = "kra-agent" })
+        end, run_opts)
     end
 
     vim.api.nvim_set_current_win(left_win)
@@ -245,8 +293,8 @@ function M.update_tool(tool_name, details)
     })
 end
 
-function M.complete_tool(tool_name, details, success)
-    complete_history(tool_name, details, success)
+function M.complete_tool(tool_name, details, success, full_result)
+    complete_history(tool_name, details, success, full_result)
     set_state({
         title = string.format("Tool · %s", tool_name),
         body = string.format("%s\n\nPress <Space>h for tool history.", details),
@@ -353,10 +401,20 @@ function M.show_history()
                     end,
                 }),
                 previewer = previewers.new_buffer_previewer({
-                    title = "Tool result",
+                    title = "Tool args + result",
                     define_preview = function(self, entry)
                         local item = entry.value
-                        local text = item.result or item.details or "(no result)"
+                        local args = pretty_json((item.args_json and item.args_json ~= "") and item.args_json or "(none)")
+                        local result = pretty_json(item.result or item.details or "(no result)")
+                        local sep = string.rep("─", 60)
+                        local text = table.concat({
+                            "── ARGS " .. string.rep("─", 54),
+                            args,
+                            "",
+                            "── RESULT " .. string.rep("─", 52),
+                            result,
+                            sep,
+                        }, "\n")
                         vim.api.nvim_buf_set_lines(
                             self.state.bufnr,
                             0,
@@ -412,6 +470,522 @@ end
 
 function M.show_diff_history()
     diff.open_diff_history()
+end
+
+send_action = function(action, args)
+    local channel = vim.g.kra_agent_channel
+    if not channel or channel == 0 then
+        vim.notify('kra-memory: agent channel not registered', vim.log.levels.ERROR)
+        return false
+    end
+    pcall(vim.fn.rpcnotify, channel, 'prompt_action', action, args or vim.empty_dict())
+    return true
+end
+
+local function prompt_add_memory(view)
+    vim.ui.input({ prompt = 'Memory title: ' }, function(title)
+        if not title or title == '' then return end
+        vim.ui.input({ prompt = 'Memory body:  ' }, function(body)
+            if not body or body == '' then return end
+            vim.ui.input({ prompt = 'Tags (csv, optional): ' }, function(tags)
+                vim.ui.select(
+                    { 'note', 'bug-fix', 'gotcha', 'decision', 'investigation', 'revisit' },
+                    { prompt = 'Kind:' },
+                    function(kind)
+                        if not kind then return end
+                        send_action('add_memory', {
+                            title = title,
+                            body = body,
+                            tags = tags or '',
+                            kind = kind,
+                            view = view or 'all',
+                        })
+                    end
+                )
+            end)
+        end)
+    end)
+end
+
+function M.show_memory_browser(items, view)
+    local ok, err = pcall(function()
+        local pickers = require('telescope.pickers')
+        local finders = require('telescope.finders')
+        local previewers = require('telescope.previewers')
+        local conf = require('telescope.config').values
+        local actions = require('telescope.actions')
+        local action_state = require('telescope.actions.state')
+
+        items = items or {}
+        view = view or 'all'
+
+        local function next_view(current)
+            if current == 'all' then return 'findings' end
+            if current == 'findings' then return 'revisits' end
+            return 'all'
+        end
+
+        local function counts(list)
+            local f, r = 0, 0
+            for _, it in ipairs(list) do
+                if it.kind == 'revisit' then r = r + 1 else f = f + 1 end
+            end
+            return f, r
+        end
+
+        if #items == 0 then
+            vim.notify(
+                'No memories in view "' .. view .. '". Press "a" to add, <Tab> to switch view.',
+                vim.log.levels.INFO,
+                { title = 'kra-memory' }
+            )
+        end
+
+        local f_count, r_count = counts(items)
+        local title = string.format(
+            'kra-memory [%s]  findings:%d revisits:%d  [<CR>:open  <Tab>:view  a:add  dd:del]',
+            view, f_count, r_count
+        )
+
+        pickers
+            .new({
+                layout_strategy = 'horizontal',
+                layout_config = { preview_width = 0.55, width = 0.95, height = 0.85 },
+            }, {
+                prompt_title = title,
+                finder = finders.new_table({
+                    results = items,
+                    entry_maker = function(entry)
+                        local status_icon = entry.status == 'open' and '' or '·'
+                        local tags = (entry.tags and #entry.tags > 0) and (' #' .. table.concat(entry.tags, ' #')) or ''
+                        return {
+                            value = entry,
+                            display = string.format('%s [%s] %s%s', status_icon, entry.kind, entry.title, tags),
+                            ordinal = string.format('%s %s %s %s', entry.kind, entry.title, entry.body or '', table.concat(entry.tags or {}, ' ')),
+                        }
+                    end,
+                }),
+                previewer = previewers.new_buffer_previewer({
+                    title = 'Memory body',
+                    define_preview = function(self, entry)
+                        local item = entry.value
+                        local lines = {
+                            string.format('id:      %s', item.id),
+                            string.format('kind:    %s', item.kind),
+                            string.format('status:  %s', item.status or ''),
+                            string.format('tags:    %s', table.concat(item.tags or {}, ', ')),
+                            string.format('paths:   %s', table.concat(item.paths or {}, ', ')),
+                            string.format('created: %s', os.date('%Y-%m-%d %H:%M:%S', math.floor((item.createdAt or 0) / 1000))),
+                            '',
+                            '# ' .. (item.title or ''),
+                            '',
+                        }
+                        for line in (item.body or ''):gmatch('([^\n]*)\n?') do
+                            table.insert(lines, line)
+                        end
+                        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+                    end,
+                }),
+                sorter = conf.generic_sorter({}),
+                attach_mappings = function(prompt_bufnr, map)
+                    actions.select_default:replace(function()
+                        local sel = action_state.get_selected_entry()
+                        actions.close(prompt_bufnr)
+                        if sel and sel.value then
+                            M.open_memory_buffer(sel.value, view)
+                        end
+                    end)
+
+                    map('n', '<Tab>', function()
+                        actions.close(prompt_bufnr)
+                        send_action('browse_memory', { view = next_view(view) })
+                    end)
+                    map('i', '<Tab>', function()
+                        actions.close(prompt_bufnr)
+                        send_action('browse_memory', { view = next_view(view) })
+                    end)
+
+                    map('n', 'a', function()
+                        actions.close(prompt_bufnr)
+                        prompt_add_memory(view)
+                    end)
+                    map('i', '<C-a>', function()
+                        actions.close(prompt_bufnr)
+                        prompt_add_memory(view)
+                    end)
+
+                    map('n', 'dd', function()
+                        local sel = action_state.get_selected_entry()
+                        if not sel then return end
+                        local id = sel.value.id
+                        vim.ui.select({ 'Yes, delete', 'No, cancel' }, {
+                            prompt = 'Delete "' .. (sel.value.title or '?') .. '"?'
+                        }, function(choice)
+                            if choice == 'Yes, delete' then
+                                actions.close(prompt_bufnr)
+                                send_action('delete_memory', { id = id, view = view })
+                            end
+                        end)
+                    end)
+                    map('n', 'D', function()
+                        local sel = action_state.get_selected_entry()
+                        if not sel then return end
+                        local id = sel.value.id
+                        actions.close(prompt_bufnr)
+                        send_action('delete_memory', { id = id, view = view })
+                    end)
+
+                    return true
+                end,
+            })
+            :find()
+    end)
+
+    if not ok then
+        vim.notify('kra-memory browser failed: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+end
+
+--- Open a single memory entry in a scratch buffer for editing.
+--- Buffer keymaps: <leader>w save, <leader>d delete,
+--- <leader>r resolve, <leader>x dismiss, <leader>o reopen (revisits only), q close.
+function M.open_memory_buffer(item, view)
+    if not item or not item.id then return end
+    view = view or 'all'
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(buf, 'buftype', 'acwrite')
+    vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
+    vim.api.nvim_buf_set_option(buf, 'filetype', 'markdown')
+    vim.api.nvim_buf_set_name(buf, 'kra-memory://' .. item.id)
+
+    local header = {
+        '---',
+        'id: ' .. (item.id or ''),
+        'kind: ' .. (item.kind or ''),
+        'status: ' .. (item.status or ''),
+        'created: ' .. os.date('%Y-%m-%d %H:%M:%S', math.floor((item.createdAt or 0) / 1000)),
+        'paths: ' .. table.concat(item.paths or {}, ','),
+        'title: ' .. (item.title or ''),
+        'tags: ' .. table.concat(item.tags or {}, ','),
+        '---',
+        '',
+    }
+    local lines = {}
+    for _, h in ipairs(header) do table.insert(lines, h) end
+    for line in (item.body or ''):gmatch('([^\n]*)\n?') do
+        table.insert(lines, line)
+    end
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.api.nvim_buf_set_option(buf, 'modified', false)
+
+    vim.cmd('tabnew')
+    vim.api.nvim_win_set_buf(0, buf)
+
+    local function parse_buffer()
+        local all = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local title, tags = item.title or '', table.concat(item.tags or {}, ',')
+        local body_start = 1
+        if all[1] == '---' then
+            for i = 2, #all do
+                if all[i] == '---' then
+                    body_start = i + 1
+                    if all[body_start] == '' then body_start = body_start + 1 end
+                    break
+                end
+                local k, v = all[i]:match('^(%w+):%s*(.*)$')
+                if k == 'title' then title = v
+                elseif k == 'tags' then tags = v end
+            end
+        end
+        local body_lines = {}
+        for i = body_start, #all do table.insert(body_lines, all[i]) end
+        return title, tags, table.concat(body_lines, '\n')
+    end
+
+    local function save()
+        local title, tags, body = parse_buffer()
+        send_action('edit_memory', {
+            id = item.id,
+            title = title,
+            body = body,
+            tags = tags,
+            view = view,
+        })
+        vim.api.nvim_buf_set_option(buf, 'modified', false)
+        vim.notify('Memory saved', vim.log.levels.INFO, { title = 'kra-memory' })
+        vim.cmd('bwipeout!')
+    end
+
+    local opts = { buffer = buf, silent = true, nowait = true }
+    vim.keymap.set('n', '<leader>w', save, vim.tbl_extend('force', opts, { desc = 'Save memory edits' }))
+    vim.api.nvim_create_autocmd('BufWriteCmd', { buffer = buf, callback = save })
+
+    vim.keymap.set('n', '<leader>d', function()
+        vim.ui.select({ 'Yes, delete', 'No, cancel' }, {
+            prompt = 'Delete "' .. (item.title or '?') .. '"?'
+        }, function(choice)
+            if choice == 'Yes, delete' then
+                send_action('delete_memory', { id = item.id, view = view })
+                vim.cmd('bwipeout!')
+            end
+        end)
+    end, vim.tbl_extend('force', opts, { desc = 'Delete memory' }))
+
+    vim.keymap.set('n', '<leader>r', function()
+        if item.kind ~= 'revisit' then
+            vim.notify('Resolve only applies to revisits', vim.log.levels.WARN, { title = 'kra-memory' })
+            return
+        end
+        vim.ui.input({ prompt = 'Resolution note (optional): ' }, function(note)
+            send_action('set_memory_status', {
+                id = item.id, status = 'resolved', resolution = note or '', view = view,
+            })
+            vim.cmd('bwipeout!')
+        end)
+    end, vim.tbl_extend('force', opts, { desc = 'Resolve revisit' }))
+
+    vim.keymap.set('n', '<leader>x', function()
+        if item.kind ~= 'revisit' then
+            vim.notify('Dismiss only applies to revisits', vim.log.levels.WARN, { title = 'kra-memory' })
+            return
+        end
+        vim.ui.input({ prompt = 'Reason for dismissal (optional): ' }, function(note)
+            send_action('set_memory_status', {
+                id = item.id, status = 'dismissed', resolution = note or '', view = view,
+            })
+            vim.cmd('bwipeout!')
+        end)
+    end, vim.tbl_extend('force', opts, { desc = 'Dismiss revisit' }))
+
+    vim.keymap.set('n', '<leader>o', function()
+        if item.kind ~= 'revisit' then
+            vim.notify('Reopen only applies to revisits', vim.log.levels.WARN, { title = 'kra-memory' })
+            return
+        end
+        send_action('set_memory_status', {
+            id = item.id, status = 'open', resolution = '', view = view,
+        })
+        vim.cmd('bwipeout!')
+    end, vim.tbl_extend('force', opts, { desc = 'Reopen revisit' }))
+
+    vim.keymap.set('n', 'q', '<Cmd>bwipeout!<CR>', vim.tbl_extend('force', opts, { desc = 'Close memory buffer' }))
+end
+
+function M.set_executable_tools(list)
+    local map = {}
+    if type(list) == "table" then
+        for _, t in ipairs(list) do
+            if type(t) == "table" and t.title then
+                map[t.title] = { server = t.server, name = t.name }
+            end
+        end
+    end
+    state.executable_tools = map
+end
+
+function M.show_tool_execution_result(result_text, error_msg, title)
+    local lines = {}
+    if error_msg and error_msg ~= "" then
+        table.insert(lines, "ERROR: " .. error_msg)
+    else
+        local pretty = pretty_json(result_text or "")
+        for _, l in ipairs(vim.split(pretty, "\n", { plain = true })) do
+            table.insert(lines, l)
+        end
+    end
+
+    -- Reuse existing popup if still open.
+    if state.tool_result_win and vim.api.nvim_win_is_valid(state.tool_result_win) then
+        pcall(vim.api.nvim_win_close, state.tool_result_win, true)
+    end
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].swapfile = false
+    vim.bo[buf].filetype = (error_msg and error_msg ~= "") and "text" or "json"
+    vim.bo[buf].modifiable = false
+
+    local width = math.floor(vim.o.columns * 0.8)
+    local height = math.floor(vim.o.lines * 0.7)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+    local win = vim.api.nvim_open_win(buf, true, {
+        relative = "editor",
+        width = width,
+        height = height,
+        row = row,
+        col = col,
+        style = "minimal",
+        border = "rounded",
+        title = " Tool result: " .. tostring(title or "") .. " ",
+        title_pos = "center",
+    })
+    vim.wo[win].number = true
+    vim.wo[win].wrap = true
+    state.tool_result_win = win
+    state.tool_result_buf = buf
+
+    local close = function()
+        if vim.api.nvim_win_is_valid(win) then pcall(vim.api.nvim_win_close, win, true) end
+        state.tool_result_win = nil
+        state.tool_result_buf = nil
+    end
+    vim.keymap.set("n", "q", close, { buffer = buf, silent = true, nowait = true, desc = "Close result popup" })
+    vim.keymap.set("n", "<leader>q", close, { buffer = buf, silent = true, nowait = true, desc = "Close result popup" })
+end
+
+local function index_progress_render_header()
+    if not state.index_progress_buf or not vim.api.nvim_buf_is_valid(state.index_progress_buf) then
+        return
+    end
+    local total = state.index_progress_total or 0
+    local done = state.index_progress_done or 0
+    local pct = total > 0 and math.floor((done / total) * 100) or 0
+    local line
+    if state.index_progress_finished then
+        line = string.format("kra-memory │ %s │ %s", state.index_progress_alias or "", state.index_progress_summary or "Done")
+    else
+        line = string.format("kra-memory │ %s │ %d/%d (%d%%) — q/<Esc> dismisses", state.index_progress_alias or "", done, total, pct)
+    end
+    vim.bo[state.index_progress_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(state.index_progress_buf, 0, 2, false, { line, string.rep("─", math.max(20, #line)) })
+    vim.bo[state.index_progress_buf].modifiable = false
+end
+
+local function close_index_progress_modal()
+    local channel = state.index_progress_channel
+    if state.index_progress_win and vim.api.nvim_win_is_valid(state.index_progress_win) then
+        pcall(vim.api.nvim_win_close, state.index_progress_win, true)
+    end
+    state.index_progress_win = nil
+    if channel then
+        pcall(vim.fn.rpcnotify, channel, 'index_progress_dismissed')
+    end
+end
+
+function M.show_index_progress_modal(opts)
+    opts = opts or {}
+    state.index_progress_alias = opts.alias or ""
+    state.index_progress_total = tonumber(opts.total_files) or 0
+    state.index_progress_done = 0
+    state.index_progress_started_at = uv.now()
+    state.index_progress_channel = tonumber(opts.channel_id) or state.index_progress_channel
+    state.index_progress_finished = false
+    state.index_progress_summary = nil
+
+    if not state.index_progress_buf or not vim.api.nvim_buf_is_valid(state.index_progress_buf) then
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.bo[buf].buftype = "nofile"
+        vim.bo[buf].bufhidden = "hide"
+        vim.bo[buf].swapfile = false
+        vim.bo[buf].filetype = "kra-index-progress"
+        state.index_progress_buf = buf
+        pcall(vim.api.nvim_buf_set_name, buf, "kra-index-progress")
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "", "" })
+    else
+        vim.bo[state.index_progress_buf].modifiable = true
+        vim.api.nvim_buf_set_lines(state.index_progress_buf, 0, -1, false, { "", "" })
+        vim.bo[state.index_progress_buf].modifiable = false
+    end
+
+    if not state.index_progress_win or not vim.api.nvim_win_is_valid(state.index_progress_win) then
+        local width = math.floor(vim.o.columns * 0.7)
+        local height = math.floor(vim.o.lines * 0.7)
+        local row = math.floor((vim.o.lines - height) / 2)
+        local col = math.floor((vim.o.columns - width) / 2)
+        state.index_progress_win = vim.api.nvim_open_win(state.index_progress_buf, true, {
+            relative = "editor",
+            width = width,
+            height = height,
+            row = row,
+            col = col,
+            style = "minimal",
+            border = "rounded",
+            title = " kra-memory: indexing ",
+            title_pos = "center",
+        })
+        vim.wo[state.index_progress_win].number = false
+        vim.wo[state.index_progress_win].wrap = false
+        vim.wo[state.index_progress_win].cursorline = true
+    end
+
+    local buf = state.index_progress_buf
+    local close = function() close_index_progress_modal() end
+    vim.keymap.set("n", "q", close, { buffer = buf, silent = true, nowait = true, desc = "Dismiss index progress" })
+    vim.keymap.set("n", "<Esc>", close, { buffer = buf, silent = true, nowait = true, desc = "Dismiss index progress" })
+
+    index_progress_render_header()
+end
+
+function M.append_index_progress(opts)
+    opts = opts or {}
+    if opts.files_total ~= nil then state.index_progress_total = tonumber(opts.files_total) or state.index_progress_total end
+    if opts.files_done ~= nil then state.index_progress_done = tonumber(opts.files_done) or state.index_progress_done end
+
+    if not state.index_progress_buf or not vim.api.nvim_buf_is_valid(state.index_progress_buf) then
+        return
+    end
+
+    local line = tostring(opts.line or "")
+    vim.bo[state.index_progress_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(state.index_progress_buf, -1, -1, false, { line })
+    vim.bo[state.index_progress_buf].modifiable = false
+
+    if state.index_progress_win and vim.api.nvim_win_is_valid(state.index_progress_win) then
+        local last = vim.api.nvim_buf_line_count(state.index_progress_buf)
+        pcall(vim.api.nvim_win_set_cursor, state.index_progress_win, { last, 0 })
+    end
+
+    index_progress_render_header()
+end
+
+function M.set_index_progress_total(opts)
+    opts = opts or {}
+    state.index_progress_total = tonumber(opts.total_files) or state.index_progress_total
+    index_progress_render_header()
+end
+
+function M.set_index_progress_done(opts)
+    opts = opts or {}
+    state.index_progress_finished = true
+    state.index_progress_summary = tostring(opts.summary or "Done")
+    if state.index_progress_total > 0 then
+        state.index_progress_done = state.index_progress_total
+    end
+    index_progress_render_header()
+end
+
+function M.reopen_index_progress()
+    if not state.index_progress_buf or not vim.api.nvim_buf_is_valid(state.index_progress_buf) then
+        vim.notify("No index progress to reopen", vim.log.levels.INFO)
+        return
+    end
+    if state.index_progress_win and vim.api.nvim_win_is_valid(state.index_progress_win) then
+        vim.api.nvim_set_current_win(state.index_progress_win)
+        return
+    end
+    local width = math.floor(vim.o.columns * 0.7)
+    local height = math.floor(vim.o.lines * 0.7)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+    state.index_progress_win = vim.api.nvim_open_win(state.index_progress_buf, true, {
+        relative = "editor",
+        width = width,
+        height = height,
+        row = row,
+        col = col,
+        style = "minimal",
+        border = "rounded",
+        title = " kra-memory: indexing ",
+        title_pos = "center",
+    })
+    vim.wo[state.index_progress_win].wrap = false
+    local buf = state.index_progress_buf
+    vim.keymap.set("n", "q", function() close_index_progress_modal() end, { buffer = buf, silent = true, nowait = true })
+    vim.keymap.set("n", "<Esc>", function() close_index_progress_modal() end, { buffer = buf, silent = true, nowait = true })
 end
 
 return M

@@ -31,6 +31,8 @@ export async function createAgentChatFile(chatFile: string): Promise<void> {
             #   <leader>P    -> Reset remembered tool approvals
             #   <leader>h    -> Browse recent tool calls
             #   <leader>s    -> Browse session diff history (all AI write diffs)
+            #   <leader>m    -> Browse kra-memory (<Tab> view, a add, dd del; <CR> opens entry buffer: <leader>w save / d del / r resolve / x dismiss / q close)
+            #   <leader>i    -> Reopen the kra-memory index-progress modal
             #   <leader>?    -> Show all keymaps
             ${formatAgentDraftEntry().trimStart()}`;
 
@@ -86,6 +88,9 @@ export async function setupAgentKeyBindings(nvimClient: neovim.NeovimClient): Pr
         map('n', '<leader>P', function() vim.fn.rpcnotify(${channelId}, 'prompt_action', 'reset_tool_approvals') end, vim.tbl_extend('force', opts, { desc = 'Reset remembered approvals' }))
         map('n', '<leader>?', '<Cmd>AgentCommands<CR>', vim.tbl_extend('force', opts, { desc = 'Show agent commands' }))
         map('n', '<leader>s', function() require('kra_agent_ui').show_diff_history() end, vim.tbl_extend('force', opts, { desc = 'Session diff history' }))
+        map('n', '<leader>m', function() vim.fn.rpcnotify(${channelId}, 'prompt_action', 'browse_memory') end, vim.tbl_extend('force', opts, { desc = 'Browse kra-memory' }))
+        map('n', '<leader>i', function() require('kra_agent_ui').reopen_index_progress() end, vim.tbl_extend('force', opts, { desc = 'Reopen kra-memory index progress' }))
+        vim.g.kra_agent_channel = ${channelId}
 
         -- Highlight reasoning lines (> prefix) in blue, independent of theme.
         vim.api.nvim_set_hl(0, 'AgentReasoning', { fg = '#61AFEF' })

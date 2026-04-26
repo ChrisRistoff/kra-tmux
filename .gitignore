@@ -21,7 +21,8 @@ lock-files/*
 node_modules/
 dest/
 coverage/
-
+.kra-memory/
+local_cache/
 
 .env
 settings.toml

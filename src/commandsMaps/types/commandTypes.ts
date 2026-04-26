@@ -35,6 +35,8 @@ export type AiCommandName = {
     'load': Command,
     'delete': Command,
     'quota-agent': Command,
+    'index': Command,
+    'memory': Command,
 }
 
 export type SystemCommands = Record<keyof SystemCommandName, Command>;

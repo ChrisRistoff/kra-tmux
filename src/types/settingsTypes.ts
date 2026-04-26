@@ -49,6 +49,17 @@ export type LspServerSettings = {
 type AgentSettings = {
     defaultModel?: string,
     mcpServers?: Record<string, McpServerSettings>,
+    memory?: {
+        enabled?: boolean,
+        indexCodeOnStart?: boolean,
+        indexCodeOnSave?: boolean,
+        autoSurfaceOnStart?: boolean,
+        gitignoreMemory?: boolean,
+        includeExtensions?: string[],
+        excludeGlobs?: string[],
+        chunkLines?: number,
+        chunkOverlap?: number,
+    },
 }
 
 export type Settings = {

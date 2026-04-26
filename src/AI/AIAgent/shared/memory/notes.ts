@@ -1,0 +1,377 @@
+/**
+ * Memory operations exposed via the kra-memory MCP server.
+ *
+ * The public surface is intentionally tiny:
+ *   - remember         add a memory entry (any kind, including 'revisit')
+ *   - recall           vector search OR list mode (when query is omitted)
+ *   - updateMemory     mark an entry resolved / dismissed (optionally with a resolution note)
+ */
+
+import crypto from 'crypto';
+import { embedOne } from './embedder';
+import { getFindingsTable, getRevisitsTable } from './db';
+import {
+    decodeRow,
+    isFindingKind,
+    isRevisitKind,
+    MEMORY_KINDS,
+    type EditMemoryInput,
+    type MemoryEntryWithScore,
+    type MemoryKind,
+    type MemoryRow,
+    type RecallInput,
+    type RememberInput,
+    type UpdateMemoryInput,
+} from './types';
+
+const DEFAULT_RECALL_K = 5;
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_BODY_FETCH = 1000;
+
+function newId(): string {
+    return crypto.randomBytes(8).toString('hex');
+}
+
+function sanitizeStringList(input: unknown): string[] {
+    if (!Array.isArray(input)) {
+        return [];
+    }
+
+    const seen = new Set<string>();
+
+    for (const item of input) {
+        if (typeof item === 'string' && item.length > 0) {
+            seen.add(item);
+        }
+    }
+
+    return [...seen];
+}
+
+function embedTextFor(title: string, body: string): string {
+    return `${title}\n\n${body}`.trim();
+}
+
+async function buildRow(
+    base: Omit<MemoryRow, 'vector' | 'updatedAt'> & { updatedAt?: number },
+): Promise<MemoryRow> {
+    const vector = await embedOne(embedTextFor(base.title, base.body));
+
+    return {
+        ...base,
+        updatedAt: base.updatedAt ?? base.createdAt,
+        vector,
+    };
+}
+
+function pickTableGetter(kind: MemoryKind): (seed: MemoryRow | null) => Promise<{ table: import('@lancedb/lancedb').Table | null; justCreated: boolean }> {
+    return isRevisitKind(kind) ? getRevisitsTable : getFindingsTable;
+}
+
+export async function remember(input: RememberInput): Promise<{ id: string }> {
+    if (!input.title || !input.body) {
+        throw new Error('remember: title and body are required');
+    }
+
+    if (!isFindingKind(input.kind) && !isRevisitKind(input.kind)) {
+        throw new Error(`remember: unknown kind '${input.kind}'`);
+    }
+
+    const now = Date.now();
+    const row = await buildRow({
+        id: newId(),
+        kind: input.kind,
+        title: input.title.trim(),
+        body: input.body.trim(),
+        tags: JSON.stringify(sanitizeStringList(input.tags)),
+        paths: JSON.stringify(sanitizeStringList(input.paths)),
+        branch: input.branch ?? '',
+        status: isRevisitKind(input.kind) ? 'open' : 'resolved',
+        resolution: '',
+        createdAt: now,
+        source: input.source ?? 'agent-auto',
+    });
+
+    const getter = pickTableGetter(input.kind);
+    const { table, justCreated } = await getter(row);
+
+    if (!table) {
+        throw new Error('remember: failed to obtain memory table');
+    }
+
+    if (!justCreated) {
+        await table.add([row as unknown as Record<string, unknown>]);
+    }
+
+    return { id: row.id };
+}
+
+async function readFromTable(
+    table: import('@lancedb/lancedb').Table,
+    input: { query?: string; k?: number; tagsAny?: string[]; status?: MemoryEntryWithScore['status']; kind?: MemoryKind },
+): Promise<MemoryEntryWithScore[]> {
+    const k = Math.max(1, Math.min(input.k ?? DEFAULT_RECALL_K, 200));
+    const tagFilter = sanitizeStringList(input.tagsAny);
+    const query = input.query?.trim() ?? '';
+
+    const matchesFilters = (row: MemoryRow): boolean => {
+        if (input.kind && row.kind !== input.kind) {
+            return false;
+        }
+
+        if (input.status && row.status !== input.status) {
+            return false;
+        }
+
+        if (tagFilter.length > 0) {
+            const decoded = decodeRow(row);
+
+            if (!tagFilter.some((t) => decoded.tags.includes(t))) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    if (query.length === 0) {
+        const total = await table.countRows();
+
+        if (total === 0) {
+            return [];
+        }
+
+        const fetchLimit = Math.min(total, MAX_BODY_FETCH);
+        const raw = await table.query().limit(fetchLimit).toArray();
+        const out: MemoryEntryWithScore[] = [];
+
+        for (const r of raw) {
+            const row = r as MemoryRow;
+
+            if (!matchesFilters(row)) {
+                continue;
+            }
+
+            out.push({ ...decodeRow(row), score: 0 });
+        }
+
+        out.sort((a, b) => b.createdAt - a.createdAt);
+
+        const limit = Math.min(input.k ?? DEFAULT_LIST_LIMIT, k);
+
+        return out.slice(0, limit);
+    }
+
+    const queryVector = await embedOne(query);
+    const fetchK = Math.min(k * 4, MAX_BODY_FETCH);
+    const raw = await table.search(queryVector).limit(fetchK).toArray();
+    const out: MemoryEntryWithScore[] = [];
+    for (const r of raw) {
+        const row = r as MemoryRow & { _distance: number };
+
+        if (!matchesFilters(row)) {
+            continue;
+        }
+
+        out.push({ ...decodeRow(row), score: 1 - row._distance });
+
+        if (out.length >= k) {
+            break;
+        }
+    }
+
+    return out;
+}
+
+export async function recall(input: RecallInput): Promise<MemoryEntryWithScore[]> {
+    if (!input.kind || (!isFindingKind(input.kind) && !isRevisitKind(input.kind))) {
+        throw new Error(`recall: 'kind' is required and must be one of: ${MEMORY_KINDS.join(', ')}`);
+    }
+
+    const getter = pickTableGetter(input.kind);
+    const { table } = await getter(null);
+
+    if (!table) {
+        return [];
+    }
+
+    const subInput: { kind: MemoryKind; query?: string; k?: number; tagsAny?: string[]; status?: MemoryEntryWithScore['status'] } = {
+        kind: input.kind,
+    };
+    if (input.query !== undefined) {
+        subInput.query = input.query;
+    }
+    if (input.k !== undefined) {
+        subInput.k = input.k;
+    }
+    if (input.tagsAny !== undefined) {
+        subInput.tagsAny = input.tagsAny;
+    }
+    if (input.status !== undefined) {
+        subInput.status = input.status;
+    }
+
+    return readFromTable(table, subInput);
+}
+
+/**
+ * UI-oriented listing that returns entries from one or both memory tables
+ * without requiring a single specific MemoryKind. Always list mode (no vector
+ * search). Sorted newest-first across the merged result set.
+ */
+export async function listMemories(input: {
+    scope: 'all' | 'findings' | 'revisits';
+    limit?: number;
+    tagsAny?: string[];
+}): Promise<MemoryEntryWithScore[]> {
+    const limit = Math.max(1, Math.min(input.limit ?? 200, MAX_BODY_FETCH));
+    const out: MemoryEntryWithScore[] = [];
+
+    const fetchOne = async (
+        getter: (seed: MemoryRow | null) => Promise<{ table: import('@lancedb/lancedb').Table | null; justCreated: boolean }>,
+    ): Promise<void> => {
+        const { table } = await getter(null);
+        if (!table) {
+            return;
+        }
+        const subInput: { k: number; tagsAny?: string[] } = { k: limit };
+        if (input.tagsAny !== undefined) {
+            subInput.tagsAny = input.tagsAny;
+        }
+        const part = await readFromTable(table, subInput);
+        out.push(...part);
+    };
+
+    if (input.scope === 'findings' || input.scope === 'all') {
+        await fetchOne(getFindingsTable);
+    }
+    if (input.scope === 'revisits' || input.scope === 'all') {
+        await fetchOne(getRevisitsTable);
+    }
+
+    out.sort((a, b) => b.createdAt - a.createdAt);
+
+    return out.slice(0, limit);
+}
+
+export async function updateMemory(input: UpdateMemoryInput): Promise<{ ok: true }> {
+    if (!input.id) {
+        throw new Error('update_memory: id is required');
+    }
+
+    const status = input.status as string;
+
+    if (status !== 'open' && status !== 'resolved' && status !== 'dismissed') {
+        throw new Error(`update_memory: status must be 'open', 'resolved' or 'dismissed', got '${status}'`);
+    }
+
+    const { table } = await getRevisitsTable(null);
+
+    if (!table) {
+        throw new Error('update_memory: revisits table does not exist yet');
+    }
+
+    const safeId = input.id.replace(/'/g, "''");
+    const updateValues: Record<string, string | number> = {
+        status: input.status,
+        updatedAt: Date.now(),
+    };
+
+    if (status === 'open') {
+        // Reopening clears any prior resolution note so the entry is back to a
+        // pristine "awaiting human input" state.
+        updateValues['resolution'] = '';
+    } else if (input.resolution !== undefined) {
+        updateValues['resolution'] = input.resolution;
+    }
+
+    await table.update({
+        values: updateValues,
+        where: `id = '${safeId}'`,
+    });
+
+    return { ok: true };
+}
+
+async function findRowAcrossTables(
+    id: string,
+): Promise<{ table: import('@lancedb/lancedb').Table; row: MemoryRow } | null> {
+    const safeId = id.replace(/'/g, "''");
+    const tryGetter = async (
+        getter: (seed: MemoryRow | null) => Promise<{ table: import('@lancedb/lancedb').Table | null; justCreated: boolean }>,
+    ): Promise<{ table: import('@lancedb/lancedb').Table; row: MemoryRow } | null> => {
+        const { table } = await getter(null);
+        if (!table) {
+            return null;
+        }
+        const found = await table.query().where(`id = '${safeId}'`).limit(1).toArray();
+        if (found.length === 0) {
+            return null;
+        }
+
+        return { table, row: found[0] as MemoryRow };
+    };
+
+    return (await tryGetter(getRevisitsTable)) ?? (await tryGetter(getFindingsTable));
+}
+
+export async function deleteMemory(id: string): Promise<{ ok: true }> {
+    if (!id) {
+        throw new Error('delete_memory: id is required');
+    }
+
+    const safeId = id.replace(/'/g, "''");
+    const where = `id = '${safeId}'`;
+
+    const { table: revisitsTable } = await getRevisitsTable(null);
+    if (revisitsTable) {
+        await revisitsTable.delete(where);
+    }
+
+    const { table: findingsTable } = await getFindingsTable(null);
+    if (findingsTable) {
+        await findingsTable.delete(where);
+    }
+
+    return { ok: true };
+}
+
+export async function editMemory(input: EditMemoryInput): Promise<{ ok: true }> {
+    if (!input.id) {
+        throw new Error('edit_memory: id is required');
+    }
+
+    const located = await findRowAcrossTables(input.id);
+    if (!located) {
+        throw new Error(`edit_memory: no entry found for id '${input.id}'`);
+    }
+
+    const { table, row } = located;
+    const safeId = input.id.replace(/'/g, "''");
+
+    const newTitle = input.title !== undefined ? input.title.trim() : row.title;
+    const newBody = input.body !== undefined ? input.body.trim() : row.body;
+    const newTags = input.tags !== undefined ? JSON.stringify(sanitizeStringList(input.tags)) : row.tags;
+    const newPaths = input.paths !== undefined ? JSON.stringify(sanitizeStringList(input.paths)) : row.paths;
+    const newBranch = input.branch !== undefined ? (input.branch ?? '') : row.branch;
+
+    const updateValues: Record<string, string | number | number[]> = {
+        title: newTitle,
+        body: newBody,
+        tags: newTags,
+        paths: newPaths,
+        branch: newBranch,
+        updatedAt: Date.now(),
+    };
+
+    if (input.title !== undefined || input.body !== undefined) {
+        updateValues['vector'] = await embedOne(embedTextFor(newTitle, newBody));
+    }
+
+    await table.update({
+        values: updateValues,
+        where: `id = '${safeId}'`,
+    });
+
+    return { ok: true };
+}

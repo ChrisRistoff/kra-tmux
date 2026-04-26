@@ -47,6 +47,76 @@ function cleanResolve<T>(
 }
 
 /**
+ * Read-only info screen. Displays `content` in a scrollable, vim-keyed box.
+ * Resolves when the user presses Esc/q/Ctrl+C. Used for "nothing here" empty
+ * states and detail/body viewers where blessed (with vim navigation) is
+ * preferable to spawning nvim.
+ */
+export async function showInfoScreen(title: string, content: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+        const screen = createScreen(title);
+        const finish = cleanResolve<void>(screen, resolve);
+
+        const headerText = figlet.textSync(title.slice(0, 20), {
+            font: 'Banner',
+            horizontalLayout: 'default',
+            verticalLayout: 'default',
+        });
+
+        const header = blessed.box({
+            top: 0,
+            left: 'center',
+            width: '100%',
+            height: 7,
+            content: '{bold}' + headerText + '{/bold}',
+            tags: true,
+            align: 'center',
+            valign: 'middle',
+            style: { fg: 'red', bg: 'black' },
+        });
+
+        const headerLines = headerText.split('\n').length;
+
+        const body = blessed.box({
+            parent: screen,
+            top: headerLines + 2,
+            left: 'center',
+            width: '90%',
+            bottom: 3,
+            content,
+            tags: false,
+            border: { type: 'line' },
+            style: { fg: 'white', bg: 'black', border: { fg: 'red' } },
+            scrollable: true,
+            alwaysScroll: true,
+            keys: true,
+            vi: true,
+            mouse: true,
+            scrollbar: { ch: ' ', style: { bg: 'red' } },
+        });
+
+        const status = blessed.box({
+            parent: screen,
+            bottom: 0,
+            left: 'center',
+            width: '100%',
+            height: 3,
+            content: 'j/k or ↑/↓: Scroll | g/G: Top/Bottom | Esc/q/Ctrl+C: Back',
+            style: { fg: 'white', bg: 'black' },
+        });
+
+        screen.append(header);
+        screen.append(body);
+        screen.append(status);
+
+        screen.key(['escape', 'q', 'C-c'], () => finish());
+
+        body.focus();
+        screen.render();
+    });
+}
+
+/**
  * Yes / No Prompt
  */
 export async function promptUserYesOrNo(message: string): Promise<boolean> {
