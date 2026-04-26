@@ -250,7 +250,7 @@ All key bindings below apply to **both** providers unless noted otherwise.
 | `<leader>P` | Reset remembered per-family tool approvals |
 | `<leader>h` | Browse tool call history for this session |
 | `<leader>s` | Browse session diff history (all AI write diffs + per-file `ORIG`) |
-| `<leader>m` | Browse / add / delete `kra-memory` entries (Telescope picker; `a` to add, `dd` to delete with confirm) |
+| `<leader>m` | Browse `kra-memory`. Picker keys: `<Tab>` cycles all/findings/revisits, `a` adds, `dd`/`D` deletes, `<CR>` opens entry in a scratch buffer. In the buffer: `<leader>w` (or `:w`) saves edits, `<leader>d` deletes, `<leader>r` resolves a revisit, `<leader>x` dismisses a revisit, `q` closes |
 | `<Space>t` | Toggle tool/intent popups on or off (global keymap) |
 | `<leader>?` | Show all keymaps (which-key) |
 
@@ -429,7 +429,9 @@ It's auto-loaded for **both** providers (alongside `kra-file-context` and `kra-s
 
 ### Storage
 
-- `<repo>/.kra-memory/lance/memory.lance/` — LanceDB table holding the rows + 384-dim vectors
+- `<repo>/.kra-memory/lance/memory_findings.lance/` — LanceDB table for findings (note / bug-fix / gotcha / decision / investigation), 384-dim vectors
+- `<repo>/.kra-memory/lance/memory_revisits.lance/` — LanceDB table for revisits (parked discussions, with status), 384-dim vectors
+- The legacy single `memory.lance/` table is dropped on first connect after upgrade
 - ~2 KB per entry; thousands of entries fit in a few MB
 - Add `.kra-memory/` to your `.gitignore` if you prefer local-only memory (the directory contains raw debugging context that may be noisy in git history)
 
@@ -445,25 +447,32 @@ The agent isn't the only one allowed to write to the memory store. Inside the ag
 - `a` (or `<C-a>` in insert mode) — prompts for kind / title / body / tags via `vim.ui.select` + `vim.ui.input` and inserts a new memory (`source = 'user'`)
 - `dd` — confirms then deletes the highlighted entry
 - `D` — deletes without confirmation (use sparingly)
-- `<CR>` — closes the picker
+- `<Tab>` — cycles the view: all → findings → revisits → all (the title shows the current view + counts)
+- `<CR>` — opens the selected entry in a markdown scratch buffer with a YAML-style header (`id` / `kind` / `status` / `created` / `paths` / `title` / `tags`) above the body. From that buffer:
+  - `<leader>w` (or `:w`) — saves edits via `edit_memory` (title, tags, and body are parsed from the buffer; id/kind/status/created/paths are read-only)
+  - `<leader>d` — deletes the entry (with confirm)
+  - `<leader>r` — resolves the entry as a revisit (prompts for an optional resolution note); no-op on findings
+  - `<leader>x` — dismisses the entry as a revisit (prompts for an optional reason); no-op on findings
+  - `q` — closes the buffer without saving
 
-Each add/delete re-opens the picker so you can chain operations. The same `notes.ts` helpers back both the picker and the MCP tools, so user-edited and agent-edited memories are indistinguishable to `recall` / `semantic_search`.
+Each action re-opens the picker on the same view so you can chain operations. The same `notes.ts` helpers back both the picker and the MCP tools, so user-edited and agent-edited memories are indistinguishable to `recall` / `semantic_search`.
 
-### Tools exposed (4, intentionally minimal)
+### Tools exposed (5, intentionally minimal)
 
-The surface is deliberately tiny so the model doesn't have to choose between near-duplicate tools. One write, one read, one mutation.
+The surface is intentionally compact so the model doesn't have to choose between near-duplicate tools. Two writes (`remember` + `edit_memory`), one read (`recall`), one mutation (`update_memory`), and one cross-table search (`semantic_search`).
 
 | Tool | Signature | Purpose |
 |------|-----------|---------|
-| `remember` | `({ kind, title, body, tags?, paths? })` | Store a long-term entry. `kind` is `note \| bug-fix \| gotcha \| decision \| investigation \| revisit`. `revisit` is for ideas you discussed but deferred — they default to `status: open` so they show up in `recall({ status: 'open' })`. |
-| `recall` | `({ query?, k?, kind?, tagsAny?, status? })` | Vector search across stored entries. Omit `query` to list everything matching the filters (useful for "show me open revisits on this branch"). |
-| `update_memory` | `({ id, status, resolution? })` | Mutate an existing entry's `status` (`resolved` or `dismissed`) and optionally attach a resolution note. The original `body` is preserved. |
-| `semantic_search` | `({ query, k?, scope?, pathGlob? })` | Conceptual vector search across the **indexed codebase** (Phase 2). `scope` is `code` (default), `memory`, or `both`. Returns ranked snippets with `path`, `startLine`/`endLine`, `language`, `snippet`. Pair with the file-context `read_lines` / `get_outline` for full context. Use ripgrep `search` for known symbols/strings; the two are complementary. |
+| `remember` | `({ kind, title, body, tags?, paths? })` | Store a long-term entry. `kind` is `note \| bug-fix \| gotcha \| decision \| investigation` (written to `memory_findings`) **or** `revisit` (written to `memory_revisits`). `revisit` is for ideas you discussed but deferred — they default to `status: open` so they show up in `recall({ kind: 'revisit', status: 'open' })`. |
+| `recall` | `({ kind, query?, k?, tagsAny?, status? })` | Vector search across stored entries. **`kind` is required** — it picks which table to query (findings vs revisits). Omit `query` to list everything matching the filters (useful for `recall({ kind: 'revisit', status: 'open' })`). |
+| `update_memory` | `({ id, status, resolution? })` | Mutate a **revisit's** `status` (`resolved` or `dismissed`) and optionally attach a resolution note. The original `body` is preserved. Findings have no status concept; use `edit_memory` to amend them. |
+| `semantic_search` | `({ query, k?, scope?, memoryKind?, pathGlob? })` | Conceptual vector search across the **indexed codebase** (Phase 2). `scope` is `code` (default), `memory`, or `both`. When `scope` includes memory, `memoryKind` is **required** so the query targets the correct table. Returns ranked snippets with `path`, `startLine`/`endLine`, `language`, `snippet`. Pair with the file-context `read_lines` / `get_outline` for full context. Use ripgrep `search` for known symbols/strings; the two are complementary. |
+| `edit_memory` | `({ id, title?, body?, tags?, paths? })` | Edit an existing entry's user-visible fields. Re-embeds the vector when `title` or `body` changes. Works on entries in either table. |
 ### Agent prompt (built-in)
 
 The agent is told to:
 - Call `remember` after fixing a non-obvious bug, hitting a gotcha, or making a design decision the next session would want to know.
-- Use `kind: 'revisit'` when you discuss an idea worth pursuing but choose not to do it now — with a clear title, what you considered, and why you deferred.
+- Use `kind: 'revisit'` when you discuss an idea worth pursuing but choose not to do it now — with a clear title, what you considered, and why you deferred. Use one of the **finding** kinds (`note` / `bug-fix` / `gotcha` / `decision` / `investigation`) for things discovered while working that the next session will want to know.
 - Call `recall` at the start of work in a familiar area, or whenever it suspects past context exists.
 - Call `update_memory` when a revisit is resolved or dismissed, instead of creating a duplicate entry.
 
@@ -498,7 +507,7 @@ Under the hood:
 
 ### Implementation notes
 
-- LanceDB's `createTable` seeds the table with the first row; `getMemoryTable` returns a `{ table, justCreated }` tuple so callers don't accidentally insert the seed twice.
+- LanceDB's `createTable` seeds the table with the first row; `getOrCreateMemoryTable` (used by both `getFindingsTable` and `getRevisitsTable`) returns a `{ table, justCreated }` tuple so callers don't accidentally insert the seed twice. The legacy single `memory` table is dropped once per process on first connect after upgrade.
 - `update_memory` passes raw values (not SQL strings) via LanceDB's `values` parameter — `valuesSql` is the SQL-expression sibling and easy to confuse.
 - `<repo>/.kra-memory/meta.sqlite` is reserved for housekeeping (settings, last-used) but currently unused.
 

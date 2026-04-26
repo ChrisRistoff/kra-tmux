@@ -31,7 +31,7 @@ export async function createAgentChatFile(chatFile: string): Promise<void> {
             #   <leader>P    -> Reset remembered tool approvals
             #   <leader>h    -> Browse recent tool calls
             #   <leader>s    -> Browse session diff history (all AI write diffs)
-            #   <leader>m    -> Browse / add / delete kra-memory entries
+            #   <leader>m    -> Browse kra-memory (<Tab> view, a add, dd del; <CR> opens entry buffer: <leader>w save / d del / r resolve / x dismiss / q close)
             #   <leader>?    -> Show all keymaps
             ${formatAgentDraftEntry().trimStart()}`;
 

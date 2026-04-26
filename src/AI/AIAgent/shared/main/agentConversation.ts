@@ -70,7 +70,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             type: 'stdio' as const,
             command: process.execPath,
             args: [path.join(__dirname, '..', 'utils', 'memoryMcpServer.js')],
-            tools: ['remember', 'recall', 'update_memory', 'semantic_search'],
+            tools: ['remember', 'recall', 'update_memory', 'edit_memory', 'semantic_search'],
         },
     };
     const stateRef: { current?: AgentConversationState } = {};
@@ -209,6 +209,43 @@ For multiple changes in the same file:
 <creating_files>
 Use \`create_file\` for new files only. It refuses if the file already exists. For existing files, use edit_lines.
 </creating_files>
+
+<long_term_memory priority="high">
+Long-term memory (kra-memory) is your persistent vector store across sessions. It is split into TWO physical tables, and you MUST pass the correct \`kind\` on every call — there is no implicit cross-table query.
+
+**Findings table** — \`kind\` ∈ { \`note\`, \`bug-fix\`, \`gotcha\`, \`decision\`, \`investigation\` }
+Things YOU discover while working that a future session will want to know. Status is irrelevant.
+  - \`bug-fix\`     — root cause + fix you found for a non-obvious bug
+  - \`gotcha\`      — repo-specific trap, surprising behavior, hidden coupling
+  - \`decision\`    — design choice + the rationale ("we picked X over Y because…")
+  - \`investigation\` — result of digging through code/docs to answer a question
+  - \`note\`        — anything else worth preserving that doesn't fit above
+
+**Revisits table** — \`kind\` = \`revisit\` only
+Ideas discussed and intentionally deferred, awaiting human input. Have status \`open\` / \`resolved\` / \`dismissed\`. Update via \`update_memory\` (revisits only).
+
+**When to write (be proactive, not stingy):**
+- After fixing a non-obvious bug → \`remember({ kind: 'bug-fix', … })\`
+- After hitting a gotcha that cost you time → \`remember({ kind: 'gotcha', … })\`
+- After making a design decision a future session would re-derive → \`remember({ kind: 'decision', … })\`
+- After non-trivial investigation whose result is reusable → \`remember({ kind: 'investigation', … })\`
+- When the user defers an idea → \`remember({ kind: 'revisit', … })\`
+Include enough detail in \`body\` that a future session can act without re-investigating. Always set \`paths\` when relevant.
+
+**When to read:**
+- \`recall({ kind, query?, tagsAny?, status? })\` — \`kind\` is **required**. With \`query\`: vector search. Without \`query\`: list mode (newest first), e.g. \`recall({ kind: 'revisit', status: 'open' })\` to surface open revisits at session start in a familiar area.
+- Call \`recall\` at the start of work in a familiar area, or whenever you suspect past context exists.
+
+**\`semantic_search\` — conceptual search across the codebase (and optionally memory):**
+- \`semantic_search({ query, scope?, memoryKind?, pathGlob?, k? })\`
+- \`scope\` is \`code\` (default), \`memory\`, or \`both\`. **When \`scope\` includes memory, \`memoryKind\` is required** (which table to search).
+- Use it for "where does X happen" / "what handles Y" when you don't know the exact symbol — it returns ranked snippets with file/line/language. Pair with \`read_lines\` / \`get_outline\` for full context.
+- For known string/symbol lookups, prefer \`kra-file-context:search\` (ripgrep). The two are complementary.
+
+**Editing & lifecycle:**
+- \`edit_memory({ id, title?, body?, tags?, paths? })\` — refine an existing entry in place. Re-embeds the vector when \`title\` or \`body\` changes. Use this instead of creating a near-duplicate.
+- \`update_memory({ id, status, resolution? })\` — close out a revisit (\`resolved\` or \`dismissed\`) once acted on.
+</long_term_memory>
 
 Reminder: Always call confirm_task_complete before ending your turn.`,
         },

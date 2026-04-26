@@ -9,11 +9,19 @@
 
 import type { NeovimClient } from 'neovim';
 import type { VimValue } from 'neovim/lib/types/VimValue';
-import { recall, remember, deleteMemory } from '@/AI/AIAgent/shared/memory/notes';
+import { editMemory, listMemories, remember, deleteMemory, updateMemory } from '@/AI/AIAgent/shared/memory/notes';
 import { MEMORY_KINDS, type MemoryKind } from '@/AI/AIAgent/shared/memory/types';
 
-export async function openMemoryBrowser(nvim: NeovimClient): Promise<void> {
-    const entries = await recall({ k: 200 });
+export type MemoryView = 'all' | 'findings' | 'revisits';
+
+function parseView(raw: unknown): MemoryView {
+    const v = String(raw ?? 'all');
+
+    return v === 'findings' || v === 'revisits' ? v : 'all';
+}
+
+export async function openMemoryBrowser(nvim: NeovimClient, view: MemoryView = 'all'): Promise<void> {
+    const entries = await listMemories({ scope: view, limit: 200 });
     const payload = entries.map((entry) => ({
         id: entry.id,
         kind: entry.kind,
@@ -27,7 +35,7 @@ export async function openMemoryBrowser(nvim: NeovimClient): Promise<void> {
 
     await nvim.executeLua(
         `require('kra_agent_ui').show_memory_browser(...)`,
-        [payload as unknown as VimValue],
+        [payload as unknown as VimValue, view as unknown as VimValue],
     );
 }
 
@@ -41,6 +49,7 @@ export async function handleAddMemory(
         : 'note';
     const title = String(args['title'] ?? '').trim();
     const body = String(args['body'] ?? '').trim();
+    const view = parseView(args['view']);
 
     if (!title || !body) {
         await nvim.executeLua(
@@ -60,8 +69,8 @@ export async function handleAddMemory(
         `local id = select(1, ...); vim.notify('Saved memory ' .. tostring(id), vim.log.levels.INFO, { title = 'kra-memory' })`,
         [id as unknown as VimValue],
     );
-    // Re-open the browser so the user immediately sees the new entry.
-    await openMemoryBrowser(nvim);
+
+    await openMemoryBrowser(nvim, view);
 }
 
 export async function handleDeleteMemory(
@@ -69,6 +78,7 @@ export async function handleDeleteMemory(
     args: Record<string, unknown>,
 ): Promise<void> {
     const id = String(args['id'] ?? '').trim();
+    const view = parseView(args['view']);
 
     if (!id) {
         return;
@@ -80,5 +90,78 @@ export async function handleDeleteMemory(
         [id as unknown as VimValue],
     );
 
-    await openMemoryBrowser(nvim);
+    await openMemoryBrowser(nvim, view);
+}
+
+export async function handleEditMemory(
+    nvim: NeovimClient,
+    args: Record<string, unknown>,
+): Promise<void> {
+    const id = String(args['id'] ?? '').trim();
+    const view = parseView(args['view']);
+    if (!id) {
+        return;
+    }
+
+    const patch: Parameters<typeof editMemory>[0] = { id };
+    if (typeof args['title'] === 'string') {
+        patch.title = (args['title']).trim();
+    }
+    if (typeof args['body'] === 'string') {
+        patch.body = (args['body']).trim();
+    }
+    if (typeof args['tags'] === 'string') {
+        const t = (args['tags']).trim();
+        patch.tags = t ? t.split(',').map((x) => x.trim()).filter(Boolean) : [];
+    } else if (Array.isArray(args['tags'])) {
+        patch.tags = (args['tags'] as unknown[]).map((x) => String(x));
+    }
+    if (typeof args['paths'] === 'string') {
+        const p = (args['paths']).trim();
+        patch.paths = p ? p.split(',').map((x) => x.trim()).filter(Boolean) : [];
+    } else if (Array.isArray(args['paths'])) {
+        patch.paths = (args['paths'] as unknown[]).map((x) => String(x));
+    }
+
+    await editMemory(patch);
+    await nvim.executeLua(
+        `local id = select(1, ...); vim.notify('Edited memory ' .. tostring(id), vim.log.levels.INFO, { title = 'kra-memory' })`,
+        [id as unknown as VimValue],
+    );
+
+    await openMemoryBrowser(nvim, view);
+}
+
+export async function handleSetMemoryStatus(
+    nvim: NeovimClient,
+    args: Record<string, unknown>,
+): Promise<void> {
+    const id = String(args['id'] ?? '').trim();
+    const statusRaw = String(args['status'] ?? '').trim();
+    const view = parseView(args['view']);
+
+    if (!id || (statusRaw !== 'resolved' && statusRaw !== 'dismissed' && statusRaw !== 'open')) {
+        return;
+    }
+
+    if (statusRaw === 'open') {
+        // Re-opening a previously resolved/dismissed revisit isn't part of
+        // updateMemory's contract; do it via editMemory by writing the status
+        // field directly through a small extension. For now, expose a notice.
+        await nvim.executeLua(
+            `vim.notify('Re-opening revisits not supported yet', vim.log.levels.WARN, { title = 'kra-memory' })`,
+            [],
+        );
+
+        return;
+    }
+
+    const resolution = typeof args['resolution'] === 'string' ? (args['resolution']) : undefined;
+    const updateInput: Parameters<typeof updateMemory>[0] =
+        resolution !== undefined
+            ? { id, status: statusRaw, resolution }
+            : { id, status: statusRaw };
+    await updateMemory(updateInput);
+
+    await openMemoryBrowser(nvim, view);
 }

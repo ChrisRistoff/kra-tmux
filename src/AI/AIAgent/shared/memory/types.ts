@@ -6,16 +6,32 @@
  * `kra-memory` MCP server (`src/AI/AIAgent/shared/utils/memoryMcpServer.ts`).
  */
 
-export const MEMORY_KINDS = [
+export const FINDING_KINDS = [
     'note',
     'bug-fix',
     'gotcha',
     'decision',
     'investigation',
-    'revisit',
 ] as const;
 
+export const REVISIT_KIND = 'revisit';
+
+export const MEMORY_KINDS = [
+    ...FINDING_KINDS,
+    REVISIT_KIND,
+] as const;
+
+export type FindingKind = typeof FINDING_KINDS[number];
+export type RevisitKind = typeof REVISIT_KIND;
 export type MemoryKind = typeof MEMORY_KINDS[number];
+
+export function isRevisitKind(kind: string): kind is RevisitKind {
+    return kind === REVISIT_KIND;
+}
+
+export function isFindingKind(kind: string): kind is FindingKind {
+    return (FINDING_KINDS as readonly string[]).includes(kind);
+}
 
 export const MEMORY_STATUSES = ['open', 'resolved', 'dismissed'] as const;
 export type MemoryStatus = typeof MEMORY_STATUSES[number];
@@ -92,7 +108,7 @@ export interface RememberInput {
 export interface RecallInput {
     query?: string;
     k?: number;
-    kind?: MemoryKind;
+    kind: MemoryKind;
     tagsAny?: string[];
     status?: MemoryStatus;
 }
@@ -101,6 +117,16 @@ export interface UpdateMemoryInput {
     id: string;
     status: 'resolved' | 'dismissed';
     resolution?: string;
+}
+
+export interface EditMemoryInput {
+    id: string;
+    kind?: MemoryKind;
+    title?: string;
+    body?: string;
+    tags?: string[];
+    paths?: string[];
+    branch?: string | null;
 }
 
 /**
@@ -140,6 +166,7 @@ export interface SemanticSearchInput {
     k?: number;
     scope?: 'code' | 'memory' | 'both';
     pathGlob?: string;
+    memoryKind?: MemoryKind;
 }
 
 export interface SemanticSearchHit {

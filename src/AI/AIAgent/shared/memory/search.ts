@@ -5,11 +5,13 @@
  */
 
 import { embedOne } from './embedder';
-import { getCodeChunksTable, getMemoryTable } from './db';
+import { getCodeChunksTable, getFindingsTable, getRevisitsTable } from './db';
 import { matchGlob } from './indexer';
 import {
     decodeRow,
+    isRevisitKind,
     type CodeChunkRow,
+    type MemoryKind,
     type MemoryRow,
     type SemanticSearchHit,
     type SemanticSearchInput,
@@ -29,7 +31,11 @@ export async function semanticSearch(input: SemanticSearchInput): Promise<Semant
     }
 
     if (scope === 'memory' || scope === 'both') {
-        hits.push(...await searchMemory(queryVector, k));
+        if (!input.memoryKind) {
+            throw new Error("semanticSearch: 'memoryKind' is required when scope includes 'memory'");
+        }
+
+        hits.push(...await searchMemory(queryVector, k, input.memoryKind));
     }
 
     hits.sort((a, b) => b.score - a.score);
@@ -52,14 +58,21 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
         .slice(0, k);
 }
 
-async function searchMemory(vector: number[], k: number): Promise<SemanticSearchHit[]> {
-    const { table } = await getMemoryTable(null);
+async function searchMemory(vector: number[], k: number, kind: MemoryKind): Promise<SemanticSearchHit[]> {
+    const getter = isRevisitKind(kind) ? getRevisitsTable : getFindingsTable;
+    const { table } = await getter(null);
 
     if (!table) return [];
 
-    const rows = await table.search(vector).limit(k).toArray();
+    // Findings table holds multiple kinds; filter to the requested one.
+    // Revisits table only has 'revisit' rows so the filter is a no-op there.
+    const fetchK = Math.min(k * 4, 200);
+    const rows = await table.search(vector).limit(fetchK).toArray();
 
-    return rows.map(toMemoryHit);
+    return rows
+        .map(toMemoryHit)
+        .filter((hit) => hit.memory?.kind === kind)
+        .slice(0, k);
 }
 
 function toCodeHit(raw: Record<string, unknown>): SemanticSearchHit {

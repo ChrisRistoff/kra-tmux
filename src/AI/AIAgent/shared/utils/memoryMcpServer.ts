@@ -9,7 +9,7 @@
  */
 
 import readline from 'readline';
-import { recall, remember, updateMemory } from '../memory/notes';
+import { editMemory, recall, remember, updateMemory } from '../memory/notes';
 import { semanticSearch } from '../memory/search';
 import { MEMORY_KINDS, MEMORY_STATUSES } from '../memory/types';
 
@@ -74,11 +74,11 @@ const RECALL_TOOL = {
         properties: {
             query: { type: 'string', description: 'Optional natural-language query. Omit for list mode (no embedding).' },
             k: { type: 'number', description: 'Max results (default 5 for search mode, 50 for list mode, hard cap 200).' },
-            kind: { type: 'string', enum: [...MEMORY_KINDS], description: 'Restrict to one kind (e.g. "revisit", "gotcha").' },
+            kind: { type: 'string', enum: [...MEMORY_KINDS], description: 'REQUIRED. Which memory to query: "revisit" hits the parked-discussions table; any of note/bug-fix/gotcha/decision/investigation hits the findings table.' },
             tagsAny: { type: 'array', items: { type: 'string' }, description: 'Match if entry has any of these tags.' },
             status: { type: 'string', enum: [...MEMORY_STATUSES], description: 'Filter by status (typically "open" for revisit listings).' },
         },
-        required: [],
+        required: ['kind'],
     },
 };
 
@@ -106,6 +106,7 @@ const SEMANTIC_SEARCH_TOOL = {
         'Use for "where does X happen" / "what handles Y" queries when you don\'t know the exact symbol.',
         'For known string/symbol lookups prefer the file-context `search` tool (ripgrep) — they are complementary.',
         'Returns code snippets ranked by semantic similarity; follow up with `read_lines` / `get_outline` for full context.',
+        'When scope includes "memory", you MUST also pass `memoryKind` to choose which memory table to search (findings or revisits).',
     ].join(' '),
     inputSchema: {
         type: 'object',
@@ -114,14 +115,36 @@ const SEMANTIC_SEARCH_TOOL = {
             k: { type: 'number', description: 'Max results (default 10, hard cap 100).' },
             scope: { type: 'string', enum: ['code', 'memory', 'both'], description: 'Where to search (default "code").' },
             pathGlob: { type: 'string', description: 'Optional glob to restrict code results by path (e.g. "src/AI/**").' },
+            memoryKind: { type: 'string', enum: [...MEMORY_KINDS], description: 'Required when scope is "memory" or "both". Picks which memory table (findings vs revisits) to search.' },
         },
         required: ['query'],
+    },
+};
+
+const EDIT_MEMORY_TOOL = {
+    name: 'edit_memory',
+    description: [
+        'Edit an existing memory entry in place: title, body, tags, paths, or branch.',
+        'Re-embeds the vector when title or body change. Works for both findings and revisits.',
+    ].join(' '),
+    inputSchema: {
+        type: 'object',
+        properties: {
+            id: { type: 'string', description: 'Memory entry id (returned by remember / recall).' },
+            title: { type: 'string', description: 'New short headline.' },
+            body: { type: 'string', description: 'New full content.' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Replacement tag list.' },
+            paths: { type: 'array', items: { type: 'string' }, description: 'Replacement paths list.' },
+            branch: { type: 'string', description: 'Replacement branch (use empty string to clear).' },
+        },
+        required: ['id'],
     },
 };
 const TOOLS = [
     REMEMBER_TOOL,
     RECALL_TOOL,
     UPDATE_MEMORY_TOOL,
+    EDIT_MEMORY_TOOL,
     SEMANTIC_SEARCH_TOOL,
 ];
 
@@ -137,6 +160,9 @@ async function dispatchTool(name: ToolName, args: Record<string, unknown>): Prom
 
         case 'update_memory':
             return updateMemory(args as unknown as Parameters<typeof updateMemory>[0]);
+
+        case 'edit_memory':
+            return editMemory(args as unknown as Parameters<typeof editMemory>[0]);
 
         case 'semantic_search':
             return semanticSearch(args as unknown as Parameters<typeof semanticSearch>[0]);
