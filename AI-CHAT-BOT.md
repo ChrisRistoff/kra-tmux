@@ -8,7 +8,6 @@ A sophisticated AI interface built on Neovim with advanced file context manageme
 - **📁 Smart File Context**: Add entire files or visual selections as context for AI conversations
 - **⚡ Real-time Streaming**: Live AI response streaming with user-controlled abort capability
 - **🔌 Multi-Provider Support**: Works with various AI model providers and models
-- **🧠 Copilot SDK Agent Mode**: Full agentic workflow with built-in tools, MCP servers, and Neovim-hosted user input
 - **🔍 Proposal Review Gate**: Review a git diff, edit proposal files, and explicitly apply or reject changes
 - **💾 Persistent Sessions**: Automatic chat saving/loading with intelligent summarization
 - **🔄 Tmux Integration**: Seamless tmux split-pane support
@@ -91,15 +90,6 @@ graph TB
 | `Ctrl+C` | ⏹️ Stop Stream | Abort AI response generation |
 | `Space` | ✂️ Add Selection | Add visual selection to context (visual mode) |
 
-### 🧠 Agent Mode Controls
-
-| Key | Action | Description |
-|-----|--------|-------------|
-| `<leader>d` | 🔍 Review Proposal | Open the current proposal `git diff` in a Neovim review tab |
-| `<leader>o` | 📄 Open Proposal File | Pick and edit one of the changed proposal files before apply |
-| `<leader>a` | ✅ Apply Proposal | Apply the approved proposal diff back into the repository |
-| `<leader>r` | 🚫 Reject Proposal | Discard the current proposal workspace changes |
-
 ## 📁 File Context System
 
 ### 🎯 Context Types
@@ -133,38 +123,6 @@ graph TB
 3. **✂️ Visual Selection**: For partial - select text in visual mode, press `Space`
 4. **💾 Context Storage**: Metadata stored in `fileContexts` array
 5. **🤖 AI Integration**: Context automatically included in AI prompts
-
-## 🧠 Copilot SDK Agent Workflow
-
-The `kra ai agent` command keeps the existing Neovim chat surface, but swaps the prompt-only backend for the GitHub Copilot SDK.
-
-> 📖 **Full documentation**: [COPILOT-AGENT.md](COPILOT-AGENT.md)
-
-### Agent Runtime Highlights
-
-1. **Uncommitted-diff proposal model** — The agent writes directly to your repository as uncommitted changes. Every edit is visible via `git diff` at any time. Reject (`<leader>r`) runs `git restore . && git clean -fd`; apply (`<leader>a`) simply confirms you're happy with what's already on disk.
-
-2. **Project-local MCP configuration** — MCP servers are loaded from `settings.toml` and injected into the SDK session alongside the built-in tools.
-
-3. **Review-before-apply** — When the agent changes files, Neovim automatically opens the resulting `git diff`. Inspect, edit proposal files, then apply or reject.
-
-4. **Confirm-before-done protocol** — The agent always asks before ending a turn. Replies are sent back for free (no extra credit consumed).
-
-5. **Quota monitoring** — `kra ai quota` shows your monthly premium usage plus cached weekly/session limits. In-session warnings appear at 50%, 25%, and 10% remaining.
-
-### `settings.toml` MCP Example
-
-```toml
-[ai.agent]
-defaultModel = "gpt-5-mini"
-
-[ai.agent.mcpServers.filesystem]
-active = true
-type = "local"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
-tools = ["*"]
-```
 
 ## 🚀 Core Functions
 

@@ -18,13 +18,16 @@
 - **💾 Smart conversation persistence** with AI-generated summaries
 - **🔄 Multi-provider support** (OpenAI, Anthropic, Gemini, etc.)
 
-### 🧠 [**Copilot SDK Agent Mode**](COPILOT-AGENT.md)
-*Full agentic workflow with review-before-apply proposal workspace*
-- **🔍 Proposal workspace** — agent edits a git worktree; you review the diff before it lands
+### 🧠 [**Agent Mode (Copilot + BYOK)**](AGENT.md)
+*Full agentic workflow with two interchangeable backends and a review-before-apply repository workspace*
+- **🔀 Two providers behind one command** — GitHub Copilot SDK *or* any OpenAI-compatible API (OpenAI, DeepSeek, Gemini, OpenRouter, DeepInfra, Mistral) via BYOK
+- **📚 Live model catalog** — models fetched from each provider on demand, annotated with context window + per-token pricing, cached for 24h
+- **🔍 Repo-as-workspace** — the agent edits files directly as uncommitted git diffs; you review before applying
+- **✏️ Inline diff editor** — edit the agent's proposed change in a 3-pane diff before approving; choose whether the AI gets notified of your edits
+- **📜 Per-file revert** — session diff history with one `ORIG` entry per file lets you roll back any single file to its pre-session baseline
 - **🛡️ Tool approval** — approve each tool call, allow by family, or go YOLO
-- **🔌 MCP server support** — extend the agent with custom tools via `settings.toml`
-- **📊 Quota monitoring** — live monthly usage + cached weekly/session limits
-
+- **🔌 MCP server support** — extend either provider with custom tools via `settings.toml`; BYOK auto-loads `kra-bash` + `kra-web`
+- **📊 Copilot quota monitoring** — live monthly usage + cached weekly/session limits with terminal warnings at 50%/25%/10%
 ---
 
 ## 🎯 **Core Philosophy**
@@ -131,7 +134,8 @@ kra ai
 | Command    | Description                                                                                                                                                                                                                       |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, and **socket-based communication**. Press `Enter` in normal mode to send prompts. |
-| **agent** 🧠 | Launch a **GitHub Copilot SDK** agent session in Neovim with **project-local MCP servers**, a **proposal workspace**, and a **review/apply gate** before repository changes are written. |
+| **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, and **socket-based communication**. Press `Enter` in normal mode to send prompts. Provider models are sourced from the same **live catalog** the agent uses (cached 24h, network-free fallback). |
+| **agent** 🧠 | Launch an agent session in Neovim with a **provider picker** (Copilot SDK *or* BYOK / OpenAI-compatible), **project-local MCP servers**, an **inline diff editor**, and **per-file revert** from session diff history. |
 | **load** 📂   | Browse saved conversations with **AI-generated summaries**. Preview summaries before loading full chat sessions.                                                                                                              |
 | **delete** 🧽 | Manage saved chats with **searchable deletion interface** and confirmation prompts.                                                                                                        |
 
@@ -139,9 +143,7 @@ kra ai
 - ⚡ **Real-time streaming responses** with user-controlled abort capability
 - 📁 **Advanced file context system** - Add entire files or visual selections as context
 - 🧠 **Multi-provider AI support** - OpenAI, Anthropic, Gemini, and custom providers
-- 🤖 **Copilot SDK agent mode** - Agentic tool use, MCP support, and interactive ask-user requests inside Neovim
-- 🔍 **Pre-apply diff review** - Review the proposed `git diff`, edit proposal files, then explicitly apply or reject
-- 🔌 **Project-local MCP registry** - Configure MCP servers in `settings.toml` and inject them into agent sessions
+- 🤖 **Agent mode (Copilot + BYOK)** — Agentic tool use, MCP support, an inline diff editor, and interactive ask-user requests inside Neovim
 - 💾 **Intelligent conversation persistence** with automatic summary generation
 - 🎯 **Visual selection integration** - Select code portions directly in Neovim
 - 🔄 **Session restoration** with complete context reconstruction
@@ -166,18 +168,20 @@ kra ai
 </details>
 
 <details>
-<summary>🧠 <strong>kra ai agent</strong> - Copilot SDK proposal workflow</summary>
+<summary>🧠 <strong>kra ai agent</strong> - Agent workflow (Copilot + BYOK)</summary>
 
 **Agent-first coding workflow:**
-1. **Role selection** - Reuse the existing role catalog for the Copilot SDK session
-2. **Model selection** - Choose a Copilot model, or set `ai.agent.defaultModel` in `settings.toml`
-3. **Proposal workspace** - The agent works in an isolated git worktree that mirrors your current working tree
-4. **Diff review in Neovim** - Review the generated `git diff`, open proposal files, refine them, then explicitly apply or reject
+1. **Provider selection** — pick `copilot` (GitHub Copilot SDK) or `byok` (any OpenAI-compatible API)
+2. **Model selection** — live catalog with context window + pricing annotations; Copilot also picks a reasoning effort. Set `ai.agent.defaultModel` in `settings.toml` to skip the picker.
+3. **Repo workspace** — the agent writes changes directly to your repo as uncommitted git diffs; nothing is staged automatically
+4. **Diff review in Neovim** — review the generated `git diff`, optionally edit the agent's proposed change in the 3-pane diff editor, then explicitly apply or reject
+5. **Per-file revert** — `<leader>s` opens session diff history with an `ORIG` entry per file so you can undo a single file at any time
 
 **MCP configuration:**
 - Define MCP servers under `ai.agent.mcpServers.*` in `settings.toml`
-- Active servers are injected into the SDK session automatically
-- The built-in toolset remains available alongside configured MCP tools
+- Active servers are injected into both providers automatically
+- BYOK additionally auto-loads `kra-bash` (shell) and `kra-web` (`web_fetch` / `web_search`) since BYOK has no built-in tools
+- Copilot also accepts remote (`http`/`sse`) MCP servers; BYOK only spawns local stdio servers
 </details>
 
 <details>
