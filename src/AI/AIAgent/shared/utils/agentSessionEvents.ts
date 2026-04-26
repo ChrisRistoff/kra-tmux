@@ -9,16 +9,38 @@ import {
     formatToolProgress,
     summarizeToolCall,
 } from '@/AI/AIAgent/shared/utils/agentUi';
-import {
-    applyProposalToRepo,
-    listProposalChanges,
-    readProposalDiff,
-    rejectProposal,
-} from '@/AI/AIAgent/shared/utils/proposalWorkspace';
+import * as bash from '@/utils/bashHelper';
 import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
 import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';
+
+function quote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+async function listProposalChanges(cwd: string): Promise<string[]> {
+    const [modified, untracked] = await Promise.all([
+        bash.execCommand(`git -C ${quote(cwd)} diff --name-only HEAD`)
+            .then(r => r.stdout.trim().split('\n').filter(Boolean)),
+        bash.execCommand(`git -C ${quote(cwd)} ls-files --others --exclude-standard`)
+            .then(r => r.stdout.trim().split('\n').filter(Boolean)),
+    ]);
+
+    return [...new Set([...modified, ...untracked])];
+}
+
+async function readProposalDiff(cwd: string): Promise<string> {
+    const savedTree = (await bash.execCommand(`git -C ${quote(cwd)} write-tree`)).stdout.trim();
+    try {
+        await bash.execCommand(`git -C ${quote(cwd)} add -A`);
+        const result = await bash.execCommand(`git --no-pager -C ${quote(cwd)} diff --cached HEAD`);
+
+        return result.stdout;
+    } finally {
+        await bash.execCommand(`git -C ${quote(cwd)} read-tree ${quote(savedTree)}`);
+    }
+}
 
 function escapeForSingleQuotes(s: string): string {
     return s.replace(/'/g, `'\\''`);
@@ -41,7 +63,8 @@ export async function updateAgentUi(
 }
 
 export async function showProposalReview(nvimClient: neovim.NeovimClient, state: AgentConversationState): Promise<void> {
-    const diff = await readProposalDiff(state.proposalWorkspace.workspacePath);
+    await state.nvim.command('silent! wall');
+    const diff = await readProposalDiff(state.cwd);
 
     if (!diff.trim()) {
         await nvimClient.command('echohl WarningMsg | echo "No proposal changes to review" | echohl None');
@@ -124,7 +147,8 @@ async function selectChangedProposalFile(
 }
 
 export async function openChangedProposalFile(state: AgentConversationState): Promise<void> {
-    const changedFiles = await listProposalChanges(state.proposalWorkspace.workspacePath);
+    await state.nvim.command('silent! wall');
+    const changedFiles = await listProposalChanges(state.cwd);
 
     if (!changedFiles.length) {
         await state.nvim.command('echohl WarningMsg | echo "No changed proposal files" | echohl None');
@@ -140,20 +164,17 @@ export async function openChangedProposalFile(state: AgentConversationState): Pr
         return;
     }
 
-    await state.nvim.command(`tabedit ${escapeForVimPath(`${state.proposalWorkspace.workspacePath}/${selectedFile}`)}`);
+    await state.nvim.command(`tabedit ${escapeForVimPath(`${state.cwd}/${selectedFile}`)}`);
 }
 
 export async function applyProposal(state: AgentConversationState): Promise<void> {
-    const message = await applyProposalToRepo(
-        state.proposalWorkspace.repoRoot,
-        state.proposalWorkspace.workspacePath
-    );
-
+    await state.nvim.command('silent! wall');
+    const message = 'Changes are already written to the repository.';
     await state.nvim.command(`echohl MoreMsg | echo '${escapeForSingleQuotes(message)}' | echohl None`);
 }
 
 export async function rejectCurrentProposal(state: AgentConversationState): Promise<void> {
-    await rejectProposal(state.proposalWorkspace.workspacePath);
+    await state.history.revertAll(state.nvim);
     await state.nvim.command('echohl WarningMsg | echo "Rejected current proposal changes" | echohl None');
 }
 
@@ -291,7 +312,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         }
 
         const details = `Running ${toolName}\n\nArguments:\n${formatToolArguments(event.data.arguments)}`;
-        const argsJson = JSON.stringify(event.data.arguments ?? {}, null, 2);
+        const argsJson = JSON.stringify(event.data.arguments, null, 2);
         void updateAgentUi(state.nvim, 'start_tool', [toolName, details, argsJson]);
     });
 
@@ -330,6 +351,18 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
             details,
             event.data.success,
         ]);
+
+        // Notify the diff module so any pending diff entry queued by an approved
+        // (possibly user-edited) write tool is either committed to the diff
+        // history (success) or discarded (failure / intercepted deny). Tools
+        // that never opened a diff editor have no pending entry, so this is a
+        // no-op for them.
+        state.nvim
+            .executeLua(
+                `require('kra_agent_diff').finalize_pending_diff(...)`,
+                [event.data.success] as VimValue[]
+            )
+            .catch(() => { /* swallow */ });
     });
 
     // ============================================================================

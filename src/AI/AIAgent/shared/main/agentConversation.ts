@@ -1,11 +1,8 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import { getConfiguredMcpServers } from '@/AI/AIAgent/shared/utils/agentSettings';
-import {
-    createProposalWorkspace,
-    hasProposalChanges,
-    removeProposalWorkspace,
-} from '@/AI/AIAgent/shared/utils/proposalWorkspace';
+import { execCommand } from '@/utils/bashHelper';
+import { createAgentHistory } from '@/AI/AIAgent/shared/utils/agentHistory';
 import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
 import * as fileContext from '@/AI/shared/utils/conversationUtils/fileContexts';
 import type {
@@ -34,13 +31,9 @@ async function cleanup(state: AgentConversationState): Promise<void> {
     fileContext.clearFileContexts();
     await updateAgentUi(state.nvim, 'finish_turn');
 
-    if (await hasProposalChanges(state.proposalWorkspace.workspacePath)) {
-        console.log(`Unapplied proposal changes kept at ${state.proposalWorkspace.workspacePath}`);
-    } else {
-        await removeProposalWorkspace(
-            state.proposalWorkspace.repoRoot,
-            state.proposalWorkspace.workspacePath
-        );
+    const changedCount = state.history.listChangedPaths().length;
+    if (changedCount > 0) {
+        console.log(`${changedCount} file(s) touched by agent (run rejectProposal to revert).`);
     }
 
     await fs.rm(state.chatFile, { force: true });
@@ -52,7 +45,8 @@ async function cleanup(state: AgentConversationState): Promise<void> {
 export async function converseAgent(options: AgentConversationOptions): Promise<void> {
     fileContext.clearFileContexts();
 
-    const proposalWorkspace = await createProposalWorkspace();
+    const cwd = (await execCommand('git rev-parse --show-toplevel')).stdout.trim();
+    const history = createAgentHistory(cwd);
     const chatFile = `/tmp/kra-agent-chat-${Date.now()}.md`;
     await createAgentChatFile(chatFile);
 
@@ -80,7 +74,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
     };
     const session = await options.client.createSession({
         model: options.model,
-        workingDirectory: proposalWorkspace.workspacePath,
+        workingDirectory: cwd,
         mcpServers: mergedMcpServers,
         excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create'],
         ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
@@ -112,6 +106,15 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             const isBashLike = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
                 (fragment) => input.toolName.toLowerCase().includes(fragment)
             );
+
+            // Run bash post-snapshot if pre-snapshot was taken.
+            if (isBashLike && stateRef.current?.pendingBashSnapshot) {
+                const snapshot = stateRef.current.pendingBashSnapshot;
+                 
+                delete (stateRef.current as Partial<AgentConversationState>).pendingBashSnapshot;
+                await stateRef.current.history.bashSnapshotAfter(snapshot).catch(() => { /* non-fatal */ });
+            }
+
             const HEAD_CHARS = isBashLike ? 2000 : 4000;
             const TAIL_CHARS = isBashLike ? 6000 : 4000;
             const text = input.toolResult.textResultForLlm;
@@ -148,24 +151,20 @@ You are in a detached proposal workspace. Edits land in the real repository only
 </workspace>
 
 <reading_code>
-**Check file size FIRST to choose the right workflow.**
+**Default to get_outline when you need a feel for a file. Only read raw lines once you know the exact range.**
 
-For small files (≤150 lines):
-  1. Call read_lines for the entire file — the tool rejects it if >150 lines and tells you to call get_outline first
-  2. No outline step needed
+Workflow:
+  1. If you already know the exact range you need (e.g. from a previous outline, search hit, or LSP result) and it's ≤150 lines, call read_lines directly on that range.
+  2. Otherwise call get_outline first to find the smallest range that contains what you need, then read_lines on that range.
+  3. Small files (≤150 lines) you can just read whole — no outline step needed.
 
-For large files (>150 lines):
-  1. Call get_outline to see line count + symbol locations (shows which functions/classes are where)
-  2. Find the exact range you need (use the line numbers from get_outline)
-  3. Call read_lines ONLY on that specific range
-  4. Example: if you see a function starts at line 203 and ends at line 215, read_lines start_line:203 end_line:215 — not the whole file
+Hard rule: read_lines bounces any single call requesting >200 lines back to the outline, but only when the file has a meaningful outline (entries from the LSP or regex fallback). Truly unstructured files (txt, csv, log, plain markdown without headings, …) are never gated — read whatever range you need (subject to the 500-line hard cap). Don't try to bypass the gate on structured files with multiple calls — narrow your range instead.
 
-**Why this matters:** When you read more than you need, you waste tokens. The outline tells you exactly where to look, so use it to find the minimal range, then read only that range.
+**Why this matters:** Reading more than you need wastes tokens. The outline tells you exactly where to look, so use it to find the minimal range, then read only that range.
 
 Reading data files (JSON/YAML/TOML/MD/.env/logs):
-  - Always call get_outline first to see line count
+  - Use get_outline first to see line count and structure
   - Then read_lines on a targeted range, not the whole file
-  - Example: For a large log file (500 lines), don't read all 500. Read around the error line you're looking for.
 
 Searching:
   Use \`kra-file-context:search\` (replaces grep/glob, both disabled).
@@ -216,7 +215,8 @@ Reminder: Always call confirm_task_complete before ending your turn.`,
         client: options.client,
         session,
         nvim: nvimClient,
-        proposalWorkspace,
+        cwd,
+        history,
         isStreaming: false,
         approvalMode: 'strict',
         allowedToolFamilies: new Set<string>(),

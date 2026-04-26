@@ -1,6 +1,6 @@
 import type * as neovim from 'neovim';
-import type { ProposalWorkspace } from '@/AI/AIAgent/shared/utils/proposalWorkspace';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
+import type { AgentHistory, BashSnapshot } from '@/AI/AIAgent/shared/utils/agentHistory';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -132,7 +132,9 @@ export interface AgentConversationState {
     client: AgentClient;
     session: AgentSession;
     nvim: neovim.NeovimClient;
-    proposalWorkspace: ProposalWorkspace;
+    cwd: string;
+    history: AgentHistory;
+    pendingBashSnapshot?: BashSnapshot;
     isStreaming: boolean;
     approvalMode: 'strict' | 'yolo';
     allowedToolFamilies: Set<string>;
