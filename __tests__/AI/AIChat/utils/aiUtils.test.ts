@@ -1,10 +1,16 @@
 import { promptUserForTemperature, formatChatEntry, pickProviderAndModel } from '@/AI/AIChat/utils/aiUtils';
 import * as ui from '@/UI/generalUI';
-import { providers } from '@/AI/AIChat/data/models';
+import { getModelCatalog } from '@/AI/shared/data/modelCatalog';
+import { SUPPORTED_PROVIDERS } from '@/AI/shared/data/providers';
 
 jest.mock('@/UI/generalUI', () => ({
     searchSelectAndReturnFromArray: jest.fn(),
     searchAndSelect: jest.fn(),
+}));
+
+jest.mock('@/AI/shared/data/modelCatalog', () => ({
+    getModelCatalog: jest.fn(),
+    formatModelInfoForPicker: jest.fn((m) => m.label),
 }));
 
 describe('promptUserForTemperature', () => {
@@ -58,24 +64,24 @@ describe('formatChatEntry', () => {
 describe('pickProviderAndModel', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        providers['providerA'] = { modelA: 'finalModelA' };
     });
 
     it('should pick provider and model correctly', async () => {
+        (getModelCatalog as jest.Mock).mockResolvedValue([
+            { id: 'finalModelA', label: 'modelA', contextWindow: 128_000 },
+        ]);
         (ui.searchSelectAndReturnFromArray as unknown as jest.Mock)
-            .mockResolvedValueOnce('providerA')
+            .mockResolvedValueOnce('gemini')
             .mockResolvedValueOnce('modelA');
 
         const result = await pickProviderAndModel();
+
         expect(ui.searchSelectAndReturnFromArray).toHaveBeenCalledTimes(2);
         expect(ui.searchSelectAndReturnFromArray).toHaveBeenNthCalledWith(1, {
-            itemsArray: Object.keys(providers),
+            itemsArray: [...SUPPORTED_PROVIDERS],
             prompt: 'Select a provider',
         });
-        expect(ui.searchSelectAndReturnFromArray).toHaveBeenNthCalledWith(2, {
-            itemsArray: Object.keys(providers['providerA']),
-            prompt: 'Select a model',
-        });
-        expect(result).toEqual({ provider: 'providerA', model: 'finalModelA' });
+        expect(getModelCatalog).toHaveBeenCalledWith('gemini');
+        expect(result).toEqual({ provider: 'gemini', model: 'finalModelA' });
     });
 });

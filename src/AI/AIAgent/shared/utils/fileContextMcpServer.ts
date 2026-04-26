@@ -168,13 +168,11 @@ const LARGE_RANGE_THRESHOLD = 100;
 // accurate.
 const seenLines = new Map<string, Set<number>>();
 
-// ── Outline-before-read soft gate ────────────────────────────────────────────
-// Files larger than OUTLINE_GATE_THRESHOLD lines that haven't been outlined yet
-// in this session will have their outline returned instead of raw content when
-// read_lines is called. This steers the AI toward targeted reads. Cleared
-// (with seenLines) after each successful edit since line numbers shift.
-const outlinedFiles = new Set<string>();
-const OUTLINE_GATE_THRESHOLD = 150;
+// ── Large-read soft gate ─────────────────────────────────────────────────────
+// If a single read_lines call requests more than LARGE_READ_THRESHOLD lines
+// (summed across ranges), return the file's outline instead of raw content so
+// the AI can pick a tighter range. Pure range-based — no per-file state.
+const LARGE_READ_THRESHOLD = 200;
 
 function canonicalPath(p: string): string {
     return path.resolve(p);
@@ -206,11 +204,8 @@ function findUnreadGap(filePath: string, start: number, end: number): [number, n
 }
 
 function clearReadCache(filePath: string): void {
-    const key = canonicalPath(filePath);
-    seenLines.delete(key);
-    outlinedFiles.delete(key);
+    seenLines.delete(canonicalPath(filePath));
 }
-
 // Build a compact outline string for read_function not-found errors so we don't
 // dump hundreds of entries back into the agent's context just to say "missing".
 function formatOutlineForMiss(filePath: string, outline: Awaited<ReturnType<typeof getFileOutline>>, max = 40): string {
@@ -633,7 +628,6 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         try {
             const outline = await getFileOutline(filePath);
 
-            outlinedFiles.add(canonicalPath(filePath));
             return textContent(formatOutline(filePath, outline));
         } catch (err) {
             return errorContent(`Could not read file: ${err instanceof Error ? err.message : String(err)}`);
@@ -643,7 +637,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     if (name === 'read_lines') {
         let startLines = coerceNumberArray(args.startLines);
         let endLines = coerceNumberArray(args.endLines);
-        const isMulti = !!(startLines || endLines);
+        const isMulti = !!(startLines ?? endLines);
 
         if (isMulti) {
             if (!startLines || !endLines || startLines.length !== endLines.length) {
@@ -670,14 +664,18 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         }
 
         try {
-            // Soft gate: if the file hasn't been outlined yet this session, return its
-            // outline instead of raw content so the AI can make a targeted read.
-            if (!outlinedFiles.has(canonicalPath(filePath))) {
+            // Soft gate: large reads get bounced to the outline so the AI can
+            // pick a tighter range. Range-based, not file-size-based.
+            // Skipped for files with no recognizable structure (e.g. plain text,
+            // JSON, logs) where an outline would be empty and unhelpful.
+            if (totalLines > LARGE_READ_THRESHOLD) {
                 const outline = await getFileOutline(filePath);
-                if (outline.lineCount > OUTLINE_GATE_THRESHOLD) {
-                    outlinedFiles.add(canonicalPath(filePath));
+                const hasStructure = outline.entries.length > 0 || !!outline.imports;
+
+                if (hasStructure) {
                     return errorContent(
-                        `File has ${outline.lineCount} lines — call \`get_outline\` first to identify the exact range you need, then retry read_lines with a targeted range.\n\n` +
+                        `Requested ${totalLines} lines in one call, exceeds the soft cap of ${LARGE_READ_THRESHOLD}. ` +
+                        `Use the outline below to pick a tighter range, then retry read_lines.\n\n` +
                         formatOutline(filePath, outline)
                     );
                 }
@@ -739,7 +737,6 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
             const numbered = numberLines(lines, range.start, range.end);
 
             markRead(filePath, range.start, range.end);
-            outlinedFiles.add(canonicalPath(filePath));
 
             return textContent(`Lines ${range.start}\u2013${range.end}:\n\n${numbered}`);
         } catch (err) {
@@ -751,7 +748,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         let startLines = coerceNumberArray(args.startLines);
         let endLines = coerceNumberArray(args.endLines);
         let newContents = coerceStringArray(args.newContents);
-        const isMulti = !!(startLines || endLines || newContents);
+        const isMulti = !!(startLines ?? endLines ?? newContents);
 
         if (isMulti) {
             if (!startLines || !endLines || !newContents ||

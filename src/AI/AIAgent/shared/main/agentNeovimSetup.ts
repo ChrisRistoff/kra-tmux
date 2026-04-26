@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as neovim from 'neovim';
-import { formatAgentDraftEntry } from '@/AI/AIAgent/utils/agentUi';
-import { buildAgentTmuxCommand } from '@/AI/AIAgent/utils/agentTmux';
+import { formatAgentDraftEntry } from '@/AI/AIAgent/shared/utils/agentUi';
+import { buildAgentTmuxCommand } from '@/AI/AIAgent/shared/utils/agentTmux';
 import * as bash from '@/utils/bashHelper';
 import { openVim } from '@/utils/neovimHelper';
 import { neovimConfig } from '@/filePaths';

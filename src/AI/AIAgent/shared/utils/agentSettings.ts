@@ -1,9 +1,10 @@
-import type { MCPLocalServerConfig, MCPRemoteServerConfig, MCPServerConfig } from "@github/copilot-sdk";
+import type { MCPLocalServerConfig, MCPRemoteServerConfig, MCPServerConfig } from "@/AI/AIAgent/shared/types/mcpConfig";
+
 import { loadSettings } from "@/utils/common";
 import { McpServerSettings } from "@/types/settingsTypes";
 
 export function getGithubToken(): string | undefined {
-    return process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_API;
+    return process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? process.env.GITHUB_API;
 }
 
 function isRemoteServer(server: McpServerSettings): server is Extract<McpServerSettings, { type: 'http' | 'sse' }> {
@@ -59,7 +60,7 @@ export async function getAgentDefaultModel(): Promise<string | undefined> {
 
 export async function getConfiguredMcpServers(): Promise<Record<string, MCPServerConfig>> {
     const settings = await loadSettings();
-    const configuredServers = settings.ai?.agent?.mcpServers || {};
+    const configuredServers = settings.ai?.agent?.mcpServers ?? {};
 
     return Object.entries(configuredServers).reduce<Record<string, MCPServerConfig>>((servers, [name, server]) => {
         if (!server.active) {

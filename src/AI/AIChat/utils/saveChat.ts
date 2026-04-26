@@ -1,6 +1,5 @@
 import * as fs from 'fs/promises';
 import { ChatData, ChatHistory, SavedFileContext } from '@/AI/shared/types/aiTypes';
-import { providers } from '@/AI/AIChat/data/models';
 import { summaryPrompt } from '@/AI/AIChat/data/prompts';
 import { formatChatEntry } from '@/AI/AIChat/utils/aiUtils';
 import { aiRoles } from '@/AI/shared/data/roles';
@@ -45,7 +44,7 @@ export async function saveChat(
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
     console.log('Preparing summary...')
-    const summary = await promptModel('gemini', providers['gemini']['gemini-3.0-flash'], finalSummaryPrompt, temperature, aiRoles[role]);
+    const summary = await promptModel('gemini', 'gemini-2.5-flash', finalSummaryPrompt, temperature, aiRoles[role]);
 
     let fullResponse = '';
     for await (const chunk of summary) {

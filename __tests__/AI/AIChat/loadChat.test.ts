@@ -6,7 +6,7 @@ import * as conversation from '@/AI/AIChat/main/conversation';
 import { loadChat } from '@/AI/AIChat/commands/loadChat';
 import { aiHistoryPath } from '@/filePaths';
 import { pickProviderAndModel } from '@/AI/AIChat/utils/aiUtils';
-import { providers } from '@/AI/AIChat/data/models';
+import { getModelCatalog } from '@/AI/shared/data/modelCatalog';
 import * as path from 'path';
 
 jest.mock('fs/promises');
@@ -17,6 +17,9 @@ jest.mock('@/AI/AIChat/main/conversation');
 jest.mock('@/AI/AIChat/utils/aiUtils');
 jest.mock('@/utils/common', () => ({
     filterGitKeep: jest.fn((chats) => chats)
+}));
+jest.mock('@/AI/shared/data/modelCatalog', () => ({
+    getModelCatalog: jest.fn(),
 }));
 
 describe('loadChat', () => {
@@ -30,19 +33,21 @@ describe('loadChat', () => {
     const validChatData = {
         temperature: 0.6,
         role: 'testRole',
-        provider: 'providerA',
+        provider: 'gemini',
         model: 'model1'
     };
 
     const invalidChatData = {
         temperature: 0.6,
         role: 'testRole',
-        provider: 'providerA',
+        provider: 'gemini',
         model: 'invalidModel'
     };
 
     beforeAll(() => {
-        providers['providerA'] = { model: 'model1' };
+        (getModelCatalog as jest.Mock).mockResolvedValue([
+            { id: 'model1', label: 'model1', contextWindow: 128_000 },
+        ]);
     });
 
     beforeEach(() => {
@@ -118,7 +123,7 @@ describe('loadChat', () => {
         (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify(invalidChatData));
         (fs.copyFile as jest.Mock).mockResolvedValue(undefined);
         (conversation.converse as jest.Mock).mockResolvedValue(undefined);
-        (pickProviderAndModel as jest.Mock).mockResolvedValue({ provider: 'providerA', model: 'model1' });
+        (pickProviderAndModel as jest.Mock).mockResolvedValue({ provider: 'gemini', model: 'model1' });
 
         await loadChat();
 
@@ -127,7 +132,7 @@ describe('loadChat', () => {
             chatFile,
             invalidChatData.temperature,
             invalidChatData.role,
-            'providerA',
+            'gemini',
             'model1',
             true
         );

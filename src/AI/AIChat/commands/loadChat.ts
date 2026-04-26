@@ -2,7 +2,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as conversation from '@/AI/AIChat/main/conversation';
 import { ChatData, Role, SavedFileContext } from '@/AI/shared/types/aiTypes'
-import { providers } from '@/AI/AIChat/data/models';
+import { getModelCatalog } from '@/AI/shared/data/modelCatalog';
+import { SUPPORTED_PROVIDERS, type SupportedProvider } from '@/AI/shared/data/providers';
 import { formatChatEntry, pickProviderAndModel } from '@/AI/AIChat/utils/aiUtils';
 import * as ui from '@/UI/generalUI';
 import * as nvim from '@/utils/neovimHelper';
@@ -60,7 +61,7 @@ export async function loadChat(): Promise<void> {
             await fs.copyFile(chatHistoryPath, chatFile);
         }
 
-        if (!chatData.provider || !checkProviderAndModelValid(chatData.provider, chatData.model)) {
+        if (!chatData.provider || !(await checkProviderAndModelValid(chatData.provider, chatData.model))) {
             console.log('Pick a new provider');
             console.log('Old model on save: ', chatData.model);
 
@@ -99,8 +100,14 @@ function formatFullChat(chatData: ChatData): string {
     }).join('');
 }
 
-function checkProviderAndModelValid(provider: string, model: string): boolean {
-    return Object.keys(providers[provider]).some((value) => providers[provider][value] === model);
+async function checkProviderAndModelValid(provider: string, model: string): Promise<boolean> {
+    if (!(SUPPORTED_PROVIDERS as readonly string[]).includes(provider)) {
+        return false;
+    }
+
+    const models = await getModelCatalog(provider as SupportedProvider);
+
+    return models.some((m) => m.id === model);
 }
 
 async function openSummaryAndPromptUserYesOrNo(chatSummaryPath: string): Promise<boolean> {

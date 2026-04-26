@@ -12,8 +12,9 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { loadSettings } from '../../../utils/common';
-import type { LspServerSettings } from '../../../types/settingsTypes';
+import { loadSettings } from '@/utils/common';
+import type { LspServerSettings } from '@/types/settingsTypes';
+
 import { LspClient, LspServerSpec } from './lspClient';
 
 const DEFAULT_ROOT_MARKERS = ['.git'];
@@ -59,8 +60,8 @@ export class LspRegistry {
     private installShutdownHooks(): void {
         const handler = (): void => { this.shutdownAll().catch(() => { /* shutting down */ }); };
         process.once('exit', handler);
-        process.once('SIGINT', () => { this.shutdownAll().catch(() => undefined).then(() => process.exit(130)); });
-        process.once('SIGTERM', () => { this.shutdownAll().catch(() => undefined).then(() => process.exit(143)); });
+        process.once('SIGINT', () => { void this.shutdownAll().catch(() => undefined).then(() => process.exit(130)); });
+        process.once('SIGTERM', () => { void this.shutdownAll().catch(() => undefined).then(() => process.exit(143)); });
     }
 
     hasServerFor(filePath: string): boolean {

@@ -9,7 +9,7 @@ import {
     isAgentDraftHeader,
     isAgentUserHeader,
     summarizeToolCall,
-} from '@/AI/AIAgent/utils/agentUi';
+} from '@/AI/AIAgent/shared/utils/agentUi';
 
 describe('agentUi helpers', () => {
     it('formats agent conversation headers with model metadata', () => {

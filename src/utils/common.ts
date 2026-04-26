@@ -13,7 +13,7 @@ export async function loadSettings(): Promise<Settings> {
     return toml.parse(settingsFileString) as Settings;
 }
 
-export async function saveSettings(settings: Settings) {
+export async function saveSettings(settings: Settings): Promise<void> {
     await fs.writeFile(settingsFilePath, toml.stringify(settings));
 }
 
