@@ -66,6 +66,12 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             args: [path.join(__dirname, '..', 'utils', 'fileContextMcpServer.js')],
             tools: ['get_outline', 'read_lines', 'read_function', 'edit_lines', 'create_file', 'search', 'lsp_query'],
         },
+        'kra-memory': {
+            type: 'stdio' as const,
+            command: process.execPath,
+            args: [path.join(__dirname, '..', 'utils', 'memoryMcpServer.js')],
+            tools: ['remember', 'recall', 'update_memory', 'semantic_search'],
+        },
     };
     const stateRef: { current?: AgentConversationState } = {};
     const mergedMcpServers = {

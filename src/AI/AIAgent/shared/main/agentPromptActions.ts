@@ -18,6 +18,11 @@ import {
     showProposalReview,
     updateAgentUi,
 } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
+import {
+    handleAddMemory,
+    handleDeleteMemory,
+    openMemoryBrowser,
+} from '@/AI/AIAgent/shared/main/agentMemoryActions';
 
 export function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -198,6 +203,16 @@ export async function setupEventHandlers(state: AgentConversationState): Promise
                     state.approvalMode = 'strict';
                     state.allowedToolFamilies.clear();
                     await updateAgentUi(state.nvim, 'show_error', ['Approval mode', 'Reset remembered approvals.']);
+                    break;
+                case 'browse_memory':
+                    await openMemoryBrowser(state.nvim);
+                    break;
+                case 'add_memory':
+                    await handleAddMemory(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
+                    break;
+                case 'delete_memory':
+                    await handleDeleteMemory(state.nvim, (args[1] ?? {}) as Record<string, unknown>);
+                    break;
                     break;
                 default:
                     console.log('Unknown action:', action);

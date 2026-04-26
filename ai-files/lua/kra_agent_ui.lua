@@ -414,4 +414,143 @@ function M.show_diff_history()
     diff.open_diff_history()
 end
 
+local function send_action(action, args)
+    local channel = vim.g.kra_agent_channel
+    if not channel or channel == 0 then
+        vim.notify('kra-memory: agent channel not registered', vim.log.levels.ERROR)
+        return false
+    end
+    pcall(vim.fn.rpcnotify, channel, 'prompt_action', action, args or vim.empty_dict())
+    return true
+end
+
+local function prompt_add_memory()
+    vim.ui.input({ prompt = 'Memory title: ' }, function(title)
+        if not title or title == '' then return end
+        vim.ui.input({ prompt = 'Memory body:  ' }, function(body)
+            if not body or body == '' then return end
+            vim.ui.input({ prompt = 'Tags (csv, optional): ' }, function(tags)
+                vim.ui.select(
+                    { 'note', 'bug-fix', 'gotcha', 'decision', 'investigation', 'revisit' },
+                    { prompt = 'Kind:' },
+                    function(kind)
+                        if not kind then return end
+                        send_action('add_memory', {
+                            title = title,
+                            body = body,
+                            tags = tags or '',
+                            kind = kind,
+                        })
+                    end
+                )
+            end)
+        end)
+    end)
+end
+
+function M.show_memory_browser(items)
+    local ok, err = pcall(function()
+        local pickers = require('telescope.pickers')
+        local finders = require('telescope.finders')
+        local previewers = require('telescope.previewers')
+        local conf = require('telescope.config').values
+        local actions = require('telescope.actions')
+        local action_state = require('telescope.actions.state')
+
+        items = items or {}
+
+        if #items == 0 then
+            vim.notify(
+                'No memories yet. Press "a" in the picker (or call again after adding) to create one.',
+                vim.log.levels.INFO,
+                { title = 'kra-memory' }
+            )
+        end
+
+        pickers
+            .new({
+                layout_strategy = 'horizontal',
+                layout_config = { preview_width = 0.55, width = 0.95, height = 0.85 },
+            }, {
+                prompt_title = string.format('kra-memory  (%d entries)  [a:add  dd:delete]', #items),
+                finder = finders.new_table({
+                    results = items,
+                    entry_maker = function(entry)
+                        local status_icon = entry.status == 'open' and '' or '·'
+                        local tags = (entry.tags and #entry.tags > 0) and (' #' .. table.concat(entry.tags, ' #')) or ''
+                        return {
+                            value = entry,
+                            display = string.format('%s [%s] %s%s', status_icon, entry.kind, entry.title, tags),
+                            ordinal = string.format('%s %s %s %s', entry.kind, entry.title, entry.body or '', table.concat(entry.tags or {}, ' ')),
+                        }
+                    end,
+                }),
+                previewer = previewers.new_buffer_previewer({
+                    title = 'Memory body',
+                    define_preview = function(self, entry)
+                        local item = entry.value
+                        local lines = {
+                            string.format('id:      %s', item.id),
+                            string.format('kind:    %s', item.kind),
+                            string.format('status:  %s', item.status or ''),
+                            string.format('tags:    %s', table.concat(item.tags or {}, ', ')),
+                            string.format('paths:   %s', table.concat(item.paths or {}, ', ')),
+                            string.format('created: %s', os.date('%Y-%m-%d %H:%M:%S', math.floor((item.createdAt or 0) / 1000))),
+                            '',
+                            '# ' .. (item.title or ''),
+                            '',
+                        }
+                        for line in (item.body or ''):gmatch('([^\n]*)\n?') do
+                            table.insert(lines, line)
+                        end
+                        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+                    end,
+                }),
+                sorter = conf.generic_sorter({}),
+                attach_mappings = function(prompt_bufnr, map)
+                    actions.select_default:replace(function()
+                        actions.close(prompt_bufnr)
+                    end)
+
+                    map('n', 'a', function()
+                        actions.close(prompt_bufnr)
+                        prompt_add_memory()
+                    end)
+                    map('i', '<C-a>', function()
+                        actions.close(prompt_bufnr)
+                        prompt_add_memory()
+                    end)
+
+                    map('n', 'dd', function()
+                        local sel = action_state.get_selected_entry()
+                        if not sel then return end
+                        local id = sel.value.id
+                        vim.ui.select({ 'Yes, delete', 'No, cancel' }, {
+                            prompt = 'Delete "' .. (sel.value.title or '?') .. '"?'
+                        }, function(choice)
+                            if choice == 'Yes, delete' then
+                                actions.close(prompt_bufnr)
+                                send_action('delete_memory', { id = id })
+                            end
+                        end)
+                    end)
+                    map('n', 'D', function()
+                        local sel = action_state.get_selected_entry()
+                        if not sel then return end
+                        local id = sel.value.id
+                        actions.close(prompt_bufnr)
+                        send_action('delete_memory', { id = id })
+                    end)
+
+                    return true
+                end,
+            })
+            :find()
+    end)
+
+    if not ok then
+        vim.notify('kra-memory browser failed: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+end
+
 return M

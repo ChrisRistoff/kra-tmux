@@ -7,7 +7,7 @@ Two provider backends are supported behind a single command — `kra ai agent`:
 | Provider | Backend | Auth | Built-in tools | Extra MCP servers added by Kra |
 |----------|---------|------|----------------|-------------------------------|
 | **copilot** | `@github/copilot-sdk` | GitHub Copilot subscription (logged-in user or `GITHUB_TOKEN`) | yes (SDK ships its own bash/web tools) | `kra-file-context`, `session-complete` |
-| **byok** | OpenAI-compatible Chat Completions (`openai` package) | Your own API key per provider | no — provided via Kra MCP servers | `kra-file-context`, `session-complete`, **`kra-bash`**, **`kra-web`** |
+| **byok** | OpenAI-compatible Chat Completions (`openai` package) | Your own API key per provider | no — provided via Kra MCP servers | `kra-file-context`, `session-complete`, **`kra-memory`**, **`kra-bash`**, **`kra-web`** |
 
 When you run `kra ai agent`, the first picker is **provider selection** (`copilot` / `byok`). Everything downstream — Neovim chat buffer, tool-approval popups, diff editor, session diff history, file-context tools — is shared by both providers.
 
@@ -24,6 +24,7 @@ When you run `kra ai agent`, the first picker is **provider selection** (`copilo
 - [Diff Editor & User Edits](#-diff-editor--user-edits)
 - [File Editing Tools (kra-file-context MCP)](#-file-editing-tools-kra-file-context-mcp)
 - [Bash & Web Tools (BYOK)](#-bash--web-tools-byok)
+- [Persistent Memory (kra-memory MCP)](#-persistent-memory-kra-memory-mcp)
 - [Session Diff History & Per-File Revert](#-session-diff-history--per-file-revert)
 - [Skills (Copilot only)](#-skills-copilot-only)
 - [MCP Server Configuration](#-mcp-server-configuration)
@@ -102,7 +103,7 @@ flowchart TD
     BYOK_PROV --> BYOK_MODEL[Pick model from live catalog]
     BYOK_MODEL --> SHARED
 
-    SHARED[Load MCP servers from settings.toml<br/>+ kra-file-context + session-complete<br/>+ kra-bash + kra-web for BYOK]
+    SHARED[Load MCP servers from settings.toml<br/>+ kra-file-context + session-complete + kra-memory<br/>+ kra-bash + kra-web for BYOK]
     SHARED --> SESSION[Start AgentSession]
     SESSION --> NVIM[Open Neovim chat buffer]
 
@@ -249,6 +250,7 @@ All key bindings below apply to **both** providers unless noted otherwise.
 | `<leader>P` | Reset remembered per-family tool approvals |
 | `<leader>h` | Browse tool call history for this session |
 | `<leader>s` | Browse session diff history (all AI write diffs + per-file `ORIG`) |
+| `<leader>m` | Browse / add / delete `kra-memory` entries (Telescope picker; `a` to add, `dd` to delete with confirm) |
 | `<Space>t` | Toggle tool/intent popups on or off (global keymap) |
 | `<leader>?` | Show all keymaps (which-key) |
 
@@ -418,6 +420,92 @@ A realistic browser User-Agent is sent on every request to reduce DuckDuckGo rat
 > The Copilot provider does **not** load `kra-bash` / `kra-web` — the SDK already provides equivalents.
 
 ---
+
+## 🧠 Persistent Memory (kra-memory MCP)
+
+The agent loses context every time a session ends, and even within a session BYOK's compactor and Copilot's SDK compaction smooth specifics away. `kra-memory` gives the agent a **local, persistent vector store** so design decisions, bug fixes, gotchas, and follow-ups survive across sessions, branches, and compaction events.
+
+It's auto-loaded for **both** providers (alongside `kra-file-context` and `kra-session-complete`) so you don't have to touch `settings.toml` to get it.
+
+### Storage
+
+- `<repo>/.kra-memory/lance/memory.lance/` — LanceDB table holding the rows + 384-dim vectors
+- ~2 KB per entry; thousands of entries fit in a few MB
+- Add `.kra-memory/` to your `.gitignore` if you prefer local-only memory (the directory contains raw debugging context that may be noisy in git history)
+
+### Embedder
+
+- **`fastembed`** with **BGE-small int8** (~30 MB, bundled inside the npm package)
+- Lazy-loaded on first use (~200 ms cold start); fully offline; no API keys, no Python, no Ollama
+
+### Manual browsing & editing (`<leader>m`)
+
+The agent isn't the only one allowed to write to the memory store. Inside the agent chat buffer, press `<leader>m` to open a Telescope picker over every entry, with a preview pane showing the body, tags, paths, status and creation time. From the picker:
+
+- `a` (or `<C-a>` in insert mode) — prompts for kind / title / body / tags via `vim.ui.select` + `vim.ui.input` and inserts a new memory (`source = 'user'`)
+- `dd` — confirms then deletes the highlighted entry
+- `D` — deletes without confirmation (use sparingly)
+- `<CR>` — closes the picker
+
+Each add/delete re-opens the picker so you can chain operations. The same `notes.ts` helpers back both the picker and the MCP tools, so user-edited and agent-edited memories are indistinguishable to `recall` / `semantic_search`.
+
+### Tools exposed (4, intentionally minimal)
+
+The surface is deliberately tiny so the model doesn't have to choose between near-duplicate tools. One write, one read, one mutation.
+
+| Tool | Signature | Purpose |
+|------|-----------|---------|
+| `remember` | `({ kind, title, body, tags?, paths? })` | Store a long-term entry. `kind` is `note \| bug-fix \| gotcha \| decision \| investigation \| revisit`. `revisit` is for ideas you discussed but deferred — they default to `status: open` so they show up in `recall({ status: 'open' })`. |
+| `recall` | `({ query?, k?, kind?, tagsAny?, status? })` | Vector search across stored entries. Omit `query` to list everything matching the filters (useful for "show me open revisits on this branch"). |
+| `update_memory` | `({ id, status, resolution? })` | Mutate an existing entry's `status` (`resolved` or `dismissed`) and optionally attach a resolution note. The original `body` is preserved. |
+| `semantic_search` | `({ query, k?, scope?, pathGlob? })` | Conceptual vector search across the **indexed codebase** (Phase 2). `scope` is `code` (default), `memory`, or `both`. Returns ranked snippets with `path`, `startLine`/`endLine`, `language`, `snippet`. Pair with the file-context `read_lines` / `get_outline` for full context. Use ripgrep `search` for known symbols/strings; the two are complementary. |
+### Agent prompt (built-in)
+
+The agent is told to:
+- Call `remember` after fixing a non-obvious bug, hitting a gotcha, or making a design decision the next session would want to know.
+- Use `kind: 'revisit'` when you discuss an idea worth pursuing but choose not to do it now — with a clear title, what you considered, and why you deferred.
+- Call `recall` at the start of work in a familiar area, or whenever it suspects past context exists.
+- Call `update_memory` when a revisit is resolved or dismissed, instead of creating a duplicate entry.
+
+### `settings.toml` knobs
+
+```toml
+[ai.agent.memory]
+enabled = true                    # master switch for the whole memory layer
+indexCodeOnStart = false          # full code reindex when the agent session starts
+indexCodeOnSave = false           # background watcher reindexes files on save (chokidar)
+autoSurfaceOnStart = false        # quietly seed recall() / open-revisit list into the session preamble
+gitignoreMemory = true            # whether .kra-memory/ should be added to gitignore by default
+# Tuning knobs (defaults are good for most repos):
+# chunkLines = 80
+# chunkOverlap = 5
+# includeExtensions = [".ts", ".js", ".py", ".go", ".rs", ".md"]
+# excludeGlobs = ["node_modules/**", "dest/**", "coverage/**", ".kra-memory/**"]
+```
+
+### Codebase indexing (Phase 2)
+
+`semantic_search` is only useful once you've built the index. Three ways to keep it fresh:
+
+1. **One-off / on demand:** `kra ai index` runs a full reindex from the terminal. Safe to re-run; chunks whose content hasn't changed are skipped (~30–150 ms per file, content-hashed).
+2. **On agent start:** flip `indexCodeOnStart = true` and every `kra ai agent` session does an incremental reindex before the prompt comes up.
+3. **On save (background):** flip `indexCodeOnSave = true` and a `chokidar` watcher reindexes files in the background as you edit (debounced 500 ms per path; deletes remove the file's chunks).
+
+Under the hood:
+- File enumeration uses `git ls-files -co --exclude-standard` so your `.gitignore` is honoured for free.
+- Files are split into fixed-line windows of `chunkLines` (default 80) with `chunkOverlap` (default 5) lines of overlap; chunk IDs encode `path:startLine-endLine:hash(content)` so unchanged windows survive reindex passes.
+- Embeddings are batched 32 chunks at a time (~60 ms/batch on M-series) and stored in `<repo>/.kra-memory/lance/code_chunks.lance/`.
+
+### Implementation notes
+
+- LanceDB's `createTable` seeds the table with the first row; `getMemoryTable` returns a `{ table, justCreated }` tuple so callers don't accidentally insert the seed twice.
+- `update_memory` passes raw values (not SQL strings) via LanceDB's `values` parameter — `valuesSql` is the SQL-expression sibling and easy to confuse.
+- `<repo>/.kra-memory/meta.sqlite` is reserved for housekeeping (settings, last-used) but currently unused.
+
+> `kra-memory` is auto-loaded for **both** providers — it lives alongside `kra-file-context` and `kra-session-complete` in the always-on MCP block in `agentConversation.ts`, so neither BYOK nor Copilot needs anything in `settings.toml` to enable it. The same code path serves both providers; nothing in `shared/memory/` knows or cares which backend is talking to it.
+
+---
+
 
 ## 📜 Session Diff History & Per-File Revert
 

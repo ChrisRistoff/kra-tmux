@@ -27,6 +27,7 @@
 - **📜 Per-file revert** — session diff history with one `ORIG` entry per file lets you roll back any single file to its pre-session baseline
 - **🛡️ Tool approval** — approve each tool call, allow by family, or go YOLO
 - **🔌 MCP server support** — extend either provider with custom tools via `settings.toml`; BYOK auto-loads `kra-bash` + `kra-web`
+- **🧠 Persistent project memory + semantic codebase search (`kra-memory` MCP)** — local LanceDB + on-device fastembed (BGE-small int8); the agent calls `remember` / `recall` / `update_memory` so design decisions, gotchas, and follow-ups survive across sessions and compaction, and `semantic_search` lets it find code by concept ("where does X happen") not just exact symbol. Build the index with `kra ai index`, or flip `indexCodeOnSave = true` to keep it fresh in the background
 - **📊 Copilot quota monitoring** — live monthly usage + cached weekly/session limits with terminal warnings at 50%/25%/10%
 ---
 
@@ -133,7 +134,6 @@ kra ai
 ### 🛠️ **Available Commands**
 | Command    | Description                                                                                                                                                                                                                       |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, and **socket-based communication**. Press `Enter` in normal mode to send prompts. |
 | **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, and **socket-based communication**. Press `Enter` in normal mode to send prompts. Provider models are sourced from the same **live catalog** the agent uses (cached 24h, network-free fallback). |
 | **agent** 🧠 | Launch an agent session in Neovim with a **provider picker** (Copilot SDK *or* BYOK / OpenAI-compatible), **project-local MCP servers**, an **inline diff editor**, and **per-file revert** from session diff history. |
 | **load** 📂   | Browse saved conversations with **AI-generated summaries**. Preview summaries before loading full chat sessions.                                                                                                              |
