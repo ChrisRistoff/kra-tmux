@@ -1,0 +1,94 @@
+name: publish
+
+# publishes kra-workflow to npm on every push to main, using conventional commits
+# since the last git tag to decide the version bump:
+#   feat!: / fix!: / any "BREAKING CHANGE" in body  -> major
+#   feat:                                            -> minor
+#   fix:                                             -> patch
+#   anything else                                    -> no publish
+# No bump commit is pushed back to main — only a lightweight git tag (vX.Y.Z).
+# Tags don't trigger this workflow, so there's no loop and no bot commit clutter.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # needed to push the version tag
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history to read commits since last tag
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Decide version bump from conventional commits
+        id: bump
+        run: |
+          set -euo pipefail
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="${LAST_TAG}..HEAD"
+            BASE_VERSION="${LAST_TAG#v}"
+          else
+            RANGE="HEAD"
+            BASE_VERSION="$(node -p "require('./package.json').version")"
+          fi
+
+          MSGS=$(git log --format='%B%n---' "$RANGE")
+          BUMP=""
+          if echo "$MSGS" | grep -qE '^(feat|fix)(\([^)]+\))?!:|BREAKING CHANGE'; then
+            BUMP=major
+          elif echo "$MSGS" | grep -qE '^feat(\([^)]+\))?:'; then
+            BUMP=minor
+          elif echo "$MSGS" | grep -qE '^fix(\([^)]+\))?:'; then
+            BUMP=patch
+          fi
+
+          if [ -z "$BUMP" ]; then
+            echo "No conventional commits since ${LAST_TAG:-<root>}; skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          IFS='.' read -r MAJ MIN PAT <<< "$BASE_VERSION"
+          case "$BUMP" in
+            major) MAJ=$((MAJ+1)); MIN=0; PAT=0 ;;
+            minor) MIN=$((MIN+1)); PAT=0 ;;
+            patch) PAT=$((PAT+1)) ;;
+          esac
+          NEW="${MAJ}.${MIN}.${PAT}"
+          echo "Bumping ${BASE_VERSION} -> ${NEW} (${BUMP})"
+          echo "version=${NEW}" >> "$GITHUB_OUTPUT"
+          echo "bump=${BUMP}"     >> "$GITHUB_OUTPUT"
+
+      - name: Set version in package.json (no commit)
+        if: steps.bump.outputs.skip != 'true'
+        run: npm pkg set version=${{ steps.bump.outputs.version }}
+
+      - name: Publish to npm
+        if: steps.bump.outputs.skip != 'true'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag the release
+        if: steps.bump.outputs.skip != 'true'
+        run: |
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin "v${{ steps.bump.outputs.version }}"

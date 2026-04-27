@@ -1,7 +1,9 @@
-import os from 'os';
-import path from 'path';
 import fs from 'fs/promises';
+import path from 'path';
 import { getGithubToken } from '@/AI/AIAgent/shared/utils/agentSettings';
+import { kraHome } from '@/filePaths';
+
+const quotaCachePath = (): string => path.join(kraHome(), 'quota-cache.json');
 
 interface QuotaSnapshot {
     percent_remaining: number;
@@ -30,7 +32,6 @@ interface QuotaCache {
     snapshots: Record<string, CachedQuotaSnapshot>;
 }
 
-const QUOTA_CACHE_PATH = path.join(os.homedir(), '.local', 'share', 'kra-tmux', 'quota-cache.json');
 const SESSION_SNAPSHOT_KEYS = new Set(['weekly', 'session']);
 
 function buildBar(percentRemaining: number, width = 30): string {
@@ -70,7 +71,7 @@ function formatCachedSnapshot(name: string, snap: CachedQuotaSnapshot, updatedAt
 
 async function readQuotaCache(): Promise<QuotaCache | null> {
     try {
-        return JSON.parse(await fs.readFile(QUOTA_CACHE_PATH, 'utf8')) as QuotaCache;
+        return JSON.parse(await fs.readFile(quotaCachePath(), 'utf8')) as QuotaCache;
     } catch {
         return null;
     }

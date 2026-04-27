@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import 'module-alias/register';
 import { aiCommands, handleAiCommandNotExist } from '@/commandsMaps/aiCommands';
 import { gitCommands, handleGitCommandNotExist } from '@/commandsMaps/gitCommands';
 import { handleTmuxCommandNotExist , tmuxCommands } from '@/commandsMaps/tmuxCommands';
@@ -9,6 +8,7 @@ import { handleChangeSettings } from '@/manageSettings';
 import { SystemCommands, TmuxCommands, GitCommands, AiCommands, Command } from '@/commandsMaps/types/commandTypes';
 import { workflowAscii } from '@/data/workflow-ascii';
 import { UserCancelled } from '@/UI/menuChain';
+import { runInstall, isInstalled } from '@/setup/install';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);
@@ -17,6 +17,12 @@ const main = async (): Promise<void> => {
         console.log(workflowAscii);
         process.exit(1);
     }
+
+
+    if (!isInstalled()) {
+        runInstall();
+    }
+
 
     const commandType = args[0];
     let commandName = args[1];
@@ -44,6 +50,11 @@ const main = async (): Promise<void> => {
             await handleChangeSettings();
 
             return;
+        case 'init':
+        case 'migrate':
+            console.log(`'${commandType}' is no longer a kra subcommand. Setup runs automatically via npm postinstall (and on first run as a fallback).`);
+            console.log('To force re-run setup: delete ~/.kra/.installed and run any kra command again, or reinstall the package.');
+            process.exit(1);
         default:
             console.log(workflowAscii);
             console.table({[`${commandType}`]: 'Is not a valid command'});

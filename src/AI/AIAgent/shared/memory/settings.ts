@@ -9,11 +9,10 @@
  * MCP server child. Both share the same defaults.
  */
 
-import os from 'os';
-import path from 'path';
 import fs from 'fs/promises';
 import * as toml from 'smol-toml';
 import type { MemorySettings } from './types';
+import { settingsFilePath } from '@/filePaths';
 
 const DEFAULT_INCLUDE_EXTENSIONS = [
     '.ts', '.tsx', '.mts', '.cts',
@@ -70,8 +69,7 @@ export async function loadMemorySettings(): Promise<MemorySettings> {
     let raw: RawMemorySettings = {};
 
     try {
-        const settingsPath = path.join(os.homedir(), 'programming', 'kra-tmux', 'settings.toml');
-        const content = await fs.readFile(settingsPath, 'utf8');
+        const content = await fs.readFile(settingsFilePath, 'utf8');
         const parsed = toml.parse(content) as { ai?: { agent?: { memory?: RawMemorySettings } } };
         const memory = parsed.ai?.agent?.memory;
 
