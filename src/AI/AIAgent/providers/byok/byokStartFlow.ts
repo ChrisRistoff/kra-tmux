@@ -29,6 +29,7 @@ import {
     formatModelInfoForPicker,
     getModelCatalog,
 } from '@/AI/shared/data/modelCatalog';
+import { menuChain } from '@/UI/menuChain';
 
 async function pickProvider(): Promise<SupportedProvider> {
     const selected = await ui.searchSelectAndReturnFromArray({
@@ -69,8 +70,11 @@ async function pickModel(provider: SupportedProvider): Promise<ModelInfo> {
 
 
 export async function startByokFlow(): Promise<void> {
-    const provider = await pickProvider();
-    const model = await pickModel(provider);
+    const { provider, model } = await menuChain()
+        .step('provider', pickProvider)
+        .step('model', async (d) => pickModel(d.provider))
+        .run();
+
     const baseURL = getProviderBaseURL(provider);
     const apiKey = getProviderApiKey(provider);
 

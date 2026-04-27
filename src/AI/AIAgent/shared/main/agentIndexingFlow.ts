@@ -46,6 +46,7 @@ interface ProgressContext {
 async function safeHeadCommit(repoRoot: string): Promise<string> {
     try {
         const result = await execCommand(`git -C '${repoRoot.replace(/'/g, `'\\''`)}' rev-parse HEAD`);
+
         return result.stdout.trim();
     } catch {
         return '';
@@ -76,6 +77,7 @@ async function appendProgress(ctx: ProgressContext, line: string, filesDone: num
 
 function formatProgressLine(filesDone: number, filesTotal: number, suffix: string): string {
     const pct = filesTotal > 0 ? Math.floor((filesDone / filesTotal) * 100) : 0;
+
     return `[${pct.toString().padStart(3)}%] ${filesDone}/${filesTotal}  ${suffix}`;
 }
 
@@ -104,6 +106,7 @@ async function runFullReindex(ctx: ProgressContext, alias: string): Promise<{ ch
         },
     });
     void lastFilesTotal;
+
     return { chunksWritten: result.chunksWritten, filesScanned: result.filesScanned, elapsedMs: result.elapsedMs };
 }
 
@@ -122,6 +125,7 @@ async function runCatchup(
 
     if (total === 0) {
         await appendProgress(ctx, '— Nothing to catch up. Index is current.', 0, 0);
+
         return { chunksWritten: 0, filesScanned: 0, elapsedMs: Date.now() - started };
     }
 
@@ -176,7 +180,7 @@ export async function runStartupIndexingFlow(
     let summary = '';
 
     const dbChunkCount = await countCodeChunks().catch(() => 0);
-    const needsFreshIndex = !existing || !existing.lastIndexedAt || dbChunkCount === 0;
+    const needsFreshIndex = !existing?.lastIndexedAt || dbChunkCount === 0;
 
     if (needsFreshIndex) {
         const r = await runFullReindex(ctx, aliasLabel);

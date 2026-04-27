@@ -8,6 +8,7 @@ import { handleSysCommandNotExist, systemCommands } from '@/commandsMaps/systemC
 import { handleChangeSettings } from '@/manageSettings';
 import { SystemCommands, TmuxCommands, GitCommands, AiCommands, Command } from '@/commandsMaps/types/commandTypes';
 import { workflowAscii } from '@/data/workflow-ascii';
+import { UserCancelled } from '@/UI/menuChain';
 
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);
@@ -57,6 +58,9 @@ const main = async (): Promise<void> => {
 }
 
 main().catch((err) => {
+    if (err instanceof UserCancelled) {
+        process.exit(0);
+    }
     console.error(err);
     process.exit(1);
 });

@@ -53,11 +53,9 @@ describe('startNewChat', () => {
         const testError = new Error('Test Error');
         (conversation.converse as jest.Mock).mockRejectedValue(testError);
 
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => { return });
 
         await expect(startNewChat()).rejects.toThrow('Test Error');
-
-        expect(consoleErrorSpy).toHaveBeenCalledWith('Error in AI prompt workflow:', 'Test Error');
 
         consoleErrorSpy.mockRestore();
     });

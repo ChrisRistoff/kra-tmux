@@ -6,9 +6,10 @@ import { aiRoles } from '@/AI/shared/data/roles';
 import { promptModel } from '@/AI/AIChat/utils/promptModel';
 import * as bash from '@/utils/bashHelper';
 import * as nvim from '@/utils/neovimHelper';
-import * as ui from '@/UI/generalUI'
+import * as ui from '@/UI/generalUI';
 import { aiHistoryPath } from '@/filePaths';
 import { filterGitKeep } from '@/utils/common';
+import { menuChain } from '@/UI/menuChain';
 
 export async function saveChat(
     chatFile: string,
@@ -18,18 +19,19 @@ export async function saveChat(
     temperature: number,
     chatHistory: ChatHistory[]
 ): Promise<void> {
-    const saveFile = await ui.promptUserYesOrNo('Do you want to save the chat history?');
+    const saves = filterGitKeep(await fs.readdir(aiHistoryPath));
+
+    const { saveFile, saveName } = await menuChain()
+        .step('saveFile', async () => ui.promptUserYesOrNo('Do you want to save the chat history?'))
+        .step('saveName', async (d) => (d.saveFile)
+            ? ui.searchAndSelect({ itemsArray: saves, prompt: 'Type file name: ' })
+            : Promise.resolve('')
+        )
+        .run();
 
     if (!saveFile) {
         process.exit(0);
     }
-
-    const saves = filterGitKeep(await fs.readdir(aiHistoryPath));
-
-    const saveName = await ui.searchAndSelect({
-        itemsArray: saves,
-        prompt: 'Type file name: '
-    });
 
     if (saves.includes(saveName)) {
         await bash.execCommand(`rm -rf ${aiHistoryPath}/${saveName}`);

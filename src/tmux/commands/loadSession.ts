@@ -41,7 +41,9 @@ export async function loadSession(): Promise<void> {
 
         await tmux.sourceTmuxConfig();
 
-        tmux.updateCurrentSession(serverName);
+        tmux.updateCurrentSession(serverName).catch(error => {
+            console.error('Error updating current session after load:', error);
+        });
 
         console.log('Sessions loaded successfully');
     } catch (error) {
@@ -75,15 +77,15 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
     for (const result of sessionResults) {
         const sessionConfig = savedData[result.sessionName];
 
-        if (!sessionConfig.windows) {
+        if (!sessionConfig.windows.length) {
             continue;
         }
 
         // sort windows by their saved index to ensure proper order
         const sortedWindows = [...sessionConfig.windows].sort((a, b) => {
             // if windows have an index property, use it; otherwise use array index
-            const aIndex = (a as any).windowIndex ?? sessionConfig.windows.indexOf(a);
-            const bIndex = (b as any).windowIndex ?? sessionConfig.windows.indexOf(b);
+            const aIndex = a.windowIndex ?? sessionConfig.windows.indexOf(a);
+            const bIndex = b.windowIndex ?? sessionConfig.windows.indexOf(b);
 
             return aIndex - bIndex;
         });
@@ -134,11 +136,11 @@ function generateRespawnScript(sessionResults: SessionResult[], savedData: TmuxS
 
                 if (pane.currentCommand === "nvim") {
                     const nvimSessionFile = `${nvimSessionsPath}/${serverName}/${result.sessionName}_${tmuxWindowIndex}_${paneIndex}.vim`;
-                    const shell = process.env.SHELL || '/bin/bash';
+                    const shell = process.env.SHELL ?? '/bin/bash';
                     const nvimCommand = `${shell} -c 'cd "${workingDir}" && (if [ -f "${nvimSessionFile}" ]; then nvim -S "${nvimSessionFile}"; else nvim; fi); exec ${shell}'`;
                     scriptLines.push(`respawn-pane -t ${paneTarget} -k "${nvimCommand}"`);
                 } else {
-                    const shell = process.env.SHELL || '/bin/bash';
+                    const shell = process.env.SHELL ?? '/bin/bash';
                     const shellCommand = `/bin/bash -c 'cd "${workingDir}" && exec ${shell}'`;
                     scriptLines.push(`respawn-pane -t ${paneTarget} -k "${shellCommand}"`);
                 }
@@ -197,7 +199,7 @@ async function createBaseSessions(sessionNames: string[]): Promise<SessionResult
         try {
             await bash.execCommand(`tmux kill-session -t "${sessionName}" 2>/dev/null || true`);
             console.log(`Cleaned up existing session: ${sessionName}`);
-        } catch (error) {
+        } catch (_error) {
             // ignore
         }
     }

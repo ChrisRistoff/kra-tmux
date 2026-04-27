@@ -1,6 +1,7 @@
 import * as bash from '@/utils/bashHelper';
 import * as ui from '@/UI/generalUI';
 import { SearchCriteria } from '@/system/types/systemFileTypes';
+import { menuChain, UserCancelled } from '@/UI/menuChain';
 
 enum SearchTargetType {
     File = 'f',
@@ -58,12 +59,14 @@ const searchByName = async (
 };
 
 const getSearchCriteria = async (): Promise<SearchCriteria> => {
-    const searchString = (await ui.askUserForInput(SYSTEM_CONSTANTS.MESSAGES.SEARCH_INPUT)).trim();
-    const exactMatch = await ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.EXACT_MATCH);
+    const { searchString, exactMatch } = await menuChain()
+        .step('searchString', async () => ui.askUserForInput(SYSTEM_CONSTANTS.MESSAGES.SEARCH_INPUT))
+        .step('exactMatch', async () => ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.EXACT_MATCH))
+        .run();
 
     return {
-        searchString,
-        exactMatch,
+        searchString: (searchString).trim(),
+        exactMatch: exactMatch,
     };
 };
 
@@ -105,44 +108,48 @@ const selectFromMatchingDirectories = async (): Promise<string | null> => {
 
 export const removeFile = async (): Promise<void> => {
     try {
-        const fileToRemove = await selectFromMatchingFiles();
+        const { fileToRemove, confirmed } = await menuChain()
+            .step('fileToRemove', async () => {
+                const f = await selectFromMatchingFiles();
+                if (!f) {
+                    console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+                    throw new UserCancelled();
+                }
 
-        if (!fileToRemove) {
-            console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+                return f;
+            })
+            .step('confirmed', async () => ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.CONFIRM_FILE_DELETE))
+            .run();
 
-            return;
-        }
-
-        const confirmed = await ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.CONFIRM_FILE_DELETE);
-
-        if (!confirmed) {
-            return;
-        }
+        if (!confirmed) return;
 
         await bash.execCommand(`rm "${fileToRemove}"`);
     } catch (error) {
+        if (error instanceof UserCancelled) throw error;
         throw new Error(`Failed to remove file: ${(error as Error).message}`);
     }
 };
 
 export const removeDirectory = async (): Promise<void> => {
     try {
-        const dirToRemove = await selectFromMatchingDirectories();
+        const { dirToRemove, confirmed } = await menuChain()
+            .step('dirToRemove', async () => {
+                const d = await selectFromMatchingDirectories();
+                if (!d) {
+                    console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+                    throw new UserCancelled();
+                }
 
-        if (!dirToRemove) {
-            console.log(SYSTEM_CONSTANTS.MESSAGES.NO_RESULTS);
+                return d;
+            })
+            .step('confirmed', async () => ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.CONFIRM_DIR_DELETE))
+            .run();
 
-            return;
-        }
-
-        const confirmed = await ui.promptUserYesOrNo(SYSTEM_CONSTANTS.MESSAGES.CONFIRM_DIR_DELETE);
-
-        if (!confirmed) {
-            return;
-        }
+        if (!confirmed) return;
 
         await bash.execCommand(`rm -rf "${dirToRemove}"`);
     } catch (error) {
+        if (error instanceof UserCancelled) throw error;
         throw new Error(`Failed to remove directory: ${(error as Error).message}`);
     }
 };

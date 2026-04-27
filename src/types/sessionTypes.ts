@@ -18,6 +18,7 @@ export type Window = {
     currentPath: string,
     gitRepoLink: string | undefined,
     panes: Pane[]
+    windowIndex?: number,
 }
 
 export type Pane = {

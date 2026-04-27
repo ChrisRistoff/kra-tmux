@@ -1,6 +1,7 @@
 import { SearchOptions } from '@/types/uiTypes';
 import blessed from 'blessed';
 import figlet from 'figlet';
+import { UserCancelled } from '@/UI/menuChain';
 
 /**
  * Shared helpers
@@ -43,6 +44,26 @@ function cleanResolve<T>(
         try { screen.destroy(); } catch { /* noop */ }
 
         resolve(value);
+    };
+}
+
+function cleanSettle<T>(
+    screen: blessed.Widgets.Screen,
+    resolve: (v: T) => void,
+    reject: (e: unknown) => void
+) {
+    let done = false;
+
+    const settle = (fn: () => void) => {
+        if (done) return;
+        done = true;
+        try { screen.destroy(); } catch { /* noop */ }
+        fn();
+    };
+
+    return {
+        finish: (value: T) => settle(() => resolve(value)),
+        cancel: () => settle(() => reject(new UserCancelled())),
     };
 }
 
@@ -109,7 +130,8 @@ export async function showInfoScreen(title: string, content: string): Promise<vo
         screen.append(body);
         screen.append(status);
 
-        screen.key(['escape', 'q', 'C-c'], () => finish());
+        screen.key(['escape', 'q'], () => finish());
+        screen.key(['C-c'], () => process.exit(0));
 
         body.focus();
         screen.render();
@@ -120,9 +142,9 @@ export async function showInfoScreen(title: string, content: string): Promise<vo
  * Yes / No Prompt
  */
 export async function promptUserYesOrNo(message: string): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
+    return new Promise<boolean>((resolve, reject) => {
         const screen = createScreen('Confirmation');
-        const finish = cleanResolve<boolean>(screen, resolve);
+        const { finish, cancel } = cleanSettle<boolean>(screen, resolve, reject);
 
         const headerText = figlet.textSync('Confirm', {
             font: 'Banner',
@@ -199,7 +221,8 @@ export async function promptUserYesOrNo(message: string): Promise<boolean> {
         // Global quick keys + quit
         screen.key(['y', 'Y'], () => finish(true));
         screen.key(['n', 'N'], () => finish(false));
-        screen.key(['escape', 'C-c'], () => finish(false));
+        screen.key(['escape'], () => cancel());
+        screen.key(['C-c'], () => process.exit(0));
 
         list.focus();
         screen.render();
@@ -211,9 +234,9 @@ export async function promptUserYesOrNo(message: string): Promise<boolean> {
  */
 
 export async function askUserForInput(message: string): Promise<string> {
-    return new Promise<string>((resolve) => {
+    return new Promise<string>((resolve, reject) => {
         const screen = createScreen('Input');
-        const finish = cleanResolve<string>(screen, resolve);
+        const { finish, cancel } = cleanSettle<string>(screen, resolve, reject);
 
         const headerText = figlet.textSync('Input', {
             font: 'Banner',
@@ -282,7 +305,8 @@ export async function askUserForInput(message: string): Promise<string> {
         });
 
         // Global quit keys
-        screen.key(['escape', 'C-c'], () => finish(''));
+        screen.key(['escape'], () => cancel());
+        screen.key(['C-c'], () => process.exit(0));
 
         input.focus();
         screen.render();
@@ -293,9 +317,9 @@ export async function askUserForInput(message: string): Promise<string> {
  * Search + Select (with type vs selection confirm)
  */
 export async function searchAndSelect(options: SearchOptions): Promise<string> {
-    return new Promise<string>((resolve) => {
+    return new Promise<string>((resolve, reject) => {
         const screen = createScreen('Search and Select');
-        const finish = cleanResolve<string>(screen, resolve);
+        const { finish, cancel } = cleanSettle<string>(screen, resolve, reject);
 
         let items = uniqueStrings(options.itemsArray || []);
         if (!items.length) items = ['<no items>'];
@@ -450,7 +474,8 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
             }
         });
 
-        screen.key(['escape', 'C-c'], () => finish(''));
+        screen.key(['escape'], () => cancel());
+        screen.key(['C-c'], () => process.exit(0));
 
         searchBox.focus();
         screen.render();
@@ -463,9 +488,9 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
 export async function searchSelectAndReturnFromArray(
     options: SearchOptions
 ): Promise<string> {
-    return new Promise<string>((resolve) => {
+    return new Promise<string>((resolve, reject) => {
         const screen = createScreen('Search and Select');
-        const finish = cleanResolve<string>(screen, resolve);
+        const { finish, cancel } = cleanSettle<string>(screen, resolve, reject);
 
         let items = uniqueStrings(options.itemsArray || []);
         if (!items.length) items = ['<no items>'];
@@ -592,10 +617,8 @@ export async function searchSelectAndReturnFromArray(
             finish(value === '<no results>' ? '' : value);
         });
 
-        screen.key(['escape', 'C-c'], () => {
-            try { screen.destroy(); } catch (e) { /* noop */ }
-            process.exit(0);
-        });
+        screen.key(['escape'], () => cancel());
+        screen.key(['C-c'], () => process.exit(0));
 
         searchBox.focus();
         screen.render();

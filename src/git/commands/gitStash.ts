@@ -1,19 +1,21 @@
 import * as bash from "@/utils/bashHelper";
 import * as ui from '@/UI/generalUI';
 import { getStashes } from "@/git/utils/gitFileUtils";
+import { menuChain } from '@/UI/menuChain';
 
 export async function applyOrDropStash(): Promise<void> {
     const stashList = await getStashes();
 
-    const stash = await ui.searchSelectAndReturnFromArray({
-        itemsArray: stashList,
-        prompt: 'Pick a stash from the list to apply or drop',
-    });
-
-    const applyOrDrop = await ui.searchSelectAndReturnFromArray({
-        itemsArray: ['apply', 'drop'],
-        prompt: 'Choose what you want to do with the stash'
-    });
+    const { stash, applyOrDrop } = await menuChain()
+        .step('stash', async () => ui.searchSelectAndReturnFromArray({
+            itemsArray: stashList,
+            prompt: 'Pick a stash from the list to apply or drop',
+        }))
+        .step('applyOrDrop', async () => ui.searchSelectAndReturnFromArray({
+            itemsArray: ['apply', 'drop'],
+            prompt: 'Choose what you want to do with the stash',
+        }))
+        .run();
 
     const command = `git stash ${applyOrDrop} stash@\{${stashList.indexOf(stash)}\}`;
     await bash.execCommand(command);
