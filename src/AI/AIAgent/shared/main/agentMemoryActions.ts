@@ -10,7 +10,7 @@
 import type { NeovimClient } from 'neovim';
 import type { VimValue } from 'neovim/lib/types/VimValue';
 import { editMemory, listMemories, remember, deleteMemory, updateMemory } from '@/AI/AIAgent/shared/memory/notes';
-import { MEMORY_KINDS, type MemoryKind } from '@/AI/AIAgent/shared/memory/types';
+import { MEMORY_KINDS, type MemoryEntry, type MemoryKind } from '@/AI/AIAgent/shared/memory/types';
 
 export type MemoryView = 'all' | 'findings' | 'revisits';
 
@@ -20,9 +20,8 @@ function parseView(raw: unknown): MemoryView {
     return v === 'findings' || v === 'revisits' ? v : 'all';
 }
 
-export async function openMemoryBrowser(nvim: NeovimClient, view: MemoryView = 'all'): Promise<void> {
-    const entries = await listMemories({ scope: view, limit: 200 });
-    const payload = entries.map((entry) => ({
+function toMemoryPayload(entry: MemoryEntry): Record<string, unknown> {
+    return {
         id: entry.id,
         kind: entry.kind,
         title: entry.title,
@@ -31,7 +30,66 @@ export async function openMemoryBrowser(nvim: NeovimClient, view: MemoryView = '
         paths: entry.paths,
         status: entry.status,
         createdAt: entry.createdAt,
-    }));
+    };
+}
+
+export async function pickMemories(
+    nvim: NeovimClient,
+    entries: MemoryEntry[],
+    options: { title?: string } = {},
+): Promise<MemoryEntry[] | null> {
+    const channelId = await nvim.channelId;
+    const payload = entries.map(toMemoryPayload);
+
+    return new Promise((resolve) => {
+        const handler = (method: string, args: unknown[]): void => {
+            if (method !== 'memory_picker_selection') {
+                return;
+            }
+
+            nvim.removeListener('notification', handler);
+
+            if (typeof args[0] !== 'string') {
+                resolve(null);
+
+                return;
+            }
+
+            try {
+                const rawIds = JSON.parse(args[0]) as unknown;
+                if (!Array.isArray(rawIds)) {
+                    resolve(null);
+
+                    return;
+                }
+
+                const byId = new Map(entries.map((entry) => [entry.id, entry]));
+                resolve(rawIds
+                    .map((id) => byId.get(String(id)))
+                    .filter((entry): entry is MemoryEntry => entry !== undefined));
+            } catch {
+                resolve(null);
+            }
+        };
+
+        nvim.on('notification', handler);
+        void nvim.executeLua(
+            `require('kra_agent_ui').pick_memories(...)`,
+            [
+                channelId as unknown as VimValue,
+                payload as unknown as VimValue,
+                { title: options.title ?? 'Select memories' } as unknown as VimValue,
+            ],
+        ).catch(() => {
+            nvim.removeListener('notification', handler);
+            resolve(null);
+        });
+    });
+}
+
+export async function openMemoryBrowser(nvim: NeovimClient, view: MemoryView = 'all'): Promise<void> {
+    const entries = await listMemories({ scope: view, limit: 200 });
+    const payload = entries.map(toMemoryPayload);
 
     await nvim.executeLua(
         `require('kra_agent_ui').show_memory_browser(...)`,
@@ -152,5 +210,4 @@ export async function handleSetMemoryStatus(
     await updateMemory(updateInput);
 
     await openMemoryBrowser(nvim, view);
-    return;
 }

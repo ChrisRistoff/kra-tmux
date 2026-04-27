@@ -12,7 +12,7 @@ import readline from 'readline';
 import 'module-alias/register';
 import { editMemory, recall, remember, updateMemory } from '../memory/notes';
 import { semanticSearch } from '../memory/search';
-import { MEMORY_KINDS, MEMORY_STATUSES } from '../memory/types';
+import { MEMORY_KINDS, MEMORY_LOOKUP_KINDS, MEMORY_STATUSES } from '../memory/types';
 
 interface JsonRpcRequest {
     jsonrpc: '2.0';
@@ -66,8 +66,10 @@ const RECALL_TOOL = {
     name: 'recall',
     description: [
         'Look up memory entries. With `query`, runs vector search and returns the top-k most semantically similar entries.',
-        'WITHOUT `query`, runs in list mode (no embedding) sorted newest-first — use this to e.g. list all open revisits at session start:',
-        '  recall({ kind: "revisit", status: "open" }).',
+        'Primary use: listing/filtering stored entries, checking revisits, or narrowing to a specific memory kind.',
+        'For first-step conceptual discovery across long-term memories, prefer `semantic_search({ scope: "memory" | "both", memoryKind: "findings" })` instead of brute-forcing `recall` queries.',
+        'WITHOUT `query`, runs in list mode (newest-first). Use `kind: "findings"` to search long-term findings memories,',
+        '`kind: "revisit"` for parked discussions, or a specific finding kind to narrow the findings table.',
         'All filters (kind / tagsAny / status) compose with both modes.',
     ].join(' '),
     inputSchema: {
@@ -75,7 +77,8 @@ const RECALL_TOOL = {
         properties: {
             query: { type: 'string', description: 'Optional natural-language query. Omit for list mode (no embedding).' },
             k: { type: 'number', description: 'Max results (default 5 for search mode, 50 for list mode, hard cap 200).' },
-            kind: { type: 'string', enum: [...MEMORY_KINDS], description: 'REQUIRED. Which memory to query: "revisit" hits the parked-discussions table; any of note/bug-fix/gotcha/decision/investigation hits the findings table.' },
+            kind: { type: 'string', enum: [...MEMORY_LOOKUP_KINDS], description: 'REQUIRED. `findings` queries the findings table, `revisit` queries parked discussions, and specific finding kinds narrow the findings table.' },
+            selectedIds: { type: 'array', items: { type: 'string' }, description: 'Optional pre-approved memory ids to limit the result set.' },
             tagsAny: { type: 'array', items: { type: 'string' }, description: 'Match if entry has any of these tags.' },
             status: { type: 'string', enum: [...MEMORY_STATUSES], description: 'Filter by status (typically "open" for revisit listings).' },
         },
@@ -104,10 +107,12 @@ const SEMANTIC_SEARCH_TOOL = {
     name: 'semantic_search',
     description: [
         'Conceptual vector search over the indexed codebase (and optionally memory entries).',
-        'Use for "where does X happen" / "what handles Y" queries when you don\'t know the exact symbol.',
-        'For known string/symbol lookups prefer the file-context `search` tool (ripgrep) — they are complementary.',
+        'Preferred first-step discovery tool for conceptual codebase lookup and prior-memory retrieval.',
+        'Use this before text search when you do not already know the exact symbol, file, path, or literal string.',
+        'For new non-trivial tasks, start with `scope: "both", memoryKind: "findings"` unless the task is a tiny exact lookup.',
+        'For known string/symbol/path lookups prefer the file-context `search` tool or `lsp_query` — they are complementary.',
         'Returns ONE entry per matched file (deduped) with parallel `startLines` / `endLines` arrays of the matched ranges (already merged), plus an annotated `outline` whose entries carry a `matched` flag indicating which symbols overlap those ranges. No source code is returned — follow up with `read_lines` (you can pass `startLines`/`endLines` straight from the response) or `read_function` for the actual content.',
-        'When scope includes "memory", you MUST also pass `memoryKind` to choose which memory table to search (findings or revisits).',
+        'When scope includes "memory", pass `memoryKind: "findings"` for long-term memories, `memoryKind: "revisit"` for parked discussions, or a specific finding kind to narrow the findings table.',
     ].join(' '),
     inputSchema: {
         type: 'object',
@@ -116,7 +121,8 @@ const SEMANTIC_SEARCH_TOOL = {
             k: { type: 'number', description: 'Max results (default 10, hard cap 100).' },
             scope: { type: 'string', enum: ['code', 'memory', 'both'], description: 'Where to search (default "code").' },
             pathGlob: { type: 'string', description: 'Optional glob to restrict code results by path (e.g. "src/AI/**").' },
-            memoryKind: { type: 'string', enum: [...MEMORY_KINDS], description: 'Required when scope is "memory" or "both". Picks which memory table (findings vs revisits) to search.' },
+            memoryKind: { type: 'string', enum: [...MEMORY_LOOKUP_KINDS], description: 'Required when scope is "memory" or "both". Use `findings` for long-term memories, `revisit` for parked discussions, or a specific finding kind to narrow the findings table.' },
+            selectedIds: { type: 'array', items: { type: 'string' }, description: 'Optional pre-approved memory ids to limit returned memory hits.' },
         },
         required: ['query'],
     },
@@ -141,14 +147,12 @@ const EDIT_MEMORY_TOOL = {
         required: ['id'],
     },
 };
-const SEMANTIC_SEARCH_ENABLED = process.env['KRA_MEMORY_SEMANTIC_SEARCH_ENABLED'] === '1';
-
 const TOOLS = [
     REMEMBER_TOOL,
     RECALL_TOOL,
     UPDATE_MEMORY_TOOL,
     EDIT_MEMORY_TOOL,
-    ...(SEMANTIC_SEARCH_ENABLED ? [SEMANTIC_SEARCH_TOOL] : []),
+    SEMANTIC_SEARCH_TOOL,
 ];
 
 type ToolName = (typeof TOOLS)[number]['name'];

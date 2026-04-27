@@ -20,10 +20,12 @@ export const MEMORY_KINDS = [
     ...FINDING_KINDS,
     REVISIT_KIND,
 ] as const;
+export const MEMORY_LOOKUP_KINDS = ['findings', ...MEMORY_KINDS] as const;
 
 export type FindingKind = typeof FINDING_KINDS[number];
 export type RevisitKind = typeof REVISIT_KIND;
 export type MemoryKind = typeof MEMORY_KINDS[number];
+export type MemoryLookupKind = typeof MEMORY_LOOKUP_KINDS[number];
 
 export function isRevisitKind(kind: string): kind is RevisitKind {
     return kind === REVISIT_KIND;
@@ -31,6 +33,10 @@ export function isRevisitKind(kind: string): kind is RevisitKind {
 
 export function isFindingKind(kind: string): kind is FindingKind {
     return (FINDING_KINDS as readonly string[]).includes(kind);
+}
+
+export function isMemoryLookupKind(kind: string): kind is MemoryLookupKind {
+    return kind === 'findings' || (MEMORY_KINDS as readonly string[]).includes(kind);
 }
 
 export const MEMORY_STATUSES = ['open', 'resolved', 'dismissed'] as const;
@@ -108,7 +114,8 @@ export interface RememberInput {
 export interface RecallInput {
     query?: string;
     k?: number;
-    kind: MemoryKind;
+    kind: MemoryLookupKind;
+    selectedIds?: string[];
     tagsAny?: string[];
     status?: MemoryStatus;
 }
@@ -173,7 +180,8 @@ export interface SemanticSearchInput {
     k?: number;
     scope?: 'code' | 'memory' | 'both';
     pathGlob?: string;
-    memoryKind?: MemoryKind;
+    memoryKind?: MemoryLookupKind;
+    selectedIds?: string[];
 }
 
 export interface SemanticSearchHit {
