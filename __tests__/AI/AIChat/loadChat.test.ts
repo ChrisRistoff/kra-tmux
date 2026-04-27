@@ -62,7 +62,7 @@ describe('loadChat', () => {
 
     it('should print message and return when no saved chats are found', async () => {
         (fs.readdir as jest.Mock).mockResolvedValue([]);
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => { return });
 
         await loadChat();
 
@@ -167,7 +167,7 @@ describe('loadChat', () => {
     it('should log error and rethrow if an error occurs', async () => {
         const testError = new Error('Test error');
         (fs.readdir as jest.Mock).mockRejectedValue(testError);
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => { return });
 
         await expect(loadChat()).rejects.toThrow('Test error');
         expect(consoleErrorSpy).toHaveBeenCalledWith('Error loading chat:', 'Test error');

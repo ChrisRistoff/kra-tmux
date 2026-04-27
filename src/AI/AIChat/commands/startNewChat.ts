@@ -2,26 +2,22 @@ import * as conversation from '@/AI/AIChat/main/conversation';
 import * as utils from '@/AI/AIChat/utils/aiUtils';
 import { aiRoles } from '@/AI/shared/data/roles';
 import * as ui from '@/UI/generalUI';
+import { menuChain } from '@/UI/menuChain';
 
 export async function startNewChat(): Promise<void> {
-    try {
-        const timestamp = Date.now();
+    const timestamp = Date.now();
+    const chatFile = `/tmp/ai-chat-${timestamp}.md`;
 
-        const chatFile = `/tmp/ai-chat-${timestamp}.md`
-
-        const role = await ui.searchSelectAndReturnFromArray({
+    const { role, pm, temperature } = await menuChain()
+        .step('role', async () => ui.searchSelectAndReturnFromArray({
             itemsArray: Object.keys(aiRoles),
-            prompt: 'Select a role from the list: '
-        });
+            prompt: 'Select a role from the list: ',
+        }))
+        .step('pm', async () => utils.pickProviderAndModel())
+        .step('temperature', async (d) => utils.promptUserForTemperature((d.pm).model))
+        .run();
 
-        const { provider, model } = await utils.pickProviderAndModel();
-
-        const temperature = await utils.promptUserForTemperature(model);
-
-        console.log('Opening vim for prompt...');
-        await conversation.converse(chatFile, temperature, role, provider, model);
-    } catch (error) {
-        console.error('Error in AI prompt workflow:', (error as Error).message);
-        throw error;
-    }
+    console.log('Opening vim for prompt...');
+    const { provider, model } = pm;
+    await conversation.converse(chatFile, temperature, role, provider, model);
 }

@@ -23,7 +23,7 @@ describe('SystemFileManager', () => {
             mockPromptYesOrNo.mockResolvedValue(false); // non-exact match
             mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
-            await removeFile();
+            await expect(removeFile()).rejects.toThrow('User cancelled');
 
             expect(mockExecCommand).toHaveBeenCalledWith('find . -type f -iname "*test*"');
         });
@@ -56,7 +56,7 @@ describe('SystemFileManager', () => {
             mockPromptYesOrNo.mockResolvedValue(false); // non-exact match
             mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
-            await removeDirectory();
+            await expect(removeDirectory()).rejects.toThrow('User cancelled');
 
             expect(mockExecCommand).toHaveBeenCalledWith('find . -type d -iname "*test*"');
         });
@@ -94,7 +94,7 @@ describe('SystemFileManager', () => {
             mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
             const consoleSpy = jest.spyOn(console, 'log');
-            await removeFile();
+            await expect(removeFile()).rejects.toThrow('User cancelled');
 
             expect(consoleSpy).toHaveBeenCalledWith('No matches found for the given search criteria.');
             consoleSpy.mockRestore();
@@ -109,7 +109,7 @@ describe('SystemFileManager', () => {
             mockPromptYesOrNo.mockResolvedValue(false); // non-exact match
             mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
-            await removeFile();
+            await expect(removeFile()).rejects.toThrow('User cancelled');
 
             // command should contain the sanitized version of the input
             expect(mockExecCommand).toHaveBeenCalledWith(
@@ -125,7 +125,7 @@ describe('SystemFileManager', () => {
             mockPromptYesOrNo.mockResolvedValue(true); // exact match
             mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
-            await removeFile();
+            await expect(removeFile()).rejects.toThrow('User cancelled');
 
             expect(mockExecCommand).toHaveBeenCalledWith(
                 `find . -type f -iname "${expectedSanitized}"`

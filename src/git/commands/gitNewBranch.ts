@@ -1,5 +1,6 @@
 import * as bash from "@/utils/bashHelper";
 import * as ui from '@/UI/generalUI';
+import { menuChain } from '@/UI/menuChain';
 
 const currentBranch = 'current';
 
@@ -13,18 +14,19 @@ export async function createBranch() {
         return branch.trim();
     });
 
-    const chosenBranchToCreateOff = await ui.searchSelectAndReturnFromArray({
-        itemsArray: branchArray,
-        prompt: 'Select a branch to create your new branch off.'
-    })
+    const { chosenBranch, branchName } = await menuChain()
+        .step('chosenBranch', async () => ui.searchSelectAndReturnFromArray({
+            itemsArray: branchArray,
+            prompt: 'Select a branch to create your new branch off.',
+        }))
+        .step('branchName', async () => ui.askUserForInput('Enter the name of new branch: '))
+        .run();
 
-    const nameForNewBranch = await ui.askUserForInput('Enter the name of new branch: ');
-
-    if (chosenBranchToCreateOff !== currentBranch) {
-        await bash.execCommand(`git checkout ${chosenBranchToCreateOff}`);
+    if ((chosenBranch) !== currentBranch) {
+        await bash.execCommand(`git checkout ${chosenBranch}`);
     }
 
     await bash.execCommand('kra git hard-reset');
-    await bash.execCommand(`git branch ${nameForNewBranch}`);
-    await bash.execCommand(`git checkout ${nameForNewBranch}`);
+    await bash.execCommand(`git branch ${branchName}`);
+    await bash.execCommand(`git checkout ${branchName}`);
 }

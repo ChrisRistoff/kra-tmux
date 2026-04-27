@@ -94,7 +94,7 @@ describe('SystemFileManager Integration Tests', () => {
             (bash.execCommand as jest.Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
 
             const consoleSpy = jest.spyOn(console, 'log');
-            await removeDirectory();
+            await expect(removeDirectory()).rejects.toThrow('User cancelled');
 
             expect(consoleSpy).toHaveBeenCalledWith('No matches found for the given search criteria.');
             consoleSpy.mockRestore();

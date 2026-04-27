@@ -13,7 +13,7 @@ jest.mock('@/UI/generalUI', () => ({
 }));
 
 jest.mock('@/utils/common', () => ({
-    filterGitKeep: jest.fn((files) => files.filter((file: string) => file !== '.gitkeep'))
+    filterGitKeep: jest.fn((files: string[]) => files.filter((file: string) => file !== '.gitkeep'))
 }));
 
 describe('deleteChats', () => {
@@ -23,7 +23,7 @@ describe('deleteChats', () => {
 
     it('should print message and not delete when no chats found', async () => {
         (fs.readdir as jest.Mock).mockResolvedValue([]);
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => { return });
 
         await deleteChats();
 
@@ -37,7 +37,7 @@ describe('deleteChats', () => {
         const chats = ['chat1', '.gitkeep'];
         (fs.readdir as jest.Mock).mockResolvedValue(chats);
         (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue('chat1');
-        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
+        const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => { return });
 
         await deleteChats();
 
@@ -54,7 +54,7 @@ describe('deleteChats', () => {
     it('should log error and throw when fs.readdir fails', async () => {
         const error = new Error('readdir failed');
         (fs.readdir as jest.Mock).mockRejectedValue(error);
-        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => { return });
 
         await expect(deleteChats()).rejects.toThrow('readdir failed');
         expect(consoleErrorSpy).toHaveBeenCalledWith('Error deleting chat:', 'readdir failed');

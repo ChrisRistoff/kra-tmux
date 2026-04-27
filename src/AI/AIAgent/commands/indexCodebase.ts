@@ -13,6 +13,7 @@ import { execCommand } from '@/utils/bashHelper';
 async function safeHeadCommit(repoRoot: string): Promise<string> {
     try {
         const r = await execCommand(`git -C '${repoRoot.replace(/'/g, `'\\''`)}' rev-parse HEAD`);
+
         return r.stdout.trim();
     } catch {
         return '';

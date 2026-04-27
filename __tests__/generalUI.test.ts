@@ -4,6 +4,7 @@ import {
     searchAndSelect,
     searchSelectAndReturnFromArray
 } from '@/UI/generalUI';
+import { UserCancelled } from '@/UI/menuChain';
 
 // Mock blessed and figlet
 const mockWidgets: { [type: string]: any[] } = {
@@ -120,10 +121,10 @@ describe('generalUI', () => {
             await expect(promise).resolves.toBe(false);
         });
 
-        it('should return false on escape', async () => {
+        it('should reject with UserCancelled on escape', async () => {
             const promise = promptUserYesOrNo('Are you sure?');
             mockWidgets.screen[0]._handlers['key escape']();
-            await expect(promise).resolves.toBe(false);
+            await expect(promise).rejects.toBeInstanceOf(UserCancelled);
         });
     });
 
@@ -136,10 +137,10 @@ describe('generalUI', () => {
             await expect(promise).resolves.toBe('test input');
         });
 
-        it('should return empty string on escape', async () => {
+        it('should reject with UserCancelled on escape', async () => {
             const promise = askUserForInput('Enter value:');
             mockWidgets.screen[0]._handlers['key escape']();
-            await expect(promise).resolves.toBe('');
+            await expect(promise).rejects.toBeInstanceOf(UserCancelled);
         });
     });
 
