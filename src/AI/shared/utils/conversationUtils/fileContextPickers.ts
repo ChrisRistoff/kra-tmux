@@ -3,6 +3,44 @@ import { FileContext } from "@/AI/shared/types/aiTypes";
 import fs from 'fs/promises';
 import { fileContexts } from './fileContexts';
 
+export interface FilePickerSelection {
+    path: string;
+    isDir: boolean;
+}
+
+function parsePickerItems<T>(raw: unknown, isItem: (value: unknown) => value is T): T[] | null {
+    if (typeof raw !== 'string') {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (!Array.isArray(parsed)) {
+            return null;
+        }
+
+        const items = parsed.filter(isItem);
+
+        return items.length > 0 ? items : null;
+    } catch {
+        return null;
+    }
+}
+
+function isFilePickerSelection(value: unknown): value is FilePickerSelection {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+
+    return typeof candidate['path'] === 'string' && typeof candidate['isDir'] === 'boolean';
+}
+
+function isString(value: unknown): value is string {
+    return typeof value === 'string';
+}
+
 /**
  * Telescope picker: choose a file context to remove. Resolves to the index in
  * `fileContexts` (or null if the user cancelled).
@@ -24,17 +62,19 @@ export async function selectContextToRemove(nvim: NeovimClient): Promise<number 
             const sizeKB = Math.round(content.length / 1024);
 
             return `${index + 1}. 📁 ${fileName} (${lineCount} lines, ${sizeKB}KB)`;
-        } catch (error) {
+        } catch (_error) {
             return `${index + 1}. ❌ ${fileName} (error reading file)`;
         }
     }));
 
     return new Promise((resolve) => {
-        const handler = (method: string, args: any[]) => {
-            if (method === 'fzf_selected_index') {
-                nvim.removeListener('notification', handler);
-                resolve(args[0] !== undefined ? args[0] : null);
+        const handler = (method: string, args: unknown[]): void => {
+            if (method !== 'fzf_selected_index') {
+                return;
             }
+
+            nvim.removeListener('notification', handler);
+            resolve(typeof args[0] === 'number' ? args[0] : null);
         };
 
         nvim.on('notification', handler);
@@ -75,17 +115,17 @@ export async function selectContextToRemove(nvim: NeovimClient): Promise<number 
 /**
  * Telescope picker: choose any file or folder under the cwd.
  */
-export async function selectFileOrFolder(nvim: NeovimClient): Promise<{ path: string; isDir: boolean } | null> {
+export async function selectFileOrFolder(nvim: NeovimClient): Promise<FilePickerSelection[] | null> {
     const channelId = await nvim.channelId;
 
     return new Promise((resolve) => {
-        const handler = (method: string, args: any[]) => {
-            if (method === 'unified_selection') {
-                nvim.removeListener('notification', handler);
-                const path: string = args[0];
-                const isDir: boolean = args[1] === true;
-                resolve(path ? { path, isDir } : null);
+        const handler = (method: string, args: unknown[]): void => {
+            if (method !== 'unified_selection') {
+                return;
             }
+
+            nvim.removeListener('notification', handler);
+            resolve(parsePickerItems(args[0], isFilePickerSelection));
         };
         nvim.on('notification', handler);
 
@@ -109,31 +149,67 @@ export async function selectFileOrFolder(nvim: NeovimClient): Promise<{ path: st
                 end
 
                 pickers.new({}, {
-                    prompt_title = 'Select File or Folder',
+                    prompt_title = 'Select File or Folder  [↑↓:move  <Tab>:toggle multi  <CR>:confirm  <Esc>:cancel]',
                     finder = finders.new_oneshot_job(find_cmd, {
                         entry_maker = make_entry.gen_from_file({}),
                     }),
                     sorter = conf.file_sorter({}),
                     previewer = conf.file_previewer({}),
-                    attach_mappings = function(prompt_bufnr, _)
-                        actions.select_default:replace(function()
-                            local selection = action_state.get_selected_entry()
-                            actions.close(prompt_bufnr)
-                            if not selection then
-                                vim.fn.rpcnotify(${channelId}, 'unified_selection', nil, false)
-                                return
+                    attach_mappings = function(prompt_bufnr, map)
+                        local function finish_selection()
+                            local picker = action_state.get_current_picker(prompt_bufnr)
+                            local multi = picker:get_multi_selection()
+                            local selected = {}
+                            local seen = {}
+
+                            local function add_item(item)
+                                if not item then
+                                    return
+                                end
+
+                                local path = vim.fn.fnamemodify(item.value or '', ':p')
+                                if path == '' or seen[path] then
+                                    return
+                                end
+
+                                table.insert(selected, {
+                                    path = path,
+                                    isDir = vim.fn.isdirectory(path) == 1,
+                                })
+                                seen[path] = true
                             end
-                            local path = vim.fn.fnamemodify(selection.value or '', ':p')
-                            local is_dir = vim.fn.isdirectory(path) == 1
-                            vim.fn.rpcnotify(${channelId}, 'unified_selection', path, is_dir)
-                        end)
+
+                            if multi and #multi > 0 then
+                                for _, item in ipairs(multi) do
+                                    add_item(item)
+                                end
+                            else
+                                add_item(action_state.get_selected_entry())
+                            end
+
+                            actions.close(prompt_bufnr)
+                            vim.fn.rpcnotify(${channelId}, 'unified_selection', #selected > 0 and vim.fn.json_encode(selected) or nil)
+                        end
+
+                        local function cancel_selection()
+                            actions.close(prompt_bufnr)
+                            vim.fn.rpcnotify(${channelId}, 'unified_selection', nil)
+                        end
+
+                        actions.select_default:replace(finish_selection)
+                        map('i', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
+                        map('n', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
+                        map('i', '<Esc>', cancel_selection)
+                        map('n', 'q', cancel_selection)
+                        map('i', '<C-c>', cancel_selection)
+                        map('n', '<C-c>', cancel_selection)
                         return true
                     end,
                 }):find()
             end)
             if not ok then
                 vim.notify('File/folder picker error: ' .. tostring(err), vim.log.levels.ERROR)
-                vim.fn.rpcnotify(${channelId}, 'unified_selection', nil, false)
+                vim.fn.rpcnotify(${channelId}, 'unified_selection', nil)
             end
         `;
 
@@ -144,6 +220,7 @@ export async function selectFileOrFolder(nvim: NeovimClient): Promise<{ path: st
     });
 }
 
+
 /**
  * Telescope prompt: ask whether to share the entire file/folder or a snippet.
  */
@@ -151,11 +228,14 @@ export async function promptShareMode(nvim: NeovimClient): Promise<'entire' | 's
     const channelId = await nvim.channelId;
 
     return new Promise((resolve) => {
-        const handler = (method: string, args: any[]) => {
-            if (method === 'share_mode_selected') {
-                nvim.removeListener('notification', handler);
-                resolve((args[0] as 'entire' | 'snippet') || null);
+        const handler = (method: string, args: unknown[]): void => {
+            if (method !== 'share_mode_selected') {
+                return;
             }
+
+            nvim.removeListener('notification', handler);
+            const shareMode = args[0];
+            resolve(shareMode === 'entire' || shareMode === 'snippet' ? shareMode : null);
         };
         nvim.on('notification', handler);
 
@@ -203,15 +283,17 @@ export async function promptShareMode(nvim: NeovimClient): Promise<'entire' | 's
 /**
  * Telescope picker: choose one file from inside a previously-selected folder.
  */
-export async function selectFileFromFolder(nvim: NeovimClient, folderPath: string): Promise<string | null> {
+export async function selectFileFromFolder(nvim: NeovimClient, folderPath: string): Promise<string[] | null> {
     const channelId = await nvim.channelId;
 
     return new Promise((resolve) => {
-        const handler = (method: string, args: any[]) => {
-            if (method === 'folder_file_selected') {
-                nvim.removeListener('notification', handler);
-                resolve(args[0] || null);
+        const handler = (method: string, args: unknown[]): void => {
+            if (method !== 'folder_file_selected') {
+                return;
             }
+
+            nvim.removeListener('notification', handler);
+            resolve(parsePickerItems(args[0], isString));
         };
         nvim.on('notification', handler);
 
@@ -233,24 +315,58 @@ export async function selectFileFromFolder(nvim: NeovimClient, folderPath: strin
                 end
 
                 pickers.new({}, {
-                    prompt_title = 'Select File from Folder',
+                    prompt_title = 'Select File from Folder  [↑↓:move  <Tab>:toggle multi  <CR>:confirm  <Esc>:cancel]',
                     cwd = folder,
                     finder = finders.new_oneshot_job(find_cmd, {
                         entry_maker = make_entry.gen_from_file({}),
                     }),
                     sorter = conf.file_sorter({}),
                     previewer = conf.file_previewer({}),
-                    attach_mappings = function(prompt_bufnr, _)
-                        actions.select_default:replace(function()
-                            local selection = action_state.get_selected_entry()
-                            actions.close(prompt_bufnr)
-                            if not selection then
-                                vim.fn.rpcnotify(${channelId}, 'folder_file_selected', nil)
-                                return
+                    attach_mappings = function(prompt_bufnr, map)
+                        local function finish_selection()
+                            local picker = action_state.get_current_picker(prompt_bufnr)
+                            local multi = picker:get_multi_selection()
+                            local selected = {}
+                            local seen = {}
+
+                            local function add_item(item)
+                                if not item then
+                                    return
+                                end
+
+                                local path = vim.fn.fnamemodify(item.value or '', ':p')
+                                if path == '' or seen[path] then
+                                    return
+                                end
+
+                                table.insert(selected, path)
+                                seen[path] = true
                             end
-                            local path = vim.fn.fnamemodify(selection.value or '', ':p')
-                            vim.fn.rpcnotify(${channelId}, 'folder_file_selected', path)
-                        end)
+
+                            if multi and #multi > 0 then
+                                for _, item in ipairs(multi) do
+                                    add_item(item)
+                                end
+                            else
+                                add_item(action_state.get_selected_entry())
+                            end
+
+                            actions.close(prompt_bufnr)
+                            vim.fn.rpcnotify(${channelId}, 'folder_file_selected', #selected > 0 and vim.fn.json_encode(selected) or nil)
+                        end
+
+                        local function cancel_selection()
+                            actions.close(prompt_bufnr)
+                            vim.fn.rpcnotify(${channelId}, 'folder_file_selected', nil)
+                        end
+
+                        actions.select_default:replace(finish_selection)
+                        map('i', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
+                        map('n', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
+                        map('i', '<Esc>', cancel_selection)
+                        map('n', 'q', cancel_selection)
+                        map('i', '<C-c>', cancel_selection)
+                        map('n', '<C-c>', cancel_selection)
                         return true
                     end,
                 }):find()

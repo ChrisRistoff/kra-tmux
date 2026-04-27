@@ -11,8 +11,8 @@ export async function handleAddFileContext(nvim: NeovimClient, chatFile: string,
     try {
         await nvim.command('echohl MoreMsg | echo "Opening context selector..." | echohl None');
 
-        const selection = await selectFileOrFolder(nvim);
-        if (!selection) {
+        const selections = await selectFileOrFolder(nvim);
+        if (!selections || selections.length === 0) {
             await nvim.command('echohl WarningMsg | echo "Cancelled" | echohl None');
 
             return;
@@ -25,22 +25,34 @@ export async function handleAddFileContext(nvim: NeovimClient, chatFile: string,
             return;
         }
 
-        const { path, isDir } = selection;
         const agentMode = options?.agentMode;
 
-        if (isDir && shareMode === 'entire') {
-            await addFolderContext(nvim, chatFile, path.replace(/\/$/, ''), agentMode);
-        } else if (isDir && shareMode === 'snippet') {
-            const fileInFolder = await selectFileFromFolder(nvim, path);
-            if (!fileInFolder) {
-                await nvim.command('echohl WarningMsg | echo "No file selected" | echohl None');
+        for (const selection of selections) {
+            const { path, isDir } = selection;
 
-                return;
+            if (isDir && shareMode === 'entire') {
+                await addFolderContext(nvim, chatFile, path.replace(/\/$/, ''), agentMode);
+                continue;
             }
-            await addPartialFileContext(nvim, chatFile, fileInFolder, agentMode);
-        } else if (!isDir && shareMode === 'entire') {
-            await addEntireFileContext(nvim, chatFile, path, agentMode);
-        } else {
+
+            if (isDir && shareMode === 'snippet') {
+                const filesInFolder = await selectFileFromFolder(nvim, path);
+                if (!filesInFolder || filesInFolder.length === 0) {
+                    await nvim.command('echohl WarningMsg | echo "No file selected" | echohl None');
+                    continue;
+                }
+
+                for (const fileInFolder of filesInFolder) {
+                    await addPartialFileContext(nvim, chatFile, fileInFolder, agentMode);
+                }
+                continue;
+            }
+
+            if (shareMode === 'entire') {
+                await addEntireFileContext(nvim, chatFile, path, agentMode);
+                continue;
+            }
+
             await addPartialFileContext(nvim, chatFile, path, agentMode);
         }
     } catch (error: unknown) {
@@ -218,7 +230,7 @@ export async function showFileContextsPopup(nvim: NeovimClient): Promise<void> {
                 const lineCount = content.split('\n').length;
                 const sizeKB = Math.round(content.length / 1024);
                 popupLines.push(`${index + 1}. 📁 ${fileName} (${lineCount} lines, ${sizeKB}KB)`, `   ${context.filePath}`, '');
-            } catch (error) {
+            } catch (_error) {
                 popupLines.push(`${index + 1}. ❌ ${fileName} (error reading file)`, `   ${context.filePath}`, '');
             }
         }
