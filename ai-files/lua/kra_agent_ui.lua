@@ -507,6 +507,35 @@ local function prompt_add_memory(view)
     end)
 end
 
+local function memory_entry_maker(entry)
+    local status_icon = entry.status == 'open' and '' or '·'
+    local tags = (entry.tags and #entry.tags > 0) and (' #' .. table.concat(entry.tags, ' #')) or ''
+    return {
+        value = entry,
+        display = string.format('%s [%s] %s%s', status_icon, entry.kind, entry.title, tags),
+        ordinal = string.format('%s %s %s %s', entry.kind, entry.title, entry.body or '', table.concat(entry.tags or {}, ' ')),
+    }
+end
+
+local function render_memory_preview(self, entry)
+    local item = entry.value
+    local lines = {
+        string.format('id:      %s', item.id),
+        string.format('kind:    %s', item.kind),
+        string.format('status:  %s', item.status or ''),
+        string.format('tags:    %s', table.concat(item.tags or {}, ', ')),
+        string.format('paths:   %s', table.concat(item.paths or {}, ', ')),
+        string.format('created: %s', os.date('%Y-%m-%d %H:%M:%S', math.floor((item.createdAt or 0) / 1000))),
+        '',
+        '# ' .. (item.title or ''),
+        '',
+    }
+    for line in (item.body or ''):gmatch('([^\n]*)\n?') do
+        table.insert(lines, line)
+    end
+    vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+end
+
 function M.show_memory_browser(items, view)
     local ok, err = pcall(function()
         local pickers = require('telescope.pickers')
@@ -555,36 +584,11 @@ function M.show_memory_browser(items, view)
                 prompt_title = title,
                 finder = finders.new_table({
                     results = items,
-                    entry_maker = function(entry)
-                        local status_icon = entry.status == 'open' and '' or '·'
-                        local tags = (entry.tags and #entry.tags > 0) and (' #' .. table.concat(entry.tags, ' #')) or ''
-                        return {
-                            value = entry,
-                            display = string.format('%s [%s] %s%s', status_icon, entry.kind, entry.title, tags),
-                            ordinal = string.format('%s %s %s %s', entry.kind, entry.title, entry.body or '', table.concat(entry.tags or {}, ' ')),
-                        }
-                    end,
+                    entry_maker = memory_entry_maker,
                 }),
                 previewer = previewers.new_buffer_previewer({
                     title = 'Memory body',
-                    define_preview = function(self, entry)
-                        local item = entry.value
-                        local lines = {
-                            string.format('id:      %s', item.id),
-                            string.format('kind:    %s', item.kind),
-                            string.format('status:  %s', item.status or ''),
-                            string.format('tags:    %s', table.concat(item.tags or {}, ', ')),
-                            string.format('paths:   %s', table.concat(item.paths or {}, ', ')),
-                            string.format('created: %s', os.date('%Y-%m-%d %H:%M:%S', math.floor((item.createdAt or 0) / 1000))),
-                            '',
-                            '# ' .. (item.title or ''),
-                            '',
-                        }
-                        for line in (item.body or ''):gmatch('([^\n]*)\n?') do
-                            table.insert(lines, line)
-                        end
-                        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
-                    end,
+                    define_preview = render_memory_preview,
                 }),
                 sorter = conf.generic_sorter({}),
                 attach_mappings = function(prompt_bufnr, map)
@@ -643,6 +647,83 @@ function M.show_memory_browser(items, view)
 
     if not ok then
         vim.notify('kra-memory browser failed: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+end
+
+function M.pick_memories(channel_id, items, opts)
+    local ok, err = pcall(function()
+        local pickers = require('telescope.pickers')
+        local finders = require('telescope.finders')
+        local previewers = require('telescope.previewers')
+        local conf = require('telescope.config').values
+        local actions = require('telescope.actions')
+        local action_state = require('telescope.actions.state')
+
+        items = items or {}
+        opts = opts or {}
+
+        local function notify_selection(ids)
+            pcall(vim.fn.rpcnotify, channel_id, 'memory_picker_selection', ids and vim.fn.json_encode(ids) or nil)
+        end
+
+        pickers.new({
+            layout_strategy = 'horizontal',
+            layout_config = { preview_width = 0.55, width = 0.95, height = 0.85 },
+        }, {
+            prompt_title = (opts.title or 'Select memories') .. '  [↑↓:move  <Tab>:toggle multi  <CR>:confirm  <Esc>:cancel]',
+            finder = finders.new_table({ results = items, entry_maker = memory_entry_maker }),
+            previewer = previewers.new_buffer_previewer({
+                title = 'Memory body',
+                define_preview = render_memory_preview,
+            }),
+            sorter = conf.generic_sorter({}),
+            attach_mappings = function(prompt_bufnr, map)
+                local function finish_selection()
+                    local picker = action_state.get_current_picker(prompt_bufnr)
+                    local multi = picker:get_multi_selection()
+                    local selected_ids = {}
+                    local seen = {}
+
+                    if multi and #multi > 0 then
+                        for _, item in ipairs(multi) do
+                            local id = item.value and item.value.id
+                            if type(id) == 'string' and not seen[id] then
+                                table.insert(selected_ids, id)
+                                seen[id] = true
+                            end
+                        end
+                    else
+                        local current = action_state.get_selected_entry()
+                        local id = current and current.value and current.value.id
+                        if type(id) == 'string' then
+                            table.insert(selected_ids, id)
+                        end
+                    end
+
+                    actions.close(prompt_bufnr)
+                    notify_selection(selected_ids)
+                end
+
+                local function cancel_selection()
+                    actions.close(prompt_bufnr)
+                    notify_selection(nil)
+                end
+
+                actions.select_default:replace(finish_selection)
+                map('i', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
+                map('n', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
+                map('i', '<Esc>', cancel_selection)
+                map('n', 'q', cancel_selection)
+                map('i', '<C-c>', cancel_selection)
+                map('n', '<C-c>', cancel_selection)
+                return true
+            end,
+        }):find()
+    end)
+
+    if not ok then
+        vim.notify('kra-memory picker failed: ' .. tostring(err), vim.log.levels.ERROR)
+        pcall(vim.fn.rpcnotify, channel_id, 'memory_picker_selection', nil)
     end
 end
 

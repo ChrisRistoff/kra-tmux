@@ -20,6 +20,10 @@ import {
     formatToolProgress,
 } from '@/AI/AIAgent/shared/utils/agentUi';
 import { getFileOutline, formatOutline } from '@/AI/AIAgent/shared/utils/fileOutline';
+import { pickMemories } from '@/AI/AIAgent/shared/main/agentMemoryActions';
+import { recall } from '@/AI/AIAgent/shared/memory/notes';
+import { semanticSearch } from '@/AI/AIAgent/shared/memory/search';
+import { isMemoryLookupKind } from '@/AI/AIAgent/shared/memory/types';
 import * as bash from '@/utils/bashHelper';
 import type {
     AgentConversationState,
@@ -600,6 +604,112 @@ export function extractFileReadPath(input: AgentPreToolUseHookInput, workspacePa
     return path.isAbsolute(rawPath) ? rawPath : path.join(workspacePath, rawPath);
 }
 
+function toolNameMatches(toolName: string, expected: string): boolean {
+    const lower = toolName.toLowerCase();
+
+    return lower === expected
+        || lower.endsWith(`:${expected}`)
+        || lower.endsWith(`_${expected}`)
+        || lower.endsWith(`-${expected}`);
+}
+
+function coerceStringList(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+
+    const out = value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    return out;
+}
+
+async function maybeInterceptMemoryRead(
+    state: AgentConversationState,
+    input: AgentPreToolUseHookInput,
+): Promise<AgentPreToolUseHookOutput | undefined> {
+    const args = getToolArgsRecord(input.toolArgs);
+
+    if (!args) {
+        return undefined;
+    }
+
+    if (toolNameMatches(input.toolName, 'recall')) {
+        const kind = typeof args.kind === 'string' ? args.kind : undefined;
+
+        if (!kind || !isMemoryLookupKind(kind)) {
+            return undefined;
+        }
+
+        const candidateInput: Parameters<typeof recall>[0] = { kind };
+        if (typeof args.query === 'string') candidateInput.query = args.query;
+        if (typeof args.k === 'number') candidateInput.k = args.k;
+        if (args.status === 'open' || args.status === 'resolved' || args.status === 'dismissed') candidateInput.status = args.status;
+        const tagsAny = coerceStringList(args.tagsAny);
+        if (tagsAny !== undefined) candidateInput.tagsAny = tagsAny;
+
+        const candidates = await recall(candidateInput);
+        if (candidates.length === 0) {
+            return { permissionDecision: 'allow' };
+        }
+
+        const picked = await pickMemories(state.nvim, candidates, {
+            title: kind === 'revisit' ? 'Select revisits for recall' : 'Select memories for recall',
+        });
+        if (!picked || picked.length === 0) {
+            return {
+                permissionDecision: 'deny',
+                permissionDecisionReason: 'No memories were selected. Continue without memory context and do not repeat this recall unless the user asks.',
+            };
+        }
+
+        return {
+            permissionDecision: 'allow',
+            modifiedArgs: { ...args, selectedIds: picked.map((entry) => entry.id) },
+            additionalContext: `User selected ${picked.length} ${picked.length === 1 ? 'memory' : 'memories'} from the picker. Use only the selected memory results below.`,
+        };
+    }
+
+    if (toolNameMatches(input.toolName, 'semantic_search')) {
+        const scope = typeof args.scope === 'string' ? args.scope : 'code';
+        const memoryKind = typeof args.memoryKind === 'string' ? args.memoryKind : undefined;
+        const query = typeof args.query === 'string' ? args.query.trim() : '';
+
+        if ((scope !== 'memory' && scope !== 'both') || !memoryKind || !isMemoryLookupKind(memoryKind) || query.length === 0) {
+            return undefined;
+        }
+
+        const candidateInput: Parameters<typeof semanticSearch>[0] = { query, scope: 'memory', memoryKind };
+        if (typeof args.k === 'number') candidateInput.k = args.k;
+
+        const candidates = (await semanticSearch(candidateInput))
+            .flatMap((hit) => (hit.memory ? [hit.memory] : []));
+        if (candidates.length === 0) {
+            return { permissionDecision: 'allow' };
+        }
+
+        const picked = await pickMemories(state.nvim, candidates, {
+            title: memoryKind === 'revisit' ? 'Select revisits for semantic search' : 'Select memories for semantic search',
+        });
+        if (!picked || picked.length === 0) {
+            return {
+                permissionDecision: 'deny',
+                permissionDecisionReason: 'No memories were selected. Continue without memory context and do not repeat this semantic search unless the user asks.',
+            };
+        }
+
+        return {
+            permissionDecision: 'allow',
+            modifiedArgs: { ...args, selectedIds: picked.map((entry) => entry.id) },
+            additionalContext: `User selected ${picked.length} ${picked.length === 1 ? 'memory' : 'memories'} from the picker. Use only the selected memory results below.`,
+        };
+    }
+
+    return undefined;
+}
+
 export async function handlePreToolUse(
     state: AgentConversationState,
     input: AgentPreToolUseHookInput
@@ -616,6 +726,11 @@ export async function handlePreToolUse(
 
     if (shouldAutoApproveTool(input.toolName)) {
         return { permissionDecision: 'allow' };
+    }
+
+    const memoryIntercept = await maybeInterceptMemoryRead(state, input);
+    if (memoryIntercept) {
+        return memoryIntercept;
     }
 
     // Intercept large file reads: return an outline and direct the model to the

@@ -52,8 +52,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
     await createAgentChatFile(chatFile);
 
     const nvimClient = await openAgentNeovim(chatFile);
-    const indexingResult = await runStartupIndexingFlow(nvimClient, cwd);
-    const semanticSearchEnabled = indexingResult.semanticSearchEnabled;
+    await runStartupIndexingFlow(nvimClient, cwd);
 
     const userMcpServers = await getConfiguredMcpServers();
     const mcpServers = {
@@ -79,12 +78,8 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
                 'recall',
                 'update_memory',
                 'edit_memory',
-                ...(semanticSearchEnabled ? ['semantic_search'] : []),
+                'semantic_search',
             ],
-            env: {
-                ...process.env,
-                KRA_MEMORY_SEMANTIC_SEARCH_ENABLED: semanticSearchEnabled ? '1' : '0',
-            },
         },
     };
     const stateRef: { current?: AgentConversationState } = {};
@@ -130,7 +125,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             // Run bash post-snapshot if pre-snapshot was taken.
             if (isBashLike && stateRef.current?.pendingBashSnapshot) {
                 const snapshot = stateRef.current.pendingBashSnapshot;
-                 
+
                 delete (stateRef.current as Partial<AgentConversationState>).pendingBashSnapshot;
                 await stateRef.current.history.bashSnapshotAfter(snapshot).catch(() => { /* non-fatal */ });
             }
@@ -211,6 +206,7 @@ Critical rule: Every line between startLine and endLine will be REPLACED with yo
   - Do NOT include unchanged lines 100–141 and 146–180 in your newContent
   - If only line 88 changes, use startLine:88 endLine:88 (single-line range: 88–88)
   - Do NOT pass the whole 100-line range just because you read it
+  - Do NOT use any other tool except edit_lines to change code in a file
 
 For multiple changes in the same file:
   - Use the multi-edit array form with several tight ranges
@@ -246,15 +242,20 @@ Ideas discussed and intentionally deferred, awaiting human input. Have status \`
 - When the user defers an idea → \`remember({ kind: 'revisit', … })\`
 Include enough detail in \`body\` that a future session can act without re-investigating. Always set \`paths\` when relevant.
 
-**When to read:**
-- \`recall({ kind, query?, tagsAny?, status? })\` — \`kind\` is **required**. With \`query\`: vector search. Without \`query\`: list mode (newest first), e.g. \`recall({ kind: 'revisit', status: 'open' })\` to surface open revisits at session start in a familiar area.
-- Call \`recall\` at the start of work in a familiar area, or whenever you suspect past context exists.
+**Discovery-first rule:**
+- For any new non-trivial bug, feature, investigation, or unfamiliar request, start with \`semantic_search({ query: <problem>, scope: 'both', memoryKind: 'findings' })\`.
+- Skip that kickoff only when the user already gave an exact file, exact symbol, exact path, or literal string, or when the task is a tiny local edit.
+- Do **not** start with \`kra-file-context:search\` for a new conceptual problem. Use \`search\` for exact symbol/string/path lookups; use \`semantic_search\` for questions like "where does this happen?", "what handles this?", or "what code path matches this behavior?".
+- Do one broad semantic pass first. If it returns weak or noisy results, move on to targeted \`search\` / \`lsp_query\` instead of repeating broad semantic queries.
+
+**When to read memory:**
+- \`recall({ kind, query?, tagsAny?, status? })\` — \`kind\` is **required**. Use \`kind: 'findings'\` for long-term memories, \`kind: 'revisit'\` for parked discussions, or a specific finding kind to narrow the findings table. With \`query\`, it runs vector search. Without \`query\`, it uses list mode (newest first).
+- Use \`recall\` mainly for listing/filtering or revisits — not as the first step for conceptual discovery when \`semantic_search\` fits.
 
 **\`semantic_search\` — conceptual search across the codebase (and optionally memory):**
 - \`semantic_search({ query, scope?, memoryKind?, pathGlob?, k? })\`
-- \`scope\` is \`code\` (default), \`memory\`, or \`both\`. **When \`scope\` includes memory, \`memoryKind\` is required** (which table to search).
-- Use it for "where does X happen" / "what handles Y" when you don't know the exact symbol. **No source code is ever returned.** Each code hit is ONE entry per matched file with parallel \`startLines\` / \`endLines\` arrays of merged matched ranges, plus an annotated \`outline\` whose entries carry a \`matched: true\` flag indicating which symbols overlap those ranges. Pipe \`startLines\`/\`endLines\` straight into \`read_lines\`, or read just the symbols flagged \`matched\` via \`read_function\`.
-- For known string/symbol lookups, prefer \`kra-file-context:search\` (ripgrep). The two are complementary.
+- \`scope\` is \`code\` (default), \`memory\`, or \`both\`. When \`scope\` includes memory, pass \`memoryKind: 'findings'\` for long-term memories, \`memoryKind: 'revisit'\` for parked discussions, or a specific finding kind to narrow the findings table.
+- Prefer it as the **first-step discovery tool** for unfamiliar codebase questions and prior-memory retrieval.
 
 **Editing & lifecycle:**
 - \`edit_memory({ id, title?, body?, tags?, paths? })\` — refine an existing entry in place. Re-embeds the vector when \`title\` or \`body\` changes. Use this instead of creating a near-duplicate.

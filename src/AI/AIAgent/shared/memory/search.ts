@@ -10,10 +10,12 @@ import { getCodeChunksTable, getFindingsTable, getRevisitsTable } from './db';
 import { matchGlob } from './indexer';
 import {
     decodeRow,
-    isRevisitKind,
+    isFindingKind,
+    isMemoryLookupKind,
+    MEMORY_LOOKUP_KINDS,
     type CodeChunkRow,
     type CodeFileHitData,
-    type MemoryKind,
+    type MemoryLookupKind,
     type MemoryRow,
     type SemanticSearchHit,
     type SemanticSearchInput,
@@ -45,11 +47,11 @@ export async function semanticSearch(input: SemanticSearchInput): Promise<Semant
     }
 
     if (scope === 'memory' || scope === 'both') {
-        if (!input.memoryKind) {
-            throw new Error("semanticSearch: 'memoryKind' is required when scope includes 'memory'");
+        if (!input.memoryKind || !isMemoryLookupKind(input.memoryKind)) {
+            throw new Error(`semanticSearch: 'memoryKind' is required when scope includes 'memory' and must be one of: ${MEMORY_LOOKUP_KINDS.join(', ')}`);
         }
 
-        hits.push(...await searchMemory(queryVector, k, input.memoryKind));
+        hits.push(...await searchMemory(queryVector, k, input.memoryKind, input.selectedIds));
     }
 
     const filtered = hits.filter((h) => h.score >= MIN_SCORE);
@@ -92,20 +94,34 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
     }));
 }
 
-async function searchMemory(vector: number[], k: number, kind: MemoryKind): Promise<SemanticSearchHit[]> {
-    const getter = isRevisitKind(kind) ? getRevisitsTable : getFindingsTable;
+async function searchMemory(vector: number[], k: number, kind: MemoryLookupKind, selectedIds?: string[]): Promise<SemanticSearchHit[]> {
+    const getter = kind === 'findings' || isFindingKind(kind) ? getFindingsTable : getRevisitsTable;
     const { table } = await getter(null);
 
     if (!table) return [];
 
-    // Findings table holds multiple kinds; filter to the requested one.
-    // Revisits table only has 'revisit' rows so the filter is a no-op there.
+    const selectedIdSet = selectedIds !== undefined ? new Set(selectedIds.filter((id): id is string => typeof id === 'string' && id.length > 0)) : undefined;
+
     const fetchK = Math.min(k * 4, 200);
     const rows = await table.search(vector).limit(fetchK).toArray();
 
     return rows
         .map(toMemoryHit)
-        .filter((hit) => hit.memory?.kind === kind)
+        .filter((hit) => {
+            if (!hit.memory) {
+                return false;
+            }
+
+            if (kind !== 'findings' && hit.memory.kind !== kind) {
+                return false;
+            }
+
+            if (selectedIdSet !== undefined && !selectedIdSet.has(hit.memory.id)) {
+                return false;
+            }
+
+            return true;
+        })
         .slice(0, k);
 }
 

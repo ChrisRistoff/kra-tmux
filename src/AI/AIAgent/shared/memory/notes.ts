@@ -13,11 +13,13 @@ import { getFindingsTable, getRevisitsTable } from './db';
 import {
     decodeRow,
     isFindingKind,
+    isMemoryLookupKind,
     isRevisitKind,
-    MEMORY_KINDS,
+    MEMORY_LOOKUP_KINDS,
     type EditMemoryInput,
     type MemoryEntryWithScore,
     type MemoryKind,
+    type MemoryLookupKind,
     type MemoryRow,
     type RecallInput,
     type RememberInput,
@@ -68,6 +70,10 @@ function pickTableGetter(kind: MemoryKind): (seed: MemoryRow | null) => Promise<
     return isRevisitKind(kind) ? getRevisitsTable : getFindingsTable;
 }
 
+function pickReadTableGetter(kind: MemoryLookupKind): (seed: MemoryRow | null) => Promise<{ table: import('@lancedb/lancedb').Table | null; justCreated: boolean }> {
+    return kind === 'findings' || isFindingKind(kind) ? getFindingsTable : getRevisitsTable;
+}
+
 export async function remember(input: RememberInput): Promise<{ id: string }> {
     if (!input.title || !input.body) {
         throw new Error('remember: title and body are required');
@@ -108,14 +114,19 @@ export async function remember(input: RememberInput): Promise<{ id: string }> {
 
 async function readFromTable(
     table: import('@lancedb/lancedb').Table,
-    input: { query?: string; k?: number; tagsAny?: string[]; status?: MemoryEntryWithScore['status']; kind?: MemoryKind },
+    input: { query?: string; k?: number; tagsAny?: string[]; selectedIds?: string[]; status?: MemoryEntryWithScore['status']; kind?: MemoryLookupKind },
 ): Promise<MemoryEntryWithScore[]> {
     const k = Math.max(1, Math.min(input.k ?? DEFAULT_RECALL_K, 200));
     const tagFilter = sanitizeStringList(input.tagsAny);
+    const selectedIdSet = input.selectedIds !== undefined ? new Set(sanitizeStringList(input.selectedIds)) : undefined;
     const query = input.query?.trim() ?? '';
 
     const matchesFilters = (row: MemoryRow): boolean => {
-        if (input.kind && row.kind !== input.kind) {
+        if (input.kind && input.kind !== 'findings' && row.kind !== input.kind) {
+            return false;
+        }
+
+        if (selectedIdSet !== undefined && !selectedIdSet.has(row.id)) {
             return false;
         }
 
@@ -184,18 +195,18 @@ async function readFromTable(
 }
 
 export async function recall(input: RecallInput): Promise<MemoryEntryWithScore[]> {
-    if (!input.kind || (!isFindingKind(input.kind) && !isRevisitKind(input.kind))) {
-        throw new Error(`recall: 'kind' is required and must be one of: ${MEMORY_KINDS.join(', ')}`);
+    if (!isMemoryLookupKind(input.kind)) {
+        throw new Error(`recall: 'kind' is required and must be one of: ${MEMORY_LOOKUP_KINDS.join(', ')}`);
     }
 
-    const getter = pickTableGetter(input.kind);
+    const getter = pickReadTableGetter(input.kind);
     const { table } = await getter(null);
 
     if (!table) {
         return [];
     }
 
-    const subInput: { kind: MemoryKind; query?: string; k?: number; tagsAny?: string[]; status?: MemoryEntryWithScore['status'] } = {
+    const subInput: { kind: MemoryLookupKind; query?: string; k?: number; selectedIds?: string[]; tagsAny?: string[]; status?: MemoryEntryWithScore['status'] } = {
         kind: input.kind,
     };
     if (input.query !== undefined) {
@@ -203,6 +214,9 @@ export async function recall(input: RecallInput): Promise<MemoryEntryWithScore[]
     }
     if (input.k !== undefined) {
         subInput.k = input.k;
+    }
+    if (input.selectedIds !== undefined) {
+        subInput.selectedIds = input.selectedIds;
     }
     if (input.tagsAny !== undefined) {
         subInput.tagsAny = input.tagsAny;

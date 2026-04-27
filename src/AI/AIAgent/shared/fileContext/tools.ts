@@ -127,6 +127,8 @@ export const TOOLS = [
         name: 'search',
         description: [
             'Unified file finder + content grep. Replaces the built-in grep/glob tools.',
+            'Use this for exact symbol, literal string, or file/path lookups once you know what token you want to search for.',
+            'For conceptual discovery or unfamiliar code paths, prefer `semantic_search` first.',
             'Provide name_pattern (glob) to filter by file name/path, content_pattern (regex) to search file contents, or both to intersect.',
             'Every result is annotated with the file\'s line count as `path (N lines)` so you can decide whether to read the whole file with read_lines or use get_outline first.',
             'A file under ~100 lines can usually just be read whole — no need for get_outline.',
