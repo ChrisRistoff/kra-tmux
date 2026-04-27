@@ -4,6 +4,7 @@ import path from 'path';
 import * as neovim from 'neovim';
 import type { VimValue } from 'neovim/lib/types/VimValue';
 import {
+    buildInsertionOnlyEdit,
     coerceNumber,
     coerceNumberArray,
     extractEditLinesRequest,
@@ -919,12 +920,16 @@ export async function handlePreToolUse(
                 const newContents: string[] = [];
 
                 if (editEnd < editStart) {
-                    const safeLine = Math.min(Math.max(editStart, 1), Math.max(beforeLines.length, 1));
-                    const original = beforeLines[safeLine - 1] ?? '';
-                    const inserted = afterLines.slice(newSliceStart, newSliceEnd).join('\n');
+                    const { safeLine, newContent } = buildInsertionOnlyEdit(
+                        beforeLines,
+                        afterLines,
+                        cp,
+                        newSliceStart,
+                        newSliceEnd
+                    );
                     newStarts.push(safeLine);
                     newEnds.push(safeLine);
-                    newContents.push(inserted ? `${original}\n${inserted}` : original);
+                    newContents.push(newContent);
                 } else {
                     const beforeSpan = editEnd - editStart + 1;
                     if (beforeSpan <= EDIT_LINES_HARD_CAP) {

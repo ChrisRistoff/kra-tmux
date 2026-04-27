@@ -1,5 +1,6 @@
 import path from 'path';
 import {
+    buildInsertionOnlyEdit,
     extractEditRequest,
     extractWriteRequest,
     getToolArgsRecord,
@@ -59,5 +60,35 @@ describe('agentToolApproval helpers', () => {
         expect(getToolArgsRecord('bash -lc ls')).toBeUndefined();
         expect(extractWriteRequest({ path: 'src/file.ts' }, '/tmp/workspace')).toBeUndefined();
         expect(extractEditRequest({ path: 'src/file.ts' }, '/tmp/workspace')).toBeUndefined();
+    });
+
+    it('keeps inserted lines before a closing brace anchor', () => {
+        const beforeLines = 'if (x) {\n}\n'.split('\n');
+        const afterLines = 'if (x) {\n  work();\n}\n'.split('\n');
+
+        expect(buildInsertionOnlyEdit(beforeLines, afterLines, 1, 1, 2)).toEqual({
+            safeLine: 2,
+            newContent: '  work();\n}',
+        });
+    });
+
+    it('avoids an extra blank line when appending into a trailing newline sentinel', () => {
+        const beforeLines = 'if (x) {\n}\n'.split('\n');
+        const afterLines = 'if (x) {\n}\nnext();\n'.split('\n');
+
+        expect(buildInsertionOnlyEdit(beforeLines, afterLines, 2, 2, 3)).toEqual({
+            safeLine: 3,
+            newContent: 'next();\n',
+        });
+    });
+
+    it('keeps the last real line first when appending without a trailing newline', () => {
+        const beforeLines = 'if (x) {\n}'.split('\n');
+        const afterLines = 'if (x) {\n}\nnext();'.split('\n');
+
+        expect(buildInsertionOnlyEdit(beforeLines, afterLines, 2, 2, 3)).toEqual({
+            safeLine: 2,
+            newContent: '}\nnext();',
+        });
     });
 });

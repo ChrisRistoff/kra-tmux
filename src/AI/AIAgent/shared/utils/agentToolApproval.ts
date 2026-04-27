@@ -213,3 +213,23 @@ export function extractEditLinesRequest(toolArgs: unknown, workspacePath: string
     return { displayPath: rawPath, endLine, newContent, startLine, targetPath };
 }
 
+export function buildInsertionOnlyEdit(
+    beforeLines: string[],
+    afterLines: string[],
+    commonPrefixLines: number,
+    newSliceStart: number,
+    newSliceEnd: number
+): { safeLine: number, newContent: string } {
+    const safeLine = Math.min(Math.max(commonPrefixLines + 1, 1), Math.max(beforeLines.length, 1));
+    const original = beforeLines[safeLine - 1] ?? '';
+    const insertedLines = afterLines.slice(newSliceStart, newSliceEnd);
+
+    // Insertions inside the BEFORE file belong before the anchor line; true EOF
+    // appends without a trailing newline must keep the last real line first.
+    const insertBeforeAnchor = commonPrefixLines < beforeLines.length;
+    const replacementLines = insertBeforeAnchor
+        ? [...insertedLines, original]
+        : [original, ...insertedLines];
+
+    return { safeLine, newContent: replacementLines.join('\n') };
+}
