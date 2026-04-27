@@ -239,7 +239,7 @@ All key bindings below apply to **both** providers unless noted otherwise.
 |-----|--------|
 | `Enter` | Submit prompt |
 | `Ctrl+C` | Stop current agent turn |
-| `@` | Add file context (Telescope picker) |
+| `@` | Add file context(s) (Telescope picker; `<Tab>` multi-select, `+` marks selections) |
 | `r` | Remove a file from context |
 | `f` | Show active file contexts popup |
 | `Ctrl+X` | Clear all file contexts |

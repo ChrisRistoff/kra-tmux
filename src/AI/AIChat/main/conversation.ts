@@ -229,7 +229,7 @@ export async function initializeChatFile(filePath: string, userPrompt = false): 
 # AI Chat History\n\nThis file contains the conversation history between the user and AI.\n
         # ✨ Controls / Shortcuts:
         #   ⏎  Enter     → Save & Submit
-        #   📎  @        → Add File Context
+        #   📎  @        → Add File Context(s) (<Tab> multi-select, + marks selections, <CR> confirm, <Esc> cancel)
         #   ❌  r        → Remove File From Context
         #   📂  f        → Show Files Currently Context
         #   🗑️  <C-x>    → Clear Contexts

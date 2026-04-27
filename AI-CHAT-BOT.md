@@ -83,9 +83,9 @@ graph TB
 | Key | Action | Description |
 |-----|--------|-------------|
 | `⏎ Enter` | 🚀 Submit | Send message to AI (normal mode) |
-| `@ @` | 📎 Add File | Open Telescope file picker for context |
-| `f f` | 📂 Show Contexts | Display popup with active file contexts |
-| `r r` | 🗑️ Remove Context | Select and remove file from context |
+| `@` | 📎 Add File | Open Telescope file picker for context (`<Tab>` multi-select, `+` marks selections) |
+| `f` | 📂 Show Contexts | Display popup with active file contexts |
+| `r` | 🗑️ Remove Context | Select and remove file from context |
 | `Ctrl+X` | 🧹 Clear All | Remove all file contexts |
 | `Ctrl+C` | ⏹️ Stop Stream | Abort AI response generation |
 | `Space` | ✂️ Add Selection | Add visual selection to context (visual mode) |

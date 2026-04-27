@@ -15,7 +15,7 @@ export async function createAgentChatFile(chatFile: string): Promise<void> {
             # Controls / Shortcuts:
             #   Enter        -> Submit prompt
             #   Ctrl+c       -> Stop current agent turn
-            #   @            -> Add file context
+            #   @            -> Add file context(s) (<Tab> multi-select, + marks selections, <CR> confirm, <Esc> cancel)
             #   r            -> Remove file from context
             #   f            -> Show active file contexts
             #   Ctrl+x       -> Clear all contexts
