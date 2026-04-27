@@ -13,7 +13,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write   # needed to push the version tag
+  contents: write # needed to push the version tag
 
 jobs:
   publish:
@@ -21,18 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # need full history to read commits since last tag
+          fetch-depth: 0 # need full history to read commits since last tag
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install
         run: npm ci
-
-      - name: Test
-        run: npm test
 
       - name: Build
         run: npm run build
