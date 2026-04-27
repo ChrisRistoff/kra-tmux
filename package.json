@@ -1,20 +1,34 @@
 {
-    "name": "kra-cli",
+    "name": "kra-workflow",
     "_moduleAliases": {
         "@": "dest/src"
     },
-    "version": "1.0.2",
-    "description": "A cli helper for tmux and git, for now",
+    "version": "2.0.0",
+    "description": "CLI for tmux session management, git workflow helpers, and an AI agent layer.",
+    "keywords": ["tmux", "cli", "workflow", "git", "ai", "agent", "productivity"],
+    "engines": {
+        "node": ">=18"
+    },
     "bin": {
-        "kra": "dest/src/main.js"
+        "kra": "bin/kra.js"
     },
     "preferGlobal": true,
     "files": [
+        "bin",
         "dest",
-        "src"
+        "automationScripts",
+        "ai-files/init.lua",
+        "ai-files/lua",
+        "settings.toml.example",
+        "start.js",
+        "README.md",
+        "LICENSE.md",
+        "AGENT.md"
     ],
     "scripts": {
-        "postinstall": "tsc && node ./dest/automationScripts/automate.js",
+        "build": "tsc",
+        "prepublishOnly": "rm -rf dest && tsc",
+        "postinstall": "node bin/postinstall.js",
         "lint": "eslint --fix",
         "test": "jest"
     },

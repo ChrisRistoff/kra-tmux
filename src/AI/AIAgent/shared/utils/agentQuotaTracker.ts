@@ -1,10 +1,10 @@
 import * as fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
+import { kraHome } from '@/filePaths';
 
 const QUOTA_WARN_THRESHOLDS = [50, 25, 10];
-const QUOTA_CACHE_PATH = path.join(os.homedir(), '.local', 'share', 'kra-tmux', 'quota-cache.json');
+const quotaCachePath = (): string => path.join(kraHome(), 'quota-cache.json');
 
 /**
  * Listen for `assistant.usage` events on the session, persist quota snapshots
@@ -28,8 +28,9 @@ export function setupQuotaTracking(state: AgentConversationState): void {
             };
         }
 
-        fs.mkdir(path.dirname(QUOTA_CACHE_PATH), { recursive: true })
-            .then(async () => fs.writeFile(QUOTA_CACHE_PATH, JSON.stringify({ updatedAt: new Date().toISOString(), snapshots: cache }, null, 2)))
+        const cachePath = quotaCachePath();
+        fs.mkdir(path.dirname(cachePath), { recursive: true })
+            .then(async () => fs.writeFile(cachePath, JSON.stringify({ updatedAt: new Date().toISOString(), snapshots: cache }, null, 2)))
             .catch(() => { /* non-critical */ });
 
         for (const [quotaId, snap] of Object.entries(snapshots)) {

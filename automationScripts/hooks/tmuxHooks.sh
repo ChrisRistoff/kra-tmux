@@ -1,5 +1,9 @@
 #!/bin/bash
-UPDATE_SCRIPT="$HOME/programming/kra-tmux/dest/automationScripts/autosave/autoSaveManager.js"
+if [[ -z "$KRA_PACKAGE_ROOT" ]]; then
+    echo "tmuxHooks.sh: KRA_PACKAGE_ROOT not set; source kra-workflow's source-all.sh first." >&2
+    return 1 2>/dev/null || exit 1
+fi
+UPDATE_SCRIPT="$KRA_PACKAGE_ROOT/dest/automationScripts/autosave/autoSaveManager.js"
 
 # session hooks
 tmux set-hook -u session-created

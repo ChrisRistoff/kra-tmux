@@ -432,20 +432,39 @@ kra sys
 - **Zsh/Bash** shell environment
 
 ### ⚡ **Quick Installation**
+
+Install the published package globally:
+
 ```bash
-# Clone and setup
-git clone <repository-url>
-cd kra-workflow
+npm install -g kra-workflow
 
-# Install dependencies and configure integrations
-npm install -g
+# postinstall auto-creates ~/.kra/, copies a default settings.toml,
+# and patches your ~/.bashrc / ~/.zshrc / nvim init.lua.
 
-# Verify installation
+# Restart your shell (or `source ~/.bashrc`) to pick up the autocompletion
+# and tmux/neovim hooks, then run `kra`.
 kra
 ```
 
+Or install from a clone:
+
+```bash
+git clone https://github.com/ChrisRistoff/kra-tmux.git
+cd kra-tmux
+npm install
+npm run build
+npm install -g .
+kra
+```
+
+User data lives under `~/.kra/` by default. Override with `KRA_HOME=/path/to/dir`.
+If you previously had the project at `~/programming/kra-tmux/`, the first install
+will copy `settings.toml`, `git-files/`, `tmux-files/`, `ai-files/`,
+`system-files/`, and `lock-files/` from there into `~/.kra/` (originals are
+left in place).
+
 ### 📚 **Detailed Setup**
-For comprehensive installation instructions, environment configuration, and troubleshooting guides, please refer to our **[Installation Guide](installation.md)**.
+For comprehensive installation instructions, environment configuration, and troubleshooting guides, please refer to our **[Installation Guide](INSTALLATION.md)**.
 
 ---
 

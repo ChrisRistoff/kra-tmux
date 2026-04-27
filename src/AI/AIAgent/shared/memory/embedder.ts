@@ -8,9 +8,9 @@
  */
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { EmbeddingModel, FlagEmbedding } from 'fastembed';
+import { kraHome } from '@/filePaths';
 
 const MODEL = EmbeddingModel.BGESmallENV15;
 export const VECTOR_DIM = 384;
@@ -25,7 +25,7 @@ function defaultCacheDir(): string {
         return override;
     }
 
-    return path.join(os.homedir(), '.cache', 'kra-tmux', 'fastembed');
+    return path.join(kraHome(), 'cache', 'fastembed');
 }
 
 async function loadModel(): Promise<FlagEmbedding> {

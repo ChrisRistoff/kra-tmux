@@ -1,6 +1,19 @@
 local function setup_autosave()
-    local home = vim.fn.expand("~")
-    local script_path = home .. "/programming/kra-tmux/dest/automationScripts/autosave/autoSaveManager.js"
+    local pkg_root = vim.env.KRA_PACKAGE_ROOT
+    if not pkg_root or pkg_root == "" then
+        -- Fallback: derive from this file's location (.../automationScripts/hooks/neovimHooks.lua
+        -- when sourced directly from the package; or .../.config/nvim/lua/neovimHooks.lua
+        -- when copied during `kra init`). The copied case has no usable hint, so we
+        -- only use the derivation when the file lives under an automationScripts/ tree.
+        local source_path = debug.getinfo(1, "S").source:sub(2)
+        local maybe_root = source_path:match("^(.*)/automationScripts/hooks/neovimHooks%.lua$")
+        if maybe_root then pkg_root = maybe_root end
+    end
+    if not pkg_root or pkg_root == "" then
+        print("Autosave: KRA_PACKAGE_ROOT not set; skipping nvim autosave hook.")
+        return
+    end
+    local script_path = pkg_root .. "/dest/automationScripts/autosave/autoSaveManager.js"
 
     if vim.fn.filereadable(script_path) == 0 then
         print("Autosave: Script not found at " .. script_path)

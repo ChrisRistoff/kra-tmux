@@ -87,7 +87,7 @@ describe('modelCatalog', () => {
 
             await getModelCatalog('open-router', { forceRefresh: true });
 
-            const cacheFile = path.join(tmpHome, '.config', 'kra-tmux', 'model-catalog', 'open-router.json');
+            const cacheFile = path.join(tmpHome, '.kra', 'model-catalog', 'open-router.json');
 
             expect(fs.existsSync(cacheFile)).toBe(true);
 

@@ -7,7 +7,7 @@
  * endpoint does not include such metadata, a small static fallback table fills
  * in the well-known values.
  *
- * Results are cached on disk under `~/.config/kra-tmux/model-catalog/<provider>.json`
+ * Results are cached on disk under `~/.kra/model-catalog/<provider>.json`
  * with a 24-hour TTL. On network failure we return the most recently cached
  * snapshot (even if expired) and only fall through to the built-in static
  * lists if no cache exists.
@@ -19,8 +19,8 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
+import { kraHome } from '@/filePaths';
 import {
     type SupportedProvider,
     getProviderApiKey,
@@ -55,7 +55,7 @@ interface CacheEntry {
 }
 
 function cacheDir(): string {
-    return path.join(os.homedir(), '.config', 'kra-tmux', 'model-catalog');
+    return path.join(kraHome(), 'model-catalog');
 }
 
 function cachePath(provider: SupportedProvider): string {
