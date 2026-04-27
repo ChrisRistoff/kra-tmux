@@ -10,33 +10,7 @@
  * Run directly: node dest/AI/AIAgent/utils/sessionCompleteMcpServer.js
  */
 
-import * as readline from 'readline';
-
-interface JsonRpcRequest {
-    jsonrpc: '2.0';
-    id?: number | string | null;
-    method: string;
-    params?: unknown;
-}
-
-interface JsonRpcResponse {
-    jsonrpc: '2.0';
-    id: number | string | null;
-    result?: unknown;
-    error?: { code: number; message: string };
-}
-
-function send(response: JsonRpcResponse): void {
-    process.stdout.write(JSON.stringify(response) + '\n');
-}
-
-function sendResult(id: number | string | null, result: unknown): void {
-    send({ jsonrpc: '2.0', id: id ?? null, result });
-}
-
-function sendError(id: number | string | null, code: number, message: string): void {
-    send({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
-}
+import { runStdioMcpServer } from '../../mcp/stdioServer';
 
 const TOOL_DEFINITION = {
     name: 'confirm_task_complete',
@@ -66,64 +40,13 @@ const TOOL_DEFINITION = {
     },
 };
 
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
-
-rl.on('line', (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-        return;
-    }
-
-    let request: JsonRpcRequest;
-
-    try {
-        request = JSON.parse(trimmed) as JsonRpcRequest;
-    } catch {
-        // Malformed — ignore
-        return;
-    }
-
-    const id = request.id ?? null;
-
-    switch (request.method) {
-        case 'initialize':
-            sendResult(id, {
-                protocolVersion: '2024-11-05',
-                capabilities: { tools: {} },
-                serverInfo: { name: 'kra-session-complete', version: '1.0.0' },
-            });
-            break;
-
-        case 'notifications/initialized':
-            // No response for notifications
-            break;
-
-        case 'tools/list':
-            sendResult(id, { tools: [TOOL_DEFINITION] });
-            break;
-
-        case 'tools/call': {
-            // The real work happens in onPreToolUse. This just needs to
-            // return a valid result so the SDK doesn't error out in case
-            // onPreToolUse allows the call through.
-            sendResult(id, {
-                content: [{ type: 'text', text: 'User has been prompted. Continue based on their reply.' }],
-                isError: false,
-            });
-            break;
-        }
-
-        case 'ping':
-            sendResult(id, {});
-            break;
-
-        default:
-            sendError(id, -32601, `Method not found: ${request.method}`);
-            break;
-    }
-});
-
-rl.on('close', () => {
-    process.exit(0);
+runStdioMcpServer({
+    serverName: 'kra-session-complete',
+    tools: [TOOL_DEFINITION],
+    allowPing: true,
+    respondParseError: false,
+    handleToolCall: async () => ({
+        content: [{ type: 'text', text: 'User has been prompted. Continue based on their reply.' }],
+        isError: false,
+    }),
 });

@@ -8,6 +8,7 @@ import type {
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
+import { createExecutableToolBridge, disconnectPool } from '@/AI/AIAgent/mcp/executableToolBridge';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
 
 export interface CopilotClientWrapperOptions {
@@ -85,9 +86,9 @@ export class CopilotClientWrapper implements AgentClient {
         // provider is Copilot (whose SDK does not expose its internal MCP
         // clients).
         const kraServers: Record<string, MCPServerConfig> = {};
-        for (const [name, cfg] of Object.entries(options.mcpServers ?? {})) {
+        for (const [name, cfg] of Object.entries(options.mcpServers)) {
             if (name.startsWith('kra-')) {
-                kraServers[name] = cfg as MCPServerConfig;
+                kraServers[name] = cfg;
             }
         }
 
@@ -106,26 +107,12 @@ export class CopilotClientWrapper implements AgentClient {
 
         const session = sdkSession as unknown as AgentSession;
         if (sidePool) {
-            session.listExecutableTools = () => Array.from(sidePool!.tools.values()).map((t) => ({
-                title: `${t.server}:${t.originalName}`,
-                server: t.server,
-                name: t.originalName,
-            }));
-            session.executeTool = async (title, args) => {
-                const tool = Array.from(sidePool!.tools.values()).find(
-                    (t) => `${t.server}:${t.originalName}` === title
-                );
-                if (!tool) throw new Error(`Unknown tool: ${title}`);
-                const result = await tool.client.callTool({ name: tool.originalName, arguments: args });
-                const contentArray = (result.content ?? []) as Array<{ type: string; text?: string }>;
-                return contentArray
-                    .filter((p) => p.type === 'text' && typeof p.text === 'string')
-                    .map((p) => p.text)
-                    .join('\n');
-            };
+            const bridge = createExecutableToolBridge(() => sidePool);
+            session.listExecutableTools = bridge.listExecutableTools;
+            session.executeTool = bridge.executeTool;
             const originalDisconnect = session.disconnect.bind(session);
             session.disconnect = async () => {
-                try { await sidePool!.disconnect(); } catch { /* swallow */ }
+                await disconnectPool(sidePool, true);
                 await originalDisconnect();
             };
         }

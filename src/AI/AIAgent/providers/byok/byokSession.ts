@@ -35,6 +35,7 @@ import {
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
+import { createExecutableToolBridge, disconnectPool } from '@/AI/AIAgent/mcp/executableToolBridge';
 import { compactMessages, estimateTokens, isContextLengthError } from '@/AI/AIAgent/providers/byok/byokCompactor';
 
 const DEFAULT_SYSTEM_PROMPT = [
@@ -69,6 +70,7 @@ export class OpenAICompatibleSession implements AgentSession {
     private listeners: { [K in keyof AgentSessionEventMap]?: EventListener<K>[] } = {};
     private abortController: AbortController | undefined;
     private compactedThisTurn = false;
+    private readonly executableToolBridge = createExecutableToolBridge(() => this.mcp);
 
     public constructor(opts: OpenAICompatibleSessionOptions) {
         this.opts = opts.sessionOptions;
@@ -236,16 +238,12 @@ export class OpenAICompatibleSession implements AgentSession {
 
         for await (const chunk of stream) {
             chunkCount += 1;
-            const delta = chunk.choices[0]?.delta;
+            const delta = chunk.choices[0].delta;
 
             if (debug) {
                 process.stderr.write(
-                    `[byok] chunk #${chunkCount} content=${JSON.stringify(delta.content ?? null)} tool_calls=${delta.tool_calls?.length ?? 0} finish=${chunk.choices[0]?.finish_reason ?? ''}\n`
+                    `[byok] chunk #${chunkCount} content=${JSON.stringify(delta.content ?? null)} tool_calls=${delta.tool_calls?.length ?? 0} finish=${chunk.choices[0].finish_reason ?? ''}\n`
                 );
-            }
-
-            if (!delta) {
-                continue;
             }
 
             const reasoning =
@@ -443,29 +441,14 @@ export class OpenAICompatibleSession implements AgentSession {
 
     public disconnect: AgentSession['disconnect'] = async () => {
         this.abortController?.abort();
-        await this.mcp?.disconnect();
+        await disconnectPool(this.mcp);
     };
 
     public listExecutableTools: NonNullable<AgentSession['listExecutableTools']> = () => {
-        if (!this.mcp) return [];
-        return Array.from(this.mcp.tools.values()).map((t) => ({
-            title: `${t.server}:${t.originalName}`,
-            server: t.server,
-            name: t.originalName,
-        }));
+        return this.executableToolBridge.listExecutableTools();
     };
 
     public executeTool: NonNullable<AgentSession['executeTool']> = async (title, args) => {
-        if (!this.mcp) throw new Error('MCP pool not initialized');
-        const tool = Array.from(this.mcp.tools.values()).find(
-            (t) => `${t.server}:${t.originalName}` === title
-        );
-        if (!tool) throw new Error(`Unknown tool: ${title}`);
-        const result = await tool.client.callTool({ name: tool.originalName, arguments: args });
-        const contentArray = (result.content ?? []) as Array<{ type: string; text?: string }>;
-        return contentArray
-            .filter((p) => p.type === 'text' && typeof p.text === 'string')
-            .map((p) => p.text)
-            .join('\n');
+        return this.executableToolBridge.executeTool(title, args);
     };
 }

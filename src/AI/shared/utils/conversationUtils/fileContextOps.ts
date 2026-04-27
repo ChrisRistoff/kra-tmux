@@ -1,7 +1,6 @@
 import { NeovimClient } from "neovim";
-import { FileContext } from "@/AI/shared/types/aiTypes";
 import fs from 'fs/promises';
-import { fileContexts, getFileExtension } from './fileContexts';
+import { getFileExtension, upsertFileContext } from './fileContextStore';
 
 const MAX_FILE_BYTES = 300_000;
 
@@ -28,18 +27,6 @@ function buildContextSummary(
     return `📁 ${fileName} (${lineCount} lines, ${sizeKB}KB)\n\n\`\`\`${ext}\n// Full file content loaded: ${filePath}\n${hintLine}// File contains ${lineCount} lines of ${ext} code\n\`\`\`\n\n`;
 }
 
-/**
- * Upsert a file context entry, replacing any existing entry with the same path
- * (and, for partial entries, the same line range).
- */
-function upsertFileContext(ctx: FileContext): void {
-    const existingIndex = ctx.isPartial
-        ? fileContexts.findIndex(c => c.filePath === ctx.filePath && c.startLine === ctx.startLine && c.endLine === ctx.endLine)
-        : fileContexts.findIndex(c => c.filePath === ctx.filePath);
-
-    if (existingIndex >= 0) fileContexts[existingIndex] = ctx;
-    else fileContexts.push(ctx);
-}
 
 /**
  * Recursively collect all files inside a folder (skips hidden dirs and node_modules)
@@ -184,8 +171,12 @@ export async function addPartialFileContext(nvim: NeovimClient, chatFile: string
                 resolve('timeout');
             }, 60000);
 
-            handler = async (method: string, args: any[]) => {
-                if (method === 'file_selection' && args[0] === 'add_selection') {
+            handler = (method: string, args: any[]) => {
+                if (method !== 'file_selection' || args[0] !== 'add_selection') {
+                    return;
+                }
+
+                void (async (): Promise<void> => {
                     clearTimeout(timeout);
                     if (handler) {
                         nvim.removeListener('notification', handler);
@@ -232,7 +223,7 @@ export async function addPartialFileContext(nvim: NeovimClient, chatFile: string
                         await nvim.command('echohl ErrorMsg | echo "Error processing selection" | echohl None');
                         resolve('error');
                     }
-                }
+                })();
             };
 
             nvim.on('notification', handler);

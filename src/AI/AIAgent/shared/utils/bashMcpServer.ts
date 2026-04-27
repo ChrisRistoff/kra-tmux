@@ -9,33 +9,7 @@
  */
 
 import { exec } from 'child_process';
-import readline from 'readline';
-
-interface JsonRpcRequest {
-    jsonrpc: '2.0';
-    id?: number | string | null;
-    method: string;
-    params?: unknown;
-}
-
-interface JsonRpcResponse {
-    jsonrpc: '2.0';
-    id: number | string | null;
-    result?: unknown;
-    error?: { code: number; message: string };
-}
-
-function send(response: JsonRpcResponse): void {
-    process.stdout.write(JSON.stringify(response) + '\n');
-}
-
-function sendResult(id: number | string | null, result: unknown): void {
-    send({ jsonrpc: '2.0', id: id ?? null, result });
-}
-
-function sendError(id: number | string | null, code: number, message: string): void {
-    send({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
-}
+import { JsonRpcToolError, runStdioMcpServer } from '../../mcp/stdioServer';
 
 const TOOL_DEFINITION = {
     name: 'bash',
@@ -106,84 +80,25 @@ async function runBash(args: BashArgs): Promise<{ output: string; isError: boole
     });
 }
 
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
+runStdioMcpServer({
+    serverName: 'kra-bash',
+    tools: [TOOL_DEFINITION],
+    handleToolCall: async ({ params }) => {
+        const rawArgs = (params as { arguments?: unknown }).arguments;
+        const args = (rawArgs ?? {}) as Partial<BashArgs>;
 
-rl.on('line', (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-        return;
-    }
-
-    let request: JsonRpcRequest;
-
-    try {
-        request = JSON.parse(trimmed) as JsonRpcRequest;
-    } catch {
-        sendError(null, -32700, 'Parse error');
-
-        return;
-    }
-
-    const id = request.id ?? null;
-
-    void (async (): Promise<void> => {
-        try {
-            switch (request.method) {
-                case 'initialize':
-                    sendResult(id, {
-                        protocolVersion: '2024-11-05',
-                        capabilities: { tools: {} },
-                        serverInfo: { name: 'kra-bash', version: '1.0.0' },
-                    });
-
-                    return;
-
-                case 'notifications/initialized':
-                    return;
-
-                case 'tools/list':
-                    sendResult(id, { tools: [TOOL_DEFINITION] });
-
-                    return;
-
-                case 'tools/call': {
-                    const params = (request.params ?? {}) as { name?: string; arguments?: BashArgs };
-
-                    if (params.name !== 'bash') {
-                        sendError(id, -32601, `Unknown tool: ${params.name ?? '(none)'}`);
-
-                        return;
-                    }
-
-                    const args = params.arguments;
-
-                    if (!args || typeof args.command !== 'string') {
-                        sendError(id, -32602, 'Missing required argument: command');
-
-                        return;
-                    }
-
-                    const { output, isError } = await runBash(args);
-
-                    sendResult(id, {
-                        content: [{ type: 'text', text: output }],
-                        isError,
-                    });
-
-                    return;
-                }
-
-                default:
-                    sendError(id, -32601, `Method not found: ${request.method}`);
-            }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            sendError(id, -32603, `Internal error: ${message}`);
+        if (typeof args.command !== 'string') {
+            throw new JsonRpcToolError(-32602, 'Missing required argument: command');
         }
-    })();
-});
 
-rl.on('close', () => {
-    process.exit(0);
+        const { output, isError } = await runBash({
+            command: args.command,
+            ...(typeof args.timeoutMs === 'number' ? { timeoutMs: args.timeoutMs } : {}),
+        });
+
+        return {
+            content: [{ type: 'text', text: output }],
+            isError,
+        };
+    },
 });

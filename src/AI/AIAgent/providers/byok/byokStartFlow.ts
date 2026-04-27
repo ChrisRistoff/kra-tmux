@@ -14,10 +14,9 @@
  * add a live fetcher branch in `src/AI/shared/data/modelCatalog.ts`.
  */
 
-import path from 'path';
 import * as conversation from '@/AI/AIAgent/shared/main/agentConversation';
 import * as ui from '@/UI/generalUI';
-import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
+import { buildByokExtraMcpServers } from '@/AI/AIAgent/mcp/serverConfig';
 import {
     SUPPORTED_PROVIDERS,
     type SupportedProvider,
@@ -68,25 +67,6 @@ async function pickModel(provider: SupportedProvider): Promise<ModelInfo> {
     return picked;
 }
 
-function buildAdditionalMcpServers(): Record<string, MCPServerConfig> {
-    const bashServerJs = path.join(__dirname, '..', '..', 'shared', 'utils', 'bashMcpServer.js');
-    const webServerJs = path.join(__dirname, '..', '..', 'shared', 'utils', 'webMcpServer.js');
-
-    return {
-        'kra-bash': {
-            type: 'stdio',
-            command: process.execPath,
-            args: [bashServerJs],
-            tools: ['bash'],
-        },
-        'kra-web': {
-            type: 'stdio',
-            command: process.execPath,
-            args: [webServerJs],
-            tools: ['web_fetch', 'web_search'],
-        },
-    };
-}
 
 export async function startByokFlow(): Promise<void> {
     const provider = await pickProvider();
@@ -100,7 +80,7 @@ export async function startByokFlow(): Promise<void> {
         await conversation.converseAgent({
             client,
             model: model.id,
-            additionalMcpServers: buildAdditionalMcpServers(),
+            additionalMcpServers: buildByokExtraMcpServers(),
             ...(model.contextWindow > 0 ? { contextWindow: model.contextWindow } : {}),
         });
     } catch (error) {

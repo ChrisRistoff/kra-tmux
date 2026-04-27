@@ -15,35 +15,9 @@
  * can still rate-limit. We send a realistic browser User-Agent to reduce that.
  */
 
-import readline from 'readline';
 import * as cheerio from 'cheerio';
 import { convert as htmlToTextLib } from 'html-to-text';
-
-interface JsonRpcRequest {
-    jsonrpc: '2.0';
-    id?: number | string | null;
-    method: string;
-    params?: unknown;
-}
-
-interface JsonRpcResponse {
-    jsonrpc: '2.0';
-    id: number | string | null;
-    result?: unknown;
-    error?: { code: number; message: string };
-}
-
-function send(response: JsonRpcResponse): void {
-    process.stdout.write(JSON.stringify(response) + '\n');
-}
-
-function sendResult(id: number | string | null, result: unknown): void {
-    send({ jsonrpc: '2.0', id: id ?? null, result });
-}
-
-function sendError(id: number | string | null, code: number, message: string): void {
-    send({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
-}
+import { JsonRpcToolError, runStdioMcpServer } from '../../mcp/stdioServer';
 
 const DEFAULT_MAX_LENGTH = 8_000;
 const HARD_MAX_LENGTH = 50_000;
@@ -351,109 +325,46 @@ async function runWebSearch(args: WebSearchArgs): Promise<{ output: string; isEr
 
 const TOOLS = [WEB_FETCH_TOOL, WEB_SEARCH_TOOL];
 
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
+runStdioMcpServer({
+    serverName: 'kra-web',
+    tools: TOOLS,
+    handleToolCall: async ({ toolName, params }) => {
+        const callParams = (params ?? {}) as { arguments?: unknown };
+        const rawArgs = callParams.arguments;
+        const args = (typeof rawArgs === 'object' && rawArgs !== null ? rawArgs : {}) as Partial<WebFetchArgs & WebSearchArgs>;
 
-rl.on('line', (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-        return;
-    }
-
-    let request: JsonRpcRequest;
-
-    try {
-        request = JSON.parse(trimmed) as JsonRpcRequest;
-    } catch {
-        sendError(null, -32700, 'Parse error');
-
-        return;
-    }
-
-    const id = request.id ?? null;
-
-    void (async (): Promise<void> => {
-        try {
-            switch (request.method) {
-                case 'initialize':
-                    sendResult(id, {
-                        protocolVersion: '2024-11-05',
-                        capabilities: { tools: {} },
-                        serverInfo: { name: 'kra-web', version: '1.0.0' },
-                    });
-
-                    return;
-
-                case 'notifications/initialized':
-                    return;
-
-                case 'tools/list':
-                    sendResult(id, { tools: TOOLS });
-
-                    return;
-
-                case 'tools/call': {
-                    const params = (request.params ?? {}) as {
-                        name?: string;
-                        arguments?: WebFetchArgs & WebSearchArgs;
-                    };
-                    const args: Partial<WebFetchArgs & WebSearchArgs> = params.arguments ?? {};
-
-                    if (params.name === 'web_fetch') {
-                        if (typeof args.url !== 'string') {
-                            sendError(id, -32602, 'Missing required argument: url');
-
-                            return;
-                        }
-
-                        const { output, isError } = await runWebFetch({
-                            url: args.url,
-                            ...(args.max_length !== undefined ? { max_length: args.max_length } : {}),
-                        });
-
-                        sendResult(id, {
-                            content: [{ type: 'text', text: output }],
-                            isError,
-                        });
-
-                        return;
-                    }
-
-                    if (params.name === 'web_search') {
-                        if (typeof args.query !== 'string') {
-                            sendError(id, -32602, 'Missing required argument: query');
-
-                            return;
-                        }
-
-                        const { output, isError } = await runWebSearch({
-                            query: args.query,
-                            ...(args.max_results !== undefined ? { max_results: args.max_results } : {}),
-                        });
-
-                        sendResult(id, {
-                            content: [{ type: 'text', text: output }],
-                            isError,
-                        });
-
-                        return;
-                    }
-
-                    sendError(id, -32601, `Unknown tool: ${params.name ?? '(none)'}`);
-
-                    return;
-                }
-
-                default:
-                    sendError(id, -32601, `Method not found: ${request.method}`);
+        if (toolName === 'web_fetch') {
+            if (typeof args.url !== 'string') {
+                throw new JsonRpcToolError(-32602, 'Missing required argument: url');
             }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            sendError(id, -32603, `Internal error: ${message}`);
-        }
-    })();
-});
 
-rl.on('close', () => {
-    process.exit(0);
+            const { output, isError } = await runWebFetch({
+                url: args.url,
+                ...(args.max_length !== undefined ? { max_length: args.max_length } : {}),
+            });
+
+            return {
+                content: [{ type: 'text', text: output }],
+                isError,
+            };
+        }
+
+        if (toolName === 'web_search') {
+            if (typeof args.query !== 'string') {
+                throw new JsonRpcToolError(-32602, 'Missing required argument: query');
+            }
+
+            const { output, isError } = await runWebSearch({
+                query: args.query,
+                ...(args.max_results !== undefined ? { max_results: args.max_results } : {}),
+            });
+
+            return {
+                content: [{ type: 'text', text: output }],
+                isError,
+            };
+        }
+
+        throw new JsonRpcToolError(-32601, `Unknown tool: ${toolName || '(none)'}`);
+    },
 });

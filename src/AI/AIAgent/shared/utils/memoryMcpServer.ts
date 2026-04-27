@@ -8,37 +8,12 @@
  * scoped per agent workspace.
  */
 
-import readline from 'readline';
+import { runStdioMcpServer } from '../../mcp/stdioServer';
 import 'module-alias/register';
 import { editMemory, recall, remember, updateMemory } from '../memory/notes';
 import { semanticSearch } from '../memory/search';
 import { MEMORY_KINDS, MEMORY_LOOKUP_KINDS, MEMORY_STATUSES } from '../memory/types';
 
-interface JsonRpcRequest {
-    jsonrpc: '2.0';
-    id?: number | string | null;
-    method: string;
-    params?: unknown;
-}
-
-interface JsonRpcResponse {
-    jsonrpc: '2.0';
-    id: number | string | null;
-    result?: unknown;
-    error?: { code: number; message: string };
-}
-
-function send(response: JsonRpcResponse): void {
-    process.stdout.write(JSON.stringify(response) + '\n');
-}
-
-function sendResult(id: number | string | null, result: unknown): void {
-    send({ jsonrpc: '2.0', id: id ?? null, result });
-}
-
-function sendError(id: number | string | null, code: number, message: string): void {
-    send({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
-}
 
 const REMEMBER_TOOL = {
     name: 'remember',
@@ -179,94 +154,29 @@ async function dispatchTool(name: ToolName, args: Record<string, unknown>): Prom
     }
 }
 
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
+runStdioMcpServer({
+    serverName: 'kra-memory',
+    tools: TOOLS,
+    handleToolCall: async ({ toolName, params }) => {
+        const callParams = (params ?? {}) as { arguments?: unknown };
+        const rawArgs = callParams.arguments;
+        const args = (typeof rawArgs === 'object' && rawArgs !== null ? rawArgs : {}) as Record<string, unknown>;
+        const result = await dispatchTool(toolName, args);
 
-let pending = 0;
-let inputClosed = false;
+        return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: false,
+        };
+    },
+    onInternalError: (error) => {
+        const message = error instanceof Error ? error.message : String(error);
 
-function maybeExit(): void {
-    if (inputClosed && pending === 0) {
-        process.exit(0);
-    }
-}
-
-rl.on('line', (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-        return;
-    }
-
-    let request: JsonRpcRequest;
-
-    try {
-        request = JSON.parse(trimmed) as JsonRpcRequest;
-    } catch {
-        sendError(null, -32700, 'Parse error');
-
-        return;
-    }
-
-    const id = request.id ?? null;
-
-    pending++;
-    void (async (): Promise<void> => {
-        try {
-            switch (request.method) {
-                case 'initialize':
-                    sendResult(id, {
-                        protocolVersion: '2024-11-05',
-                        capabilities: { tools: {} },
-                        serverInfo: { name: 'kra-memory', version: '1.0.0' },
-                    });
-
-                    return;
-
-                case 'notifications/initialized':
-                    return;
-
-                case 'tools/list':
-                    sendResult(id, { tools: TOOLS });
-
-                    return;
-
-                case 'tools/call': {
-                    const params = (request.params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
-                    const toolName = params.name;
-
-                    if (!toolName || !TOOLS.some((t) => t.name === toolName)) {
-                        sendError(id, -32601, `Unknown tool: ${toolName ?? '(none)'}`);
-
-                        return;
-                    }
-
-                    const result = await dispatchTool(toolName, params.arguments ?? {});
-
-                    sendResult(id, {
-                        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-                        isError: false,
-                    });
-
-                    return;
-                }
-
-                default:
-                    sendError(id, -32601, `Method not found: ${request.method}`);
-            }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            sendResult(id, {
+        return {
+            kind: 'result',
+            result: {
                 content: [{ type: 'text', text: `Error: ${message}` }],
                 isError: true,
-            });
-        } finally {
-            pending--;
-            maybeExit();
-        }
-    })();
-});
-
-rl.on('close', () => {
-    inputClosed = true;
-    maybeExit();
+            },
+        };
+    },
 });
