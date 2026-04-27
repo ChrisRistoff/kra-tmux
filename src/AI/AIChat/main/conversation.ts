@@ -8,8 +8,9 @@ import { ChatHistory, Role, StreamController } from '@/AI/shared/types/aiTypes'
 import * as bash from '@/utils/bashHelper';
 import { openVim } from '@/utils/neovimHelper';
 import { neovimConfig } from '@/filePaths';
-import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
-import * as fileContext from '@/AI/shared/utils/conversationUtils/fileContexts'
+import * as conversation from '@/AI/shared/conversation';
+const aiNeovimHelper = conversation;
+const fileContext = conversation;
 
 // stream controller for the current request
 let currentStreamController: StreamController | null = null;

@@ -10,7 +10,7 @@ import {
     summarizeToolCall,
 } from '@/AI/AIAgent/shared/utils/agentUi';
 import * as bash from '@/utils/bashHelper';
-import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
+import * as aiNeovimHelper from '@/AI/shared/conversation';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
 import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';

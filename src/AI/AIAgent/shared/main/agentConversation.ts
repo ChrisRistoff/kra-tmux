@@ -1,10 +1,8 @@
 import * as fs from 'fs/promises';
-import path from 'path';
-import { getConfiguredMcpServers } from '@/AI/AIAgent/shared/utils/agentSettings';
 import { execCommand } from '@/utils/bashHelper';
 import { createAgentHistory } from '@/AI/AIAgent/shared/utils/agentHistory';
-import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
-import * as fileContext from '@/AI/shared/utils/conversationUtils/fileContexts';
+import { buildCoreMcpServers } from '@/AI/AIAgent/mcp/serverConfig';
+import * as conversation from '@/AI/shared/conversation';
 import type {
     AgentConversationOptions,
     AgentConversationState,
@@ -26,7 +24,8 @@ import {
 } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import { getErrorMessage, setupEventHandlers } from '@/AI/AIAgent/shared/main/agentPromptActions';
 
-
+const aiNeovimHelper = conversation;
+const fileContext = conversation;
 
 async function cleanup(state: AgentConversationState): Promise<void> {
     fileContext.clearFileContexts();
@@ -54,34 +53,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
     const nvimClient = await openAgentNeovim(chatFile);
     await runStartupIndexingFlow(nvimClient, cwd);
 
-    const userMcpServers = await getConfiguredMcpServers();
-    const mcpServers = {
-        ...userMcpServers,
-        'kra-session-complete': {
-            type: 'stdio' as const,
-            command: process.execPath,
-            args: [path.join(__dirname, '..', 'utils', 'sessionCompleteMcpServer.js')],
-            tools: ['confirm_task_complete'],
-        },
-        'kra-file-context': {
-            type: 'stdio' as const,
-            command: process.execPath,
-            args: [path.join(__dirname, '..', 'utils', 'fileContextMcpServer.js')],
-            tools: ['get_outline', 'read_lines', 'read_function', 'edit_lines', 'create_file', 'search', 'lsp_query'],
-        },
-        'kra-memory': {
-            type: 'stdio' as const,
-            command: process.execPath,
-            args: [path.join(__dirname, '..', 'utils', 'memoryMcpServer.js')],
-            tools: [
-                'remember',
-                'recall',
-                'update_memory',
-                'edit_memory',
-                'semantic_search',
-            ],
-        },
-    };
+    const mcpServers = await buildCoreMcpServers();
     const stateRef: { current?: AgentConversationState } = {};
     const mergedMcpServers = {
         ...mcpServers,

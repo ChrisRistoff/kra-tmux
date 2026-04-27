@@ -1,11 +1,11 @@
-import { fileTypes } from "@/AI/shared/data/filetypes";
-import { FileContext } from "@/AI/shared/types/aiTypes";
 import { NeovimClient } from "neovim";
 import fs from 'fs/promises';
+import { formatContextPopupEntry, formatContextSummary } from './fileContextDisplay';
 import { selectContextToRemove, selectFileOrFolder, promptShareMode, selectFileFromFolder } from './fileContextPickers';
 import { addFolderContext, addEntireFileContext, addPartialFileContext } from './fileContextOps';
+import { clearStoredFileContexts, fileContexts, getContextFileName, getFileExtension } from './fileContextStore';
 
-export const fileContexts: FileContext[] = [];
+export { fileContexts, getFileExtension };
 
 export async function handleAddFileContext(nvim: NeovimClient, chatFile: string, options?: { agentMode?: boolean }): Promise<void> {
     try {
@@ -66,26 +66,15 @@ export async function handleAddFileContext(nvim: NeovimClient, chatFile: string,
 **/
 export async function clearAllFileContexts(nvim: NeovimClient): Promise<void> {
     const count = fileContexts.length;
-    fileContexts.length = 0;
+    clearStoredFileContexts();
     await nvim.command(`echohl MoreMsg | echo "Cleared ${count} file context(s)" | echohl None`);
 }
 
 /**
  * Clear file contexts array
 **/
-export const clearFileContexts = (): void => { fileContexts.length = 0; };
-
-/**
- * Get file extension for syntax highlighting
-**/
-export const getFileExtension = (filename: string): string => {
-    const idx = filename.lastIndexOf('.');
-
-    if (idx === -1) return 'text';
-
-    const ext = filename.slice(idx + 1).toLowerCase();
-
-    return fileTypes[ext] || ext || 'text';
+export const clearFileContexts = (): void => {
+    clearStoredFileContexts();
 };
 
 /**
@@ -120,13 +109,7 @@ export async function showFileContexts(nvim: NeovimClient): Promise<void> {
         return;
     }
 
-    const summaries = fileContexts.map(ctx => {
-        const fileName = ctx.filePath.split('/').pop() || ctx.filePath;
-
-        return ctx.isPartial
-            ? `${fileName} (${ctx.startLine === ctx.endLine ? `line ${ctx.startLine}` : `lines ${ctx.startLine}-${ctx.endLine}`})`
-            : `${fileName} (full file)`;
-    });
+    const summaries = fileContexts.map((context) => formatContextSummary(context));
 
     await nvim.command(`echohl MoreMsg | echo "Loaded contexts: ${summaries.join(', ')}" | echohl None`);
 }
@@ -194,7 +177,7 @@ export async function handleRemoveFileContext(nvim: NeovimClient): Promise<void>
 
         if (selectedIndex >= 0 && selectedIndex < fileContexts.length) {
             const removedContext = fileContexts.splice(selectedIndex, 1)[0];
-            const fileName = removedContext.filePath.split('/').pop() || removedContext.filePath;
+            const fileName = getContextFileName(removedContext.filePath);
             await nvim.command(`echohl MoreMsg | echo "Removed context: ${fileName}" | echohl None`);
             await showFileContextsPopup(nvim);
         } else {
@@ -219,21 +202,8 @@ export async function showFileContextsPopup(nvim: NeovimClient): Promise<void> {
     const popupLines: string[] = ['📁 Active File Contexts:', '', '💡 Tip: press "r" to remove files from the context', ''];
 
     for (const [index, context] of fileContexts.entries()) {
-        const fileName = context.filePath.split('/').pop() || context.filePath;
-
-        if (context.isPartial) {
-            const lineRange = context.startLine === context.endLine ? `line ${context.startLine}` : `lines ${context.startLine}-${context.endLine}`;
-            popupLines.push(`${index + 1}. 📄 ${fileName} (${lineRange})`, `   ${context.filePath}`, '');
-        } else {
-            try {
-                const content = await fs.readFile(context.filePath, 'utf-8');
-                const lineCount = content.split('\n').length;
-                const sizeKB = Math.round(content.length / 1024);
-                popupLines.push(`${index + 1}. 📁 ${fileName} (${lineCount} lines, ${sizeKB}KB)`, `   ${context.filePath}`, '');
-            } catch (_error) {
-                popupLines.push(`${index + 1}. ❌ ${fileName} (error reading file)`, `   ${context.filePath}`, '');
-            }
-        }
+        const entryLines = await formatContextPopupEntry(context, index);
+        popupLines.push(...entryLines);
     }
 
     popupLines.push('Press any key to close...');

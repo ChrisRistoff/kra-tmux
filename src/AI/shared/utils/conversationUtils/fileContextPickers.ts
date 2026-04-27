@@ -1,7 +1,6 @@
 import { NeovimClient } from "neovim";
-import { FileContext } from "@/AI/shared/types/aiTypes";
-import fs from 'fs/promises';
-import { fileContexts } from './fileContexts';
+import { formatContextPickerItem } from './fileContextDisplay';
+import { fileContexts } from './fileContextStore';
 
 export interface FilePickerSelection {
     path: string;
@@ -47,25 +46,9 @@ function isString(value: unknown): value is string {
  */
 export async function selectContextToRemove(nvim: NeovimClient): Promise<number | null> {
     const channelId = await nvim.channelId;
-    const displayItems = await Promise.all(fileContexts.map(async (context: FileContext, index: number) => {
-        const fileName = context.filePath.split('/').pop() || context.filePath;
-
-        if (context.isPartial) {
-            const lineRange = context.startLine === context.endLine ? `line ${context.startLine}` : `lines ${context.startLine}-${context.endLine}`;
-
-            return `${index + 1}. 📄 ${fileName} (${lineRange})`;
-        }
-
-        try {
-            const content = await fs.readFile(context.filePath, 'utf-8');
-            const lineCount = content.split('\n').length;
-            const sizeKB = Math.round(content.length / 1024);
-
-            return `${index + 1}. 📁 ${fileName} (${lineCount} lines, ${sizeKB}KB)`;
-        } catch (_error) {
-            return `${index + 1}. ❌ ${fileName} (error reading file)`;
-        }
-    }));
+    const displayItems = await Promise.all(
+        fileContexts.map(async (context, index) => formatContextPickerItem(context, index))
+    );
 
     return new Promise((resolve) => {
         const handler = (method: string, args: unknown[]): void => {

@@ -10,7 +10,7 @@ import * as nvim from '@/utils/neovimHelper';
 import * as bash from '@/utils/bashHelper';
 import { filterGitKeep } from '@/utils/common';
 import { aiHistoryPath } from '@/filePaths';
-import { getFileExtension } from '@/AI/shared/utils/conversationUtils/fileContexts';
+import { getFileExtension } from '@/AI/shared/conversation';
 
 export async function loadChat(): Promise<void> {
     try {

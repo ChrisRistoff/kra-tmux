@@ -5,7 +5,7 @@ import { buildAgentTmuxCommand } from '@/AI/AIAgent/shared/utils/agentTmux';
 import * as bash from '@/utils/bashHelper';
 import { openVim } from '@/utils/neovimHelper';
 import { neovimConfig } from '@/filePaths';
-import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
+import * as aiNeovimHelper from '@/AI/shared/conversation';
 
 export async function createAgentChatFile(chatFile: string): Promise<void> {
     const initialContent = `# Copilot Agent Chat
