@@ -5,6 +5,65 @@ local diff = require("kra_agent_diff")
 
 local popups_hidden = false
 
+-- ── Blocking-surface revival ─────────────────────────────────────────────────
+-- Any popup/tab that blocks the agent (waiting for a decision) registers a
+-- revive fn here. If its window/buffer is closed without a decision (e.g.
+-- <Tab> hides the prompt window and takes the popup with it), the guard
+-- autocmd reopens it. <leader>t routes through set_popups_hidden(false)
+-- which also re-shows everything via revive_all().
+local pending_revivers = {}  -- id -> { token = {}, fn = function }
+
+local function register_pending(id, revive_fn)
+    local token = {}
+    pending_revivers[id] = { token = token, fn = revive_fn }
+    return token
+end
+
+local function clear_pending(id)
+    pending_revivers[id] = nil
+end
+
+local function guard_window(id, win, token)
+    if type(win) ~= "number" or not vim.api.nvim_win_is_valid(win) then return end
+    vim.api.nvim_create_autocmd("WinClosed", {
+        pattern = tostring(win), once = true,
+        callback = function()
+            vim.schedule(function()
+                local entry = pending_revivers[id]
+                if entry and entry.token == token and not popups_hidden then
+                    pcall(entry.fn)
+                end
+            end)
+        end,
+    })
+end
+
+local function guard_buffer(id, buf, token)
+    if type(buf) ~= "number" or not vim.api.nvim_buf_is_valid(buf) then return end
+    vim.api.nvim_create_autocmd("BufWipeout", {
+        buffer = buf, once = true,
+        callback = function()
+            vim.schedule(function()
+                local entry = pending_revivers[id]
+                if entry and entry.token == token and not popups_hidden then
+                    pcall(entry.fn)
+                end
+            end)
+        end,
+    })
+end
+
+local function revive_all()
+    for _, entry in pairs(pending_revivers) do pcall(entry.fn) end
+end
+
+M.register_pending = register_pending
+M.clear_pending = clear_pending
+M.guard_window = guard_window
+M.guard_buffer = guard_buffer
+M.revive_all = revive_all
+
+
 local function safe_rpcnotify(channel_id, method, ...)
     if type(channel_id) ~= "number" then
         vim.notify("Tool approval could not be sent because the agent session is unavailable.", vim.log.levels.WARN, {
@@ -236,6 +295,8 @@ local function render_permission_buffer(buf, payload, preview, actions, selected
 end
 
 local function send_permission(channel_id, action, payload_json)
+    clear_pending("permission")
+    close_permission()
     close_permission()
     safe_rpcnotify(channel_id, "tool_permission_decision", action, payload_json)
 end
@@ -243,6 +304,32 @@ end
 -- ── User input popup ──────────────────────────────────────────────────────────
 
 local user_input_state = { win = nil, buf = nil, popup = nil }
+local freeform_state = nil  -- { popup, reopen } when a freeform input is mounted
+
+local function hide_freeform_input()
+    if not freeform_state or not freeform_state.popup then return end
+    -- clear pending revival first so WinClosed (fired by :hide) doesn't resurrect us
+    clear_pending("freeform")
+    pcall(function() freeform_state.popup:hide() end)
+end
+
+local function show_freeform_input()
+    if not freeform_state or not freeform_state.popup then return end
+    local ok = pcall(function() freeform_state.popup:show() end)
+    if not ok and freeform_state.reopen then
+        pcall(freeform_state.reopen)
+    end
+    -- intentionally do NOT re-register pending here:
+    -- ui.toggle_popups calls revive_all() right after, which would see the
+    -- registration and mount a duplicate freeform popup. relative="editor"
+    -- already protects against the prompt-window <Tab> accidental-close.
+end
+
+local function close_freeform_input()
+    if not freeform_state or not freeform_state.popup then return end
+    pcall(function() freeform_state.popup:unmount() end)
+    freeform_state = nil
+end
 
 local function close_user_input()
     if not user_input_state.win and not user_input_state.popup then
@@ -385,18 +472,26 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
     local selected_index = 1
 
     local function send(answer, is_freeform)
+        clear_pending("user_input")
+        clear_pending("freeform")
+        freeform_state = nil
         close_user_input()
         safe_rpcnotify(channel_id, "user_input_response", answer, is_freeform or false)
     end
 
     local function prompt_freeform(prefill)
+        clear_pending("user_input")
         close_user_input()
+        local function reopen()
+            prompt_freeform(prefill)
+        end
         vim.schedule(function()
             local nui_ok, Input = pcall(require, "nui.input")
 
             if nui_ok then
                 local input_popup = Input({
                     position = "50%",
+                    relative = "editor",
                     size = { width = math.min(math.max(50, math.floor(vim.o.columns * 0.5)), 100) },
                     border = {
                         style = "rounded",
@@ -420,10 +515,18 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
                 })
 
                 input_popup:mount()
-                local nui_event = require("nui.utils.autocmd").event
-                input_popup:on(nui_event.BufLeave, function()
-                    input_popup:unmount()
-                end)
+                freeform_state = { popup = input_popup, reopen = reopen }
+                local _tok = register_pending("freeform", reopen)
+                guard_window("freeform", input_popup.winid, _tok)
+                local fbuf = input_popup.bufnr
+                if fbuf and vim.api.nvim_buf_is_valid(fbuf) then
+                    vim.keymap.set({ "i", "n" }, "<leader>t", function()
+                        vim.schedule(function()
+                            local ok, ui = pcall(require, "kra_agent_ui")
+                            if ok then ui.toggle_popups() end
+                        end)
+                    end, { buffer = fbuf, silent = true, nowait = true, desc = "Toggle agent popups" })
+                end
             else
                 -- fallback: small floating window in insert mode
                 local fbuf = vim.api.nvim_create_buf(false, true)
@@ -520,6 +623,7 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
             enter = true,
             focusable = true,
             position = "50%",
+            relative = "editor",
             size = { width = width, height = height },
             border = {
                 style = "rounded",
@@ -541,6 +645,10 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
         buf = popup.bufnr
         win = popup.winid
         user_input_state = { buf = buf, win = win, popup = popup }
+        local _tok = register_pending("user_input", function()
+            M.request_user_input(channel_id, question, choices, allow_freeform)
+        end)
+        guard_window("user_input", win, _tok)
     else
         local row = math.max(1, math.floor((vim.o.lines - height) / 2) - 1)
         local col = math.floor((vim.o.columns - width) / 2)
@@ -558,6 +666,10 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
             title_pos = "center",
         })
         user_input_state = { buf = buf, win = win }
+        local _tok = register_pending("user_input", function()
+            M.request_user_input(channel_id, question, choices, allow_freeform)
+        end)
+        guard_window("user_input", win, _tok)
     end
 
     vim.bo[buf].buftype = "nofile"
@@ -657,6 +769,7 @@ function M.request_permission(channel_id, payload)
             enter = true,
             focusable = true,
             position = "50%",
+            relative = "editor",
             size = {
                 width = width,
                 height = height,
@@ -713,6 +826,11 @@ function M.request_permission(channel_id, payload)
         }
     end
 
+    local _tok = register_pending("permission", function()
+        M.request_permission(channel_id, payload)
+    end)
+    guard_window("permission", win, _tok)
+
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].bufhidden = "wipe"
     vim.bo[buf].swapfile = false
@@ -730,6 +848,7 @@ function M.request_permission(channel_id, payload)
     -- Build a send_fn closure to pass into the diff editors (avoids circular dependency).
     local function make_send_fn()
         return function(action, edited_json)
+            clear_pending("permission")
             safe_rpcnotify(channel_id, "tool_permission_decision", action, edited_json)
         end
     end
@@ -738,9 +857,11 @@ function M.request_permission(channel_id, payload)
         if action_id == "allow" then
             send_permission(channel_id, "allow")
         elseif action_id == "edit-diff" then
+            clear_pending("permission")
             close_permission()
             diff.open_write_diff_editor(channel_id, payload, make_send_fn())
         elseif action_id == "edit-json" then
+            clear_pending("permission")
             close_permission()
             diff.open_args_editor(channel_id, payload, make_send_fn())
         elseif action_id == "allow-family" then
@@ -807,5 +928,7 @@ M.hide_user_input_window = hide_user_input_window
 M.show_user_input_window = show_user_input_window
 M.hide_permission_window = hide_permission_window
 M.show_permission_window = show_permission_window
+M.hide_freeform_input = hide_freeform_input
+M.show_freeform_input = show_freeform_input
 
 return M

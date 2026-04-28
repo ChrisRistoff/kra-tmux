@@ -379,6 +379,12 @@ function M.open_args_editor(channel_id, payload, send_fn)
 
     map_keys(info_buf)
     map_keys(editor_buf)
+
+    local popups = require("kra_agent_popups")
+    local _tok = popups.register_pending("permission", function()
+        popups.request_permission(channel_id, payload)
+    end)
+    popups.guard_buffer("permission", editor_buf, _tok)
     vim.api.nvim_set_current_win(editor_win)
 
     vim.notify(
@@ -749,6 +755,12 @@ function M.open_write_diff_editor(channel_id, payload, send_fn)
     map_diff_keys(proposed_buf)
     map_diff_keys(reference_buf)
     map_diff_keys(help_buf)
+
+    local popups = require("kra_agent_popups")
+    local _tok = popups.register_pending("permission", function()
+        popups.request_permission(channel_id, payload)
+    end)
+    popups.guard_buffer("permission", proposed_buf, _tok)
 
     vim.api.nvim_set_current_win(mid_win)
 end

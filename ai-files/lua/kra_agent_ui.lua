@@ -163,6 +163,10 @@ local function set_state(opts)
     end
 
     stop_spinner()
+    -- A spinning notification was rendered with timeout=false (persistent).
+    -- nvim-notify won't re-arm the timer when we replace it with a finite
+    -- timeout, so dismiss the persistent handle first and render a fresh one.
+    dismiss_notification()
     render_notification(opts.timeout or 3000)
 end
 
@@ -452,6 +456,7 @@ function M.toggle_popups()
         dismiss_notification()
         popups.hide_user_input_window()
         popups.hide_permission_window()
+        if popups.hide_freeform_input then popups.hide_freeform_input() end
     else
         if state.spinning then
             render_notification(false)
@@ -460,6 +465,8 @@ function M.toggle_popups()
         end
         popups.show_user_input_window()
         popups.show_permission_window()
+        if popups.show_freeform_input then popups.show_freeform_input() end
+        if popups.revive_all then popups.revive_all() end
     end
     vim.notify(
         state.popups_hidden and "Popups hidden  (<Space>t to show)" or "Popups visible",
