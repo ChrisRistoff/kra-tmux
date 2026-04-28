@@ -129,7 +129,7 @@ describe('dispatchPromptAction', () => {
 
         expect(conversation.handleAddFileContext).toHaveBeenCalledWith(state.nvim, state.chatFile, { agentMode: true });
         expect(conversation.showFileContextsPopup).toHaveBeenCalledWith(state.nvim);
-        expect(conversation.handleRemoveFileContext).toHaveBeenCalledWith(state.nvim);
-        expect(conversation.clearAllFileContexts).toHaveBeenCalledWith(state.nvim);
+        expect(conversation.handleRemoveFileContext).toHaveBeenCalledWith(state.nvim, state.chatFile, { agentMode: true });
+        expect(conversation.clearAllFileContexts).toHaveBeenCalledWith(state.nvim, state.chatFile, { agentMode: true });
     });
 });

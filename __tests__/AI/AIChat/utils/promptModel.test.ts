@@ -62,7 +62,7 @@ describe('promptModel', () => {
         expect(instance.chat.completions.create).toHaveBeenCalledWith({
             messages: [
                 { role: 'system', content: 'test system' },
-                { role: 'user', content: 'test prompt\nRespond without adding chat entries, we format that on our end.' },
+                { role: 'user', content: 'test prompt' },
             ],
             model: 'gpt-3.5-turbo',
             temperature: 0.7,

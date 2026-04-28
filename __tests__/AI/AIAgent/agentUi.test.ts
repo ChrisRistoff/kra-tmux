@@ -1,52 +1,29 @@
 import {
-    extractAgentDraftPrompt,
-    formatAgentConversationEntry,
-    formatAgentDraftEntry,
+    formatConfirmAnswer,
+    formatConfirmQuestion,
+    formatSubmittedAgentPrompt,
     formatToolArguments,
     formatToolCompletion,
     formatToolDisplayName,
-    materializeAgentDraft,
-    isAgentDraftHeader,
-    isAgentUserHeader,
     summarizeToolCall,
 } from '@/AI/AIAgent/shared/utils/agentUi';
 
 describe('agentUi helpers', () => {
-    it('formats agent conversation headers with model metadata', () => {
-        expect(formatAgentConversationEntry('ASSISTANT', {
-            model: 'gpt-5.4',
-            timestamp: '2026-04-19T11:39:18.702Z',
-        })).toBe('\n---\n\n## 🤖 ASSISTANT RESPONSE · gpt-5.4 · 2026-04-19T11:39:18.702Z\n\n');
-    });
-
-    it('detects agent user headers', () => {
-        expect(isAgentUserHeader('## 👤 USER PROMPT · 2026-04-19T11:39:18.702Z')).toBe(true);
-        expect(isAgentUserHeader('### USER (2026-04-19T11:39:18.702Z)')).toBe(false);
-    });
-
-    it('uses a distinct draft section for the next prompt', () => {
-        expect(formatAgentDraftEntry()).toBe('\n---\n\n## 👤 USER PROMPT (draft)\n\n');
-        expect(isAgentDraftHeader('## 👤 USER PROMPT (draft)')).toBe(true);
-    });
-
-    it('extracts and materializes the current draft prompt into a user turn', () => {
-        const lines = [
-            '# Copilot Agent Chat',
-            '---',
-            '',
-            '## 👤 USER PROMPT (draft)',
-            '',
-            'Tell me something interesting.',
-            '',
-        ];
-
-        expect(extractAgentDraftPrompt(lines)).toBe('Tell me something interesting.');
-        expect(materializeAgentDraft(lines, '2026-04-19T11:49:40.395Z')).toContain(
-            '## 👤 USER PROMPT · 2026-04-19T11:49:40.395Z'
-        );
-        expect(materializeAgentDraft(lines, '2026-04-19T11:49:40.395Z')).toContain(
+    it('formats the submitted prompt body without any header', () => {
+        expect(formatSubmittedAgentPrompt('  Tell me something interesting.  ')).toBe(
             'Tell me something interesting.\n'
         );
+        expect(formatSubmittedAgentPrompt('   ')).toBe('');
+    });
+
+    it('formats confirm-task-complete questions and answers', () => {
+        expect(formatConfirmQuestion('Continue?', ['Yes', 'No'])).toBe(
+            '\n\n---\n**💬 Continue?**\n\n- Yes\n- No\n\n'
+        );
+
+        const answer = formatConfirmAnswer('Yes');
+        expect(answer).toContain('## 👤 USER PROMPT · ');
+        expect(answer.endsWith('Yes\n\n')).toBe(true);
     });
 
     it('creates short tool call summaries', () => {

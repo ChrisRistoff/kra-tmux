@@ -37,6 +37,13 @@ describe('converse', () => {
         nvimEvents = {};
         fakeNvim = {
             command: jest.fn().mockResolvedValue(undefined),
+            executeLua: jest.fn().mockImplementation(async (code: string) => {
+                if (code.includes('get_prompt_text')) {
+                    return 'USER message';
+                }
+
+                return undefined;
+            }),
             on: jest.fn((event: string, fn: Function) => {
                 nvimEvents[event] = fn;
             }),
@@ -60,7 +67,9 @@ describe('converse', () => {
 
         (promptModel as jest.Mock).mockResolvedValue('AI response');
         (fs.readFile as jest.Mock).mockResolvedValue('Chat history content');
-        (formatChatEntry as jest.Mock).mockImplementation((header: string) => header);
+        (formatChatEntry as jest.Mock).mockImplementation((header: string, content = '') =>
+            content ? `${header}\n${content}` : header
+        );
     });
 
     afterEach(() => {

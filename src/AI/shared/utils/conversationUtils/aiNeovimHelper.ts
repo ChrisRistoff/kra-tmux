@@ -36,6 +36,11 @@ export async function waitForSocket(socketPath: string, timeout = 5000): Promise
 export async function addNeovimFunctions(nvim: NeovimClient, channelId: number): Promise<void> {
     await nvim.command(`
         function! SaveAndSubmit()
+            if exists('g:kra_agent_prompt_buf') || exists('g:kra_chat_prompt_buf')
+                call rpcnotify(${channelId}, 'prompt_action', 'submit_pressed')
+                return
+            endif
+
             write
             call rpcnotify(${channelId}, 'prompt_action', 'submit_pressed')
         endfunction
@@ -104,6 +109,28 @@ export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
     await nvim.command(`nnoremap f :call ShowFileContextsPopup()<CR>`);
     await nvim.command(`nnoremap <C-x> :call ClearContexts()<CR>`);
     await nvim.command(`nnoremap r :call RemoveFileContext()<CR>`);
+}
+
+export async function setupChatSplitLayout(nvim: NeovimClient, channelId: number): Promise<void> {
+    await nvim.executeLua(`require('kra_chat_layout').setup(...)`, [channelId]);
+}
+
+export async function getChatPromptText(nvim: NeovimClient): Promise<string> {
+    const prompt = await nvim.executeLua(`return require('kra_chat_layout').get_prompt_text()`, []);
+
+    return typeof prompt === 'string' ? prompt : '';
+}
+
+export async function clearChatPrompt(nvim: NeovimClient): Promise<void> {
+    await nvim.executeLua(`require('kra_chat_layout').clear_prompt()`, []);
+}
+
+export async function focusChatPrompt(nvim: NeovimClient): Promise<void> {
+    await nvim.executeLua(`require('kra_chat_layout').focus_prompt()`, []);
+}
+
+export async function refreshChatLayout(nvim: NeovimClient): Promise<void> {
+    await nvim.executeLua(`require('kra_chat_layout').refresh()`, []);
 }
 
 export async function updateNvimAndGoToLastLine(nvim: NeovimClient): Promise<void> {

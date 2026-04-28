@@ -7,6 +7,7 @@ import { loadChat } from '@/AI/AIChat/commands/loadChat';
 import { aiHistoryPath } from '@/filePaths';
 import { pickProviderAndModel } from '@/AI/AIChat/utils/aiUtils';
 import { getModelCatalog } from '@/AI/shared/data/modelCatalog';
+import { Role } from '@/AI/shared/types/aiTypes';
 import * as path from 'path';
 
 jest.mock('fs/promises');
@@ -114,6 +115,31 @@ describe('loadChat', () => {
             validChatData.model,
             true
         );
+    });
+
+    it('should rebuild saved chat history without appending a blank draft user turn', async () => {
+        const chatDataWithHistory = {
+            ...validChatData,
+            chatHistory: [
+                { role: Role.User, message: 'First prompt', timestamp: '2026-04-28T10:00:00.000Z' },
+                { role: Role.AI, message: 'First reply', timestamp: '2026-04-28T10:00:01.000Z' },
+            ],
+        };
+
+        (fs.readdir as jest.Mock).mockResolvedValue(fakeChats);
+        (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue(savedChatName);
+        (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(true);
+        (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify(chatDataWithHistory));
+        (fs.appendFile as jest.Mock).mockResolvedValue(undefined);
+        (conversation.converse as jest.Mock).mockResolvedValue(undefined);
+
+        await loadChat();
+
+        expect(conversation.initializeChatFile).toHaveBeenCalledWith(chatFile);
+        expect(fs.appendFile).toHaveBeenCalledWith(chatFile, expect.stringContaining('First prompt'));
+
+        const transcript = (fs.appendFile as jest.Mock).mock.calls[0][1] as string;
+        expect((transcript.match(/USER PROMPT/g) ?? [])).toHaveLength(1);
     });
 
     it('should prompt for new provider and model if the saved chat has invalid provider', async () => {

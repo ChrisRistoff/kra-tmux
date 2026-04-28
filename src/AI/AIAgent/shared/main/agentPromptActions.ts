@@ -1,18 +1,21 @@
 import * as fs from 'fs/promises';
 import type { AgentConversationState, MessageOptions } from '@/AI/AIAgent/shared/types/agentTypes';
+import { formatSubmittedAgentPrompt } from '@/AI/AIAgent/shared/utils/agentUi';
 import {
-    extractAgentDraftPrompt,
-    formatAgentConversationEntry,
-    isAgentDraftHeader,
-    isAgentUserHeader,
-    materializeAgentDraft,
-} from '@/AI/AIAgent/shared/utils/agentUi';
+    formatAssistantHeader,
+    materializeUserDraft,
+} from '@/AI/shared/utils/conversationUtils/chatHeaders';
 import type { FileContext } from '@/AI/shared/types/aiTypes';
+import {
+    clearAgentPrompt,
+    focusAgentPrompt,
+    getAgentPromptText,
+    refreshAgentLayout,
+} from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import * as conversation from '@/AI/shared/conversation';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import { dispatchPromptAction } from './agentPromptActionDispatch';
-const aiNeovimHelper = conversation;
 const fileContext = conversation;
 
 export function getErrorMessage(error: unknown): string {
@@ -27,28 +30,6 @@ export function getErrorMessage(error: unknown): string {
     return 'Unknown error';
 }
 
-export function extractCurrentUserPrompt(lines: string[]): string {
-    const draftPrompt = extractAgentDraftPrompt(lines);
-
-    if (draftPrompt) {
-        return draftPrompt;
-    }
-
-    let startIndex = -1;
-
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-        if (isAgentUserHeader(lines[index])) {
-            startIndex = index + 1;
-            break;
-        }
-    }
-
-    if (startIndex === -1) {
-        return '';
-    }
-
-    return lines.slice(startIndex).join('\n').trim();
-}
 
 async function createSelectionAttachment(
     context: FileContext,
@@ -109,9 +90,7 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
         return;
     }
 
-    const buffer = await state.nvim.buffer;
-    const lines = await buffer.lines;
-    const prompt = extractCurrentUserPrompt(lines);
+    const prompt = await getAgentPromptText(state.nvim);
 
     if (!prompt) {
         await state.nvim.command('echohl WarningMsg | echo "Type a prompt before submitting" | echohl None');
@@ -119,15 +98,17 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
         return;
     }
 
-    if (lines.some((line) => isAgentDraftHeader(line))) {
-        await fs.writeFile(state.chatFile, materializeAgentDraft(lines), 'utf8');
-        await state.nvim.command('edit!');
-    }
+    const turnTimestamp = new Date().toISOString();
+
+    await materializeUserDraft(state.chatFile, turnTimestamp);
+    await appendToChat(state.chatFile, formatSubmittedAgentPrompt(prompt));
+    await clearAgentPrompt(state.nvim);
 
     state.isStreaming = true;
     await updateAgentUi(state.nvim, 'start_turn', [state.model]);
-    await appendToChat(state.chatFile, formatAgentConversationEntry('ASSISTANT', { model: state.model }));
-    await aiNeovimHelper.updateNvimAndGoToLastLine(state.nvim);
+    await appendToChat(state.chatFile, formatAssistantHeader(state.model, turnTimestamp));
+    await refreshAgentLayout(state.nvim);
+    await focusAgentPrompt(state.nvim);
 
     const attachments = await buildAttachments();
 

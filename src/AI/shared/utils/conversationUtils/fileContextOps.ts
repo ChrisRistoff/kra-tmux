@@ -2,6 +2,28 @@ import { NeovimClient } from "neovim";
 import fs from 'fs/promises';
 import { getFileExtension, upsertFileContext } from './fileContextStore';
 
+/**
+ * Reload the chat transcript window so just-appended file-context entries
+ * become visible immediately. The bare `edit!` we used before reloaded
+ * whichever window had focus (often the prompt buffer), leaving the chat
+ * transcript stale until the next layout refresh.
+ */
+export async function refreshTranscript(nvim: NeovimClient, agentMode?: boolean): Promise<void> {
+    const moduleName = agentMode ? 'kra_agent_layout' : 'kra_chat_layout';
+    try {
+        await nvim.executeLua(`require('${moduleName}').refresh()`, []);
+    } catch (err) {
+        console.warn('refreshTranscript: layout refresh failed, falling back to edit!', err);
+        try {
+            await nvim.command('edit!');
+            await nvim.command('redraw!');
+            await nvim.command('normal! G');
+        } catch (fallbackErr) {
+            console.warn('refreshTranscript: fallback edit! also failed', fallbackErr);
+        }
+    }
+}
+
 const MAX_FILE_BYTES = 300_000;
 
 /**
@@ -82,8 +104,9 @@ export async function addFolderContext(nvim: NeovimClient, chatFile: string, fol
                 const lineCount = content.split('\n').length;
                 totalLines += lineCount;
 
-                upsertFileContext({ filePath, isPartial: false, summary: `Full file: ${fileName} (${lineCount} lines)` });
-                await fs.appendFile(chatFile, buildContextSummary(agentMode, fileName, filePath, ext, lineCount, content.length));
+                const chatEntry = buildContextSummary(agentMode, fileName, filePath, ext, lineCount, content.length);
+                upsertFileContext({ filePath, isPartial: false, summary: `Full file: ${fileName} (${lineCount} lines)`, chatEntry });
+                await fs.appendFile(chatFile, chatEntry);
                 addedCount++;
             } catch {
                 // skip unreadable files
@@ -91,9 +114,7 @@ export async function addFolderContext(nvim: NeovimClient, chatFile: string, fol
         }
 
         const folderName = folderPath.split('/').pop() || folderPath;
-        await nvim.command('edit!');
-        await nvim.command('redraw!');
-        await nvim.command('normal! G');
+        await refreshTranscript(nvim, agentMode);
         await nvim.command(`echohl MoreMsg | echo "Added ${addedCount} files from '${folderName}' (${totalLines} total lines)" | echohl None`);
     } catch (error) {
         console.error('addFolderContext error:', error);
@@ -111,16 +132,12 @@ export async function addEntireFileContext(nvim: NeovimClient, chatFile: string,
         const ext = getFileExtension(fileName);
         const lineCount = content.split('\n').length;
 
-        upsertFileContext({ filePath, isPartial: false, summary: `Full file: ${fileName} (${lineCount} lines)` });
+        const chatEntry = buildContextSummary(agentMode, fileName, filePath, ext, lineCount, content.length, 'Use this file context in your responses');
+        upsertFileContext({ filePath, isPartial: false, summary: `Full file: ${fileName} (${lineCount} lines)`, chatEntry });
 
         // In agent mode, only write a short reference — the SDK attachment delivers the actual content
-        await fs.appendFile(
-            chatFile,
-            buildContextSummary(agentMode, fileName, filePath, ext, lineCount, content.length, 'Use this file context in your responses')
-        );
-        await nvim.command('edit!');
-        await nvim.command('redraw!');
-        await nvim.command('normal! G');
+        await fs.appendFile(chatFile, chatEntry);
+        await refreshTranscript(nvim, agentMode);
         await nvim.command(`echohl MoreMsg | echo "Added ${fileName} (${lineCount} lines) - full content available to AI" | echohl None`);
     } catch (error) {
         await nvim.command(`echohl ErrorMsg | echo "Failed to read file: ${filePath}" | echohl None`);
@@ -196,12 +213,19 @@ export async function addPartialFileContext(nvim: NeovimClient, chatFile: string
                         const fileName = currentFile.split('/').pop() || currentFile;
                         const lineRange = startLine === endLine ? `line ${startLine}` : `lines ${startLine}-${endLine}`;
 
-                        upsertFileContext({ filePath: currentFile, isPartial: true, startLine, endLine, summary: `Partial file: ${fileName} (${lineRange})` });
-
                         const ext = getFileExtension(fileName);
                         const contextEntry = agentMode
                             ? `# 📎 ${currentFile} (${lineRange}) attached\n`
                             : `📁 ${fileName} (${lineRange})\n\n\`\`\`${ext}\n// Selected from: ${currentFile} (${lineRange})\n${selectedText}\n\`\`\`\n\n`;
+
+                        upsertFileContext({
+                            filePath: currentFile,
+                            isPartial: true,
+                            startLine,
+                            endLine,
+                            summary: `Partial file: ${fileName} (${lineRange})`,
+                            chatEntry: contextEntry,
+                        });
 
                         try {
                             const winCount = await nvim.call('winnr', '$') as number;
@@ -213,9 +237,7 @@ export async function addPartialFileContext(nvim: NeovimClient, chatFile: string
                         }
 
                         await fs.appendFile(chatFile, contextEntry);
-                        await nvim.command('edit!');
-                        await nvim.command('redraw!');
-                        await nvim.command('normal! G');
+                        await refreshTranscript(nvim, agentMode);
                         await nvim.command(`echohl MoreMsg | echo "Added ${fileName} (${lineRange}) - ${selectedText.length} chars" | echohl None`);
                         resolve('success');
                     } catch (err) {

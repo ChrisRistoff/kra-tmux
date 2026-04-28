@@ -45,10 +45,10 @@ export async function dispatchPromptAction(
             await fileContext.showFileContextsPopup(state.nvim);
             break;
         case 'remove_file_context':
-            await fileContext.handleRemoveFileContext(state.nvim);
+            await fileContext.handleRemoveFileContext(state.nvim, state.chatFile, { agentMode: true });
             break;
         case 'clear_contexts':
-            await fileContext.clearAllFileContexts(state.nvim);
+            await fileContext.clearAllFileContexts(state.nvim, state.chatFile, { agentMode: true });
             break;
         case 'review_proposal':
             await showProposalReview(state.nvim, state);

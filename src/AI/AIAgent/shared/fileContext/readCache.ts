@@ -38,6 +38,8 @@ export function markRead(filePath: string, start: number, end: number): void {
     for (let i = start; i <= end; i++) s.add(i);
 }
 
+// Note currently in use, left here to potentially force errors on edit_lines calls
+// that would mutate large ranges without first reading them.
 export function findUnreadGap(filePath: string, start: number, end: number): [number, number] | undefined {
     const s = seenLines.get(canonicalPath(filePath));
 

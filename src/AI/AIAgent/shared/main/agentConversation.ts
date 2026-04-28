@@ -19,8 +19,10 @@ import {
     addAgentCommands,
     addAgentFunctions,
     createAgentChatFile,
+    focusAgentPrompt,
     openAgentNeovim,
-    setupAgentKeyBindings,
+    refreshAgentLayout,
+    setupAgentSplitLayout,
 } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import { getErrorMessage, setupEventHandlers } from '@/AI/AIAgent/shared/main/agentPromptActions';
 
@@ -261,12 +263,13 @@ Reminder: Always call confirm_task_complete before ending your turn.`,
         await aiNeovimHelper.setupKeyBindings(nvimClient);
         await addAgentFunctions(nvimClient, channelId);
         await addAgentCommands(nvimClient);
-        await setupAgentKeyBindings(nvimClient);
         await nvimClient.command(`edit ${chatFile}`);
         // Enable fold markers for the tool-call log blocks (uses default {{{/}}} markers).
         // foldlevel=99 keeps all folds open by default; user can fold with zc/za.
         await nvimClient.command('setlocal foldmethod=marker foldlevel=99');
-        await aiNeovimHelper.updateNvimAndGoToLastLine(nvimClient);
+        await setupAgentSplitLayout(nvimClient, channelId);
+        await refreshAgentLayout(nvimClient);
+        await focusAgentPrompt(nvimClient);
         await setupSessionEventHandlers(state);
         await setupEventHandlers(state);
 

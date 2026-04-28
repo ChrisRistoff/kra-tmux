@@ -15,11 +15,11 @@ import {
     shouldAutoApproveTool,
 } from '@/AI/AIAgent/shared/utils/agentToolApproval';
 import {
-    formatAgentConversationEntry,
     formatConfirmAnswer,
     formatConfirmQuestion,
     formatToolProgress,
 } from '@/AI/AIAgent/shared/utils/agentUi';
+import { formatAssistantHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
 import { getFileOutline, formatOutline } from '@/AI/AIAgent/shared/utils/fileOutline';
 import { pickMemories } from '@/AI/AIAgent/shared/main/agentMemoryActions';
 import { recall } from '@/AI/AIAgent/shared/memory/notes';
@@ -556,7 +556,7 @@ export async function handleConfirmTaskComplete(
     // Write the user's answer into the chat file.
     await appendToChat(state.chatFile, formatConfirmAnswer(answer));
     // Write a new ASSISTANT header so the AI's continuation is visually separated.
-    await appendToChat(state.chatFile, formatAgentConversationEntry('ASSISTANT', { model: state.model }));
+    await appendToChat(state.chatFile, formatAssistantHeader(state.model));
     try { await state.nvim.command('edit!'); } catch { /* nvim busy */ }
     try { await state.nvim.command('redraw!'); } catch { /* nvim busy */ }
 

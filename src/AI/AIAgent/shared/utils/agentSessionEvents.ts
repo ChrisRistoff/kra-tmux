@@ -1,7 +1,6 @@
 import * as neovim from 'neovim';
 import type { VimValue } from 'neovim/lib/types/VimValue';
 import {
-    formatAgentDraftEntry,
     formatToolArguments,
     formatToolCompletion,
     formatToolDisplayName,
@@ -9,8 +8,12 @@ import {
     formatToolProgress,
     summarizeToolCall,
 } from '@/AI/AIAgent/shared/utils/agentUi';
+import { formatUserDraftHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
+import {
+    focusAgentPrompt,
+    refreshAgentLayout,
+} from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import * as bash from '@/utils/bashHelper';
-import * as aiNeovimHelper from '@/AI/shared/conversation';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
 import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';
@@ -199,9 +202,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     };
 
     const nvimRefresh = async (): Promise<void> =>
-        state.nvim.command('edit!')
-            .then(async () => state.nvim.command('redraw!'))
-            .catch(() => { /* neovim busy — skip */ });
+        refreshAgentLayout(state.nvim).catch(() => { /* neovim busy — skip */ });
 
     // Write text to the chat file and refresh neovim (through the queue).
     const write = (content: string, refresh = true): void => {
@@ -378,17 +379,17 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
             clearFlushTimer();
             flushBuffer();
 
-            // Wait for all in-flight writes to finish before appending the draft.
+            // Wait for all in-flight writes to finish before marking the session ready.
             await writeChain;
 
             activeToolCount = 0;
             assistantStatusVisible = false;
             state.isStreaming = false;
 
-            await appendToChat(state.chatFile, formatAgentDraftEntry());
-            await nvimRefresh();
+            await appendToChat(state.chatFile, formatUserDraftHeader());
+            await refreshAgentLayout(state.nvim);
             await updateAgentUi(state.nvim, 'ready_for_next_prompt');
-            await aiNeovimHelper.updateNvimAndGoToLastLine(state.nvim);
+            await focusAgentPrompt(state.nvim);
 
         })();
     });
