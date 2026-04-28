@@ -3,7 +3,7 @@
  *
  * The agent prompt-action handler dispatches `browse_memory` / `add_memory`
  * / `delete_memory` here. We talk to LanceDB via the same `notes.ts` helpers
- * the MCP server uses, then drive a Telescope picker in `kra_agent_ui.lua`
+ * the MCP server uses, then drive a Telescope picker in `kra_agent.ui`
  * via `executeLua`.
  */
 
@@ -74,7 +74,7 @@ export async function pickMemories(
 
         nvim.on('notification', handler);
         void nvim.executeLua(
-            `require('kra_agent_ui').pick_memories(...)`,
+            `require('kra_agent.ui').pick_memories(...)`,
             [
                 channelId as unknown as VimValue,
                 payload as unknown as VimValue,
@@ -92,7 +92,7 @@ export async function openMemoryBrowser(nvim: NeovimClient, view: MemoryView = '
     const payload = entries.map(toMemoryPayload);
 
     await nvim.executeLua(
-        `require('kra_agent_ui').show_memory_browser(...)`,
+        `require('kra_agent.ui').show_memory_browser(...)`,
         [payload as unknown as VimValue, view as unknown as VimValue],
     );
 }

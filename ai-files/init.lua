@@ -4,6 +4,7 @@ local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 local project_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":p:h")
 package.path = project_root .. "/?.lua;" .. package.path
 package.path = project_root .. "/lua/?.lua;" .. package.path
+package.path = project_root .. "/lua/?/init.lua;" .. package.path
 
 if not vim.loop.fs_stat(lazypath) then
     vim.fn.system({
@@ -481,7 +482,7 @@ require("lazy").setup({
                     lualine_x = {
                         {
                             function()
-                                return require("kra_agent_ui").statusline()
+                                return require("kra_agent.ui").statusline()
                             end,
                             color = { fg = "#7dcfff", gui = "bold" },
                         },
@@ -594,7 +595,7 @@ map("n", "<leader>Z", "zA", { silent = true, desc = "Toggle fold recursively" })
 
 -- Toggle agent popups (noice tool notifications + ask_user window) on/off
 map("n", "<Space>t", function()
-    require("kra_agent_ui").toggle_popups()
+    require("kra_agent.ui").toggle_popups()
 end, { silent = true, desc = "Toggle agent popups" })
 
 -- Performance optimizations for large chat logs

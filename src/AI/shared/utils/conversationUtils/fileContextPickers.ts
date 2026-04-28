@@ -63,6 +63,7 @@ export async function selectContextToRemove(nvim: NeovimClient): Promise<number[
                     .map((v) => (typeof v === 'number' ? v : null))
                     .filter((v): v is number => v !== null);
                 resolve(indices.length > 0 ? indices : null);
+
                 return;
             }
             resolve(null);

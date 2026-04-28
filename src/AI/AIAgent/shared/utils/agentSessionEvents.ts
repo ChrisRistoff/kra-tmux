@@ -59,7 +59,7 @@ export async function updateAgentUi(
     args: unknown[] = []
 ): Promise<void> {
     try {
-        await nvimClient.executeLua(`require('kra_agent_ui').${method}(...)`, args as VimValue[]);
+        await nvimClient.executeLua(`require('kra_agent.ui').${method}(...)`, args as VimValue[]);
     } catch {
         // Ignore UI update failures during startup/shutdown so the session itself can continue.
     }
@@ -364,7 +364,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         // no-op for them.
         state.nvim
             .executeLua(
-                `require('kra_agent_diff').finalize_pending_diff(...)`,
+                `require('kra_agent.diff').finalize_pending_diff(...)`,
                 [event.data.success] as VimValue[]
             )
             .catch(() => { /* swallow */ });

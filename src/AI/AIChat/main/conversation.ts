@@ -138,6 +138,7 @@ async function handleSubmit(
     if (!prompt.trim()) {
         await nvim.command('echohl WarningMsg | echo "Type a prompt before submitting" | echohl None');
         await aiNeovimHelper.focusChatPrompt(nvim);
+
         return;
     }
 
