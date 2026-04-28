@@ -451,6 +451,10 @@ require("lazy").setup({
         "nvim-lualine/lualine.nvim",
         dependencies = { "nvim-tree/nvim-web-devicons" },
         config = function()
+            local hide_agent_filename = function()
+                return not vim.b.kra_agent_hide_filename
+            end
+
             require("lualine").setup({
                 options = {
                     icons_enabled = true,
@@ -473,7 +477,7 @@ require("lazy").setup({
                 sections = {
                     lualine_a = { "mode" },
                     lualine_b = { "branch", "diff", "diagnostics" },
-                    lualine_c = { { "filename", path = 1 } },
+                    lualine_c = { { "filename", path = 1, cond = hide_agent_filename } },
                     lualine_x = {
                         {
                             function()
@@ -491,7 +495,7 @@ require("lazy").setup({
                 inactive_sections = {
                     lualine_a = {},
                     lualine_b = {},
-                    lualine_c = { "filename" },
+                    lualine_c = { { "filename", cond = hide_agent_filename } },
                     lualine_x = { "location" },
                     lualine_y = {},
                     lualine_z = {},

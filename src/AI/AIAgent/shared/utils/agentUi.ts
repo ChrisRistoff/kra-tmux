@@ -3,7 +3,7 @@ import type { ToolResultSummary } from '@/AI/AIAgent/shared/types/agentTypes';
 
 const TOOL_TEXT_MAX_LINES = 14;
 const TOOL_TEXT_MAX_LENGTH = 1200;
-const AGENT_DRAFT_HEADER = '## 👤 USER PROMPT (draft)';
+import { formatUserHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
 
 /** One line written to the chat file when a tool finishes. */
 export function formatToolLine(toolSummary: string, success: boolean): string {
@@ -19,13 +19,11 @@ export function formatToolLine(toolSummary: string, success: boolean): string {
 export function formatConfirmQuestion(question: string, choices: string[]): string {
     const choiceLines = choices.map((c) => `- ${c}`).join('\n');
 
-    return `\n---\n\n**💬 ${question}**\n\n${choiceLines}\n\n`;
+    return `\n\n---\n**💬 ${question}**\n\n${choiceLines}\n\n`;
 }
 
 export function formatConfirmAnswer(answer: string): string {
-    const timestamp = new Date().toISOString();
-
-    return `\n---\n\n## 👤 USER PROMPT · ${timestamp}\n\n${answer}\n\n`;
+    return `${formatUserHeader()}${answer}\n\n`;
 }
 
 function truncateMultiline(value: string): string {
@@ -64,90 +62,13 @@ function extractErrorMessage(error: unknown): string {
     return 'Tool failed.';
 }
 
-export function formatAgentConversationEntry(
-    role: 'USER' | 'ASSISTANT',
-    options?: { model?: string, timestamp?: string }
-): string {
-    const timestamp = options?.timestamp ?? new Date().toISOString();
-    const parts: string[] = [
-        role === 'USER' ? '👤 USER PROMPT' : '🤖 ASSISTANT RESPONSE',
-    ];
 
-    if (options?.model) {
-        parts.push(options.model);
-    }
+export function formatSubmittedAgentPrompt(prompt: string): string {
+    const normalizedPrompt = prompt.trim();
 
-    parts.push(timestamp);
-
-    return `\n---\n\n## ${parts.join(' · ')}\n\n`;
+    return normalizedPrompt ? `${normalizedPrompt}\n` : '';
 }
 
-export function formatAgentDraftEntry(): string {
-    return `\n---\n\n${AGENT_DRAFT_HEADER}\n\n`;
-}
-
-export function isAgentUserHeader(line: string): boolean {
-    return line.startsWith('## 👤 USER PROMPT · ');
-}
-
-export function isAgentDraftHeader(line: string): boolean {
-    return line === AGENT_DRAFT_HEADER;
-}
-
-function trimBlankEdges(lines: string[]): string[] {
-    let start = 0;
-    let end = lines.length;
-
-    while (start < end && !lines[start].trim()) {
-        start += 1;
-    }
-
-    while (end > start && !lines[end - 1].trim()) {
-        end -= 1;
-    }
-
-    return lines.slice(start, end);
-}
-
-export function extractAgentDraftPrompt(lines: string[]): string {
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-        if (isAgentDraftHeader(lines[index])) {
-            return trimBlankEdges(lines.slice(index + 1)).join('\n');
-        }
-    }
-
-    return '';
-}
-
-export function materializeAgentDraft(lines: string[], timestamp?: string): string {
-    let draftIndex = -1;
-
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-        if (isAgentDraftHeader(lines[index])) {
-            draftIndex = index;
-            break;
-        }
-    }
-
-    if (draftIndex === -1) {
-        return lines.join('\n');
-    }
-
-    const prompt = extractAgentDraftPrompt(lines);
-    const prefix = lines.slice(0, draftIndex);
-
-    while (prefix.length > 0 && !prefix[prefix.length - 1].trim()) {
-        prefix.pop();
-    }
-
-    const header = formatAgentConversationEntry(
-        'USER',
-        timestamp ? { timestamp } : undefined
-    ).trimStart();
-    const body = prompt ? `${prompt}\n` : '';
-
-    return `${prefix.join('\n')}\n${header}${body}`;
-}
 
 export function summarizeToolCall(
     toolName: string,

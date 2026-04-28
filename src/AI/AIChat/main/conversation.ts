@@ -3,12 +3,19 @@ import * as neovim from 'neovim';
 import { aiRoles } from '@/AI/shared/data/roles';
 import { promptModel } from '@/AI/AIChat/utils/promptModel';
 import { saveChat } from '@/AI/AIChat/utils/saveChat';
-import { formatChatEntry } from '@/AI/AIChat/utils/aiUtils';
 import { ChatHistory, Role, StreamController } from '@/AI/shared/types/aiTypes'
 import * as bash from '@/utils/bashHelper';
 import { openVim } from '@/utils/neovimHelper';
 import { neovimConfig } from '@/filePaths';
 import * as conversation from '@/AI/shared/conversation';
+import {
+    extractTimestampFromHeader,
+    formatAssistantHeader,
+    formatUserDraftHeader,
+    isAssistantHeader,
+    isUserHeader,
+    materializeUserDraft,
+} from '@/AI/shared/utils/conversationUtils/chatHeaders';
 const aiNeovimHelper = conversation;
 const fileContext = conversation;
 
@@ -50,16 +57,18 @@ export async function converse(
         const channelId = await nvim.channelId;
 
         try {
-            aiNeovimHelper.addNeovimFunctions(nvim, channelId);
-            aiNeovimHelper.addCommands(nvim);
-            aiNeovimHelper.setupKeyBindings(nvim);
+            await aiNeovimHelper.addNeovimFunctions(nvim, channelId);
+            await aiNeovimHelper.addCommands(nvim);
+            await aiNeovimHelper.setupKeyBindings(nvim);
         } catch (error) {
             console.error('Error setting up commands:', error);
         }
 
         // open the file in Neovim
         await nvim.command(`edit ${chatFile}`);
-        await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);
+        await aiNeovimHelper.setupChatSplitLayout(nvim, channelId);
+        await aiNeovimHelper.refreshChatLayout(nvim);
+        await aiNeovimHelper.focusChatPrompt(nvim);
         await setupEventHandlers(nvim, chatFile, provider, model, temperature, role);
 
         nvim.on('disconnect', async () => {
@@ -105,10 +114,10 @@ async function setupEventHandlers(
                 await fileContext.showFileContextsPopup(nvim);
                 break;
             case 'remove_file_context':
-                await fileContext.handleRemoveFileContext(nvim);
+                await fileContext.handleRemoveFileContext(nvim, chatFile);
                 break;
             case 'clear_contexts':
-                await fileContext.clearAllFileContexts(nvim);
+                await fileContext.clearAllFileContexts(nvim, chatFile);
                 break;
             default:
                 console.log('Unknown action:', action);
@@ -124,19 +133,32 @@ async function handleSubmit(
     temperature: number,
     role: string
 ): Promise<void> {
-    const buffer = await nvim.buffer;
-    const lines = await buffer.lines;
+    const prompt = await aiNeovimHelper.getChatPromptText(nvim);
 
-    const conversationHistory = lines.join('\n');
+    if (!prompt.trim()) {
+        await nvim.command('echohl WarningMsg | echo "Type a prompt before submitting" | echohl None');
+        await aiNeovimHelper.focusChatPrompt(nvim);
+        return;
+    }
 
-    // Load fresh file contexts right before sending to LLM
+    const conversationHistory = await fs.readFile(chatFile, 'utf8');
+    const trimmedPrompt = prompt.trim();
+    const turnTimestamp = new Date().toISOString();
+    const promptCompletion = `${trimmedPrompt}\n`;
+
+    // Replace the trailing `(draft)` USER header with a real timestamped one
+    // so the prompt body (and any @-added file context) sits under it cleanly.
+    await materializeUserDraft(chatFile, turnTimestamp);
+    await appendToChat(chatFile, promptCompletion);
+    await aiNeovimHelper.clearChatPrompt(nvim);
+
+    // Load fresh file contexts right before sending to LLM.
     const fileContextPrompt = await fileContext.getFileContextsForPrompt();
+    const fullPrompt = conversationHistory + promptCompletion + fileContextPrompt + '\n';
 
-    const fullPrompt = conversationHistory + fileContextPrompt + '\n';
-
-    const aiEntryHeader = formatChatEntry('AI - ' + model, '', false);
-    await appendToChat(chatFile, aiEntryHeader);
-    await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);
+    await appendToChat(chatFile, formatAssistantHeader(model, turnTimestamp));
+    await aiNeovimHelper.refreshChatLayout(nvim);
+    await aiNeovimHelper.focusChatPrompt(nvim);
 
     // create stream controller for this request
     currentStreamController = createStreamController();
@@ -155,17 +177,15 @@ async function handleSubmit(
     } catch (error: unknown) {
         if (currentStreamController.isAborted) {
             await appendToChat(chatFile, '\n[Generation stopped by user]\n');
-            await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);
         } else {
             console.error('Error in AI response:', error);
             await appendToChat(chatFile, '\n[Error generating response]\n');
-            await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);
         }
     } finally {
         currentStreamController = null;
-        const userEntryHeader = formatChatEntry('USER', '', false);
-        await appendToChat(chatFile, userEntryHeader);
-        await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);
+        await appendToChat(chatFile, formatUserDraftHeader());
+        await aiNeovimHelper.refreshChatLayout(nvim);
+        await aiNeovimHelper.focusChatPrompt(nvim);
     }
 }
 
@@ -189,28 +209,25 @@ async function handleStreamingResponse(
 
             if (Date.now() - lastUpdate >= updateInterval) {
                 await appendToChat(chatFile, pendingBuffer);
-                await nvim.command('edit!');
-                await nvim.command('redraw!');
+                await aiNeovimHelper.refreshChatLayout(nvim);
                 pendingBuffer = '';
                 lastUpdate = Date.now();
             }
         }
 
-        // write any remaining buffer
         if (pendingBuffer && !controller.isAborted) {
             await appendToChat(chatFile, pendingBuffer);
-            await nvim.command('edit!');
-            await nvim.command('redraw!');
+            await aiNeovimHelper.refreshChatLayout(nvim);
         }
 
-        await appendToChat(chatFile, '\n');
-        await aiNeovimHelper.updateNvimAndGoToLastLine(nvim);
+        await aiNeovimHelper.refreshChatLayout(nvim);
     } catch (error: unknown) {
         if (!controller.isAborted) {
             throw error;
         }
     }
 }
+
 
 function createStreamController(): StreamController {
     let isAborted = false;
@@ -226,24 +243,28 @@ function createStreamController(): StreamController {
 }
 
 export async function initializeChatFile(filePath: string, userPrompt = false): Promise<void> {
-    let initialContent = `
-# AI Chat History\n\nThis file contains the conversation history between the user and AI.\n
-        # ✨ Controls / Shortcuts:
-        #   ⏎  Enter     → Save & Submit
-        #   📎  @        → Add File Context(s) (<Tab> multi-select, + marks selections, <CR> confirm, <Esc> cancel)
-        #   ❌  r        → Remove File From Context
-        #   📂  f        → Show Files Currently Context
-        #   🗑️  <C-x>    → Clear Contexts
-        #   ⏹️  <C-c>    → Stop Stream
+    const initialContent = `
+# AI Chat History
 
-# 💡 Tip: Press the keys in normal mode to trigger actions
+This file contains the conversation history between the user and AI.
+
+        # Controls / Shortcuts:
+        #   Enter          -> Submit prompt
+        #   Tab / S-Tab    -> Switch between transcript and prompt
+        #   @              -> Add File Context(s) (<Tab> multi-select, + marks selections, <CR> confirm, <Esc> cancel)
+        #   r              -> Remove File From Context
+        #   f              -> Show Current File Contexts
+        #   <C-x>          -> Clear Contexts
+        #   <C-c>          -> Stop Stream
+        #
+        # Tip: Type your next message in the bottom prompt split.
 `;
 
-    if (userPrompt) {
-        initialContent += `---\n\n### USER (${new Date().toISOString()})\n\n`
-    }
+    const finalContent = userPrompt
+        ? `${initialContent}${formatUserDraftHeader()}`
+        : initialContent;
 
-    await fs.writeFile(filePath, initialContent, 'utf-8');
+    await fs.writeFile(filePath, finalContent, 'utf-8');
 }
 
 async function appendToChat(file: string, content: string): Promise<void> {
@@ -272,12 +293,14 @@ function parseChatHistory(historyString: string): ChatHistory[] {
     };
 
     for (const line of lines) {
-        const isUserMarker = line.startsWith("### USER (");
-        const isAiMarker = line.startsWith("### AI -");
+        const isUserMarker = isUserHeader(line) || line.startsWith('### USER (');
+        const isAiMarker = isAssistantHeader(line) || line.startsWith('### AI -');
 
         if (isUserMarker || isAiMarker) {
             flushMessage();
-            currentTimestamp = extractTimestamp(line) || '';
+            currentTimestamp = (isUserHeader(line) || isAssistantHeader(line))
+                ? extractTimestampFromHeader(line)
+                : (extractTimestamp(line) ?? '');
             currentRole = isUserMarker ? Role.User : Role.AI;
             currentTextLines = [];
         } else if (currentRole !== null) {

@@ -5,6 +5,11 @@ import { ChatData, Role, SavedFileContext } from '@/AI/shared/types/aiTypes'
 import { getModelCatalog } from '@/AI/shared/data/modelCatalog';
 import { SUPPORTED_PROVIDERS, type SupportedProvider } from '@/AI/shared/data/providers';
 import { formatChatEntry, pickProviderAndModel } from '@/AI/AIChat/utils/aiUtils';
+import {
+    formatAssistantHeader,
+    formatUserDraftHeader,
+    formatUserHeader,
+} from '@/AI/shared/utils/conversationUtils/chatHeaders';
 import * as ui from '@/UI/generalUI';
 import * as nvim from '@/utils/neovimHelper';
 import * as bash from '@/utils/bashHelper';
@@ -44,22 +49,19 @@ export async function loadChat(): Promise<void> {
         let chatTranscript;
 
         if (chatData.chatHistory && chatData.chatHistory.length) {
-            chatData.chatHistory.push({
-                role: Role.User,
-                message: '',
-                timestamp: new Date().toISOString()
-            })
 
             chatTranscript = formatFullChat(chatData);
         }
 
         if (chatTranscript) {
-            conversation.initializeChatFile(chatFile);
-            fs.appendFile(chatFile, chatTranscript);
+            await conversation.initializeChatFile(chatFile);
+            await fs.appendFile(chatFile, chatTranscript);
         } else {
             const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
             await fs.copyFile(chatHistoryPath, chatFile);
         }
+
+        await fs.appendFile(chatFile, formatUserDraftHeader());
 
         if (!chatData.provider || !(await checkProviderAndModelValid(chatData.provider, chatData.model))) {
             console.log('Pick a new provider');
@@ -93,10 +95,10 @@ export async function loadChat(): Promise<void> {
 function formatFullChat(chatData: ChatData): string {
     return chatData.chatHistory.map((entry: any) => {
         if (entry.role === Role.AI) {
-            return `### ${entry.role} - ${chatData.model} - (${entry.timestamp})\n\n${entry.message}\n`
+            return `${formatAssistantHeader(chatData.model, entry.timestamp)}${entry.message}`;
         }
 
-        return `### ${entry.role} - (${entry.timestamp})\n\n${entry.message}\n`
+        return `${formatUserHeader(entry.timestamp)}${entry.message}`;
     }).join('');
 }
 

@@ -14,6 +14,12 @@ export interface FileContext {
     startLine?: number | undefined;
     endLine?: number | undefined;
     summary: string;
+    /**
+     * The exact text that was appended to the chat file when this context was
+     * added. Stored so we can surgically remove it again when the user removes
+     * the context, keeping the visible chat in sync with the in-memory list.
+     */
+    chatEntry?: string;
 }
 
 export interface AiRoles {

@@ -2,7 +2,8 @@ import { NeovimClient } from "neovim";
 import fs from 'fs/promises';
 import { formatContextPopupEntry, formatContextSummary } from './fileContextDisplay';
 import { selectContextToRemove, selectFileOrFolder, promptShareMode, selectFileFromFolder } from './fileContextPickers';
-import { addFolderContext, addEntireFileContext, addPartialFileContext } from './fileContextOps';
+import { addFolderContext, addEntireFileContext, addPartialFileContext, refreshTranscript } from './fileContextOps';
+import type { FileContext } from '@/AI/shared/types/aiTypes';
 import { clearStoredFileContexts, fileContexts, getContextFileName, getFileExtension } from './fileContextStore';
 
 export { fileContexts, getFileExtension };
@@ -64,9 +65,20 @@ export async function handleAddFileContext(nvim: NeovimClient, chatFile: string,
 /**
  * Clear all file contexts and show count
 **/
-export async function clearAllFileContexts(nvim: NeovimClient): Promise<void> {
+export async function clearAllFileContexts(
+    nvim: NeovimClient,
+    chatFile?: string,
+    options?: { agentMode?: boolean }
+): Promise<void> {
     const count = fileContexts.length;
+    const removed = fileContexts.slice();
     clearStoredFileContexts();
+
+    if (chatFile) {
+        await removeContextEntriesFromChatFile(chatFile, removed);
+        await refreshTranscript(nvim, options?.agentMode);
+    }
+
     await nvim.command(`echohl MoreMsg | echo "Cleared ${count} file context(s)" | echohl None`);
 }
 
@@ -76,6 +88,36 @@ export async function clearAllFileContexts(nvim: NeovimClient): Promise<void> {
 export const clearFileContexts = (): void => {
     clearStoredFileContexts();
 };
+
+/**
+ * Strip the chat-file entries that were appended when each of the given
+ * contexts was added. Keeps the visible chat in sync with the in-memory list
+ * so the user sees adds/removes immediately.
+ */
+async function removeContextEntriesFromChatFile(
+    chatFile: string,
+    removed: FileContext[]
+): Promise<void> {
+    const entries = removed
+        .map((ctx) => ctx.chatEntry)
+        .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0);
+
+    if (entries.length === 0) {
+        return;
+    }
+
+    try {
+        let content = await fs.readFile(chatFile, 'utf-8');
+        for (const entry of entries) {
+            const idx = content.lastIndexOf(entry);
+            if (idx === -1) continue;
+            content = content.slice(0, idx) + content.slice(idx + entry.length);
+        }
+        await fs.writeFile(chatFile, content, 'utf-8');
+    } catch (error) {
+        console.error('Failed to strip removed contexts from chat file:', error);
+    }
+}
 
 /**
  * Generate context string for AI prompt from loaded file contexts
@@ -160,7 +202,11 @@ export async function rebuildFileContextsFromChat(chatFile: string): Promise<voi
 /**
  * Handle removing a file context via selection
 **/
-export async function handleRemoveFileContext(nvim: NeovimClient): Promise<void> {
+export async function handleRemoveFileContext(
+    nvim: NeovimClient,
+    chatFile?: string,
+    options?: { agentMode?: boolean }
+): Promise<void> {
     try {
         if (fileContexts.length === 0) {
             await nvim.command('echohl WarningMsg | echo "No file contexts to remove" | echohl None');
@@ -168,21 +214,39 @@ export async function handleRemoveFileContext(nvim: NeovimClient): Promise<void>
             return;
         }
 
-        const selectedIndex = await selectContextToRemove(nvim);
-        if (selectedIndex === null) {
+        const selectedIndices = await selectContextToRemove(nvim);
+        if (!selectedIndices || selectedIndices.length === 0) {
             await nvim.command('echohl WarningMsg | echo "No context selected" | echohl None');
 
             return;
         }
 
-        if (selectedIndex >= 0 && selectedIndex < fileContexts.length) {
-            const removedContext = fileContexts.splice(selectedIndex, 1)[0];
-            const fileName = getContextFileName(removedContext.filePath);
-            await nvim.command(`echohl MoreMsg | echo "Removed context: ${fileName}" | echohl None`);
-            await showFileContextsPopup(nvim);
-        } else {
+        const validIndices = Array.from(new Set(selectedIndices))
+            .filter((idx) => idx >= 0 && idx < fileContexts.length)
+            .sort((a, b) => b - a);
+
+        if (validIndices.length === 0) {
             await nvim.command('echohl WarningMsg | echo "Invalid selection" | echohl None');
+
+            return;
         }
+
+        const removedContexts: FileContext[] = [];
+        for (const idx of validIndices) {
+            removedContexts.push(fileContexts.splice(idx, 1)[0]);
+        }
+
+        if (chatFile) {
+            await removeContextEntriesFromChatFile(chatFile, removedContexts);
+            await refreshTranscript(nvim, options?.agentMode);
+        }
+
+        const names = removedContexts
+            .map((ctx) => getContextFileName(ctx.filePath))
+            .reverse()
+            .join(', ');
+        await nvim.command(`echohl MoreMsg | echo "Removed ${removedContexts.length} context(s): ${names}" | echohl None`);
+        await showFileContextsPopup(nvim);
     } catch (error) {
         console.error('Error removing file context:', error);
         await nvim.command('echohl ErrorMsg | echo "Error removing file context" | echohl None');

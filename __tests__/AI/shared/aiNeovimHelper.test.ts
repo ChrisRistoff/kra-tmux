@@ -5,6 +5,11 @@ import {
     addNeovimFunctions,
     addCommands,
     setupKeyBindings,
+    setupChatSplitLayout,
+    getChatPromptText,
+    clearChatPrompt,
+    focusChatPrompt,
+    refreshChatLayout,
     updateNvimAndGoToLastLine
 } from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
 
@@ -101,6 +106,7 @@ describe('nvim-utils', () => {
 
                 expect(mockNvim.command).toHaveBeenCalledTimes(6);
                 expect(mockNvim.command).toHaveBeenCalledWith(expect.stringContaining('SaveAndSubmit()'));
+                expect(mockNvim.command).toHaveBeenCalledWith(expect.stringContaining('g:kra_chat_prompt_buf'));
                 expect(mockNvim.command).toHaveBeenCalledWith(expect.stringContaining('AddFileContext()'));
                 expect(mockNvim.command).toHaveBeenCalledWith(expect.stringContaining('StopStream()'));
                 expect(mockNvim.command).toHaveBeenCalledWith(expect.stringContaining('ShowFileContextsPopup()'));
@@ -134,6 +140,40 @@ describe('nvim-utils', () => {
                     expect.stringContaining("map('n', '<CR>'"),
                     []
                 );
+            });
+        });
+
+        describe('chat split layout helpers', () => {
+            it('should delegate chat prompt layout operations to the Lua module', async () => {
+                const executeLuaMock = mockNvim.executeLua as unknown as jest.Mock;
+                executeLuaMock
+                    .mockResolvedValueOnce(undefined)
+                    .mockResolvedValueOnce('Prompt text')
+                    .mockResolvedValueOnce(undefined)
+                    .mockResolvedValueOnce(undefined)
+                    .mockResolvedValueOnce(undefined);
+
+                await setupChatSplitLayout(mockNvim, 123);
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(1, `require('kra_chat_layout').setup(...)`, [123]);
+
+                const prompt = await getChatPromptText(mockNvim);
+                expect(prompt).toBe('Prompt text');
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(2, `return require('kra_chat_layout').get_prompt_text()`, []);
+
+                await clearChatPrompt(mockNvim);
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(3, `require('kra_chat_layout').clear_prompt()`, []);
+
+                await focusChatPrompt(mockNvim);
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(4, `require('kra_chat_layout').focus_prompt()`, []);
+
+                await refreshChatLayout(mockNvim);
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(5, `require('kra_chat_layout').refresh()`, []);
+            });
+
+            it('should return an empty string when the prompt text is not a string', async () => {
+                (mockNvim.executeLua as unknown as jest.Mock).mockResolvedValueOnce(123);
+
+                await expect(getChatPromptText(mockNvim)).resolves.toBe('');
             });
         });
 

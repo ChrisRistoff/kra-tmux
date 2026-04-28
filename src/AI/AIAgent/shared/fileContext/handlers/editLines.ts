@@ -4,7 +4,6 @@ import { atomicWriteFile } from '../../utils/fileSafety';
 import {
     LARGE_RANGE_THRESHOLD,
     clearReadCache,
-    findUnreadGap,
 } from '../readCache';
 import { withDiagnostics } from '../format';
 import { errorContent, textContent, ToolResult } from '../toolResult';
@@ -78,16 +77,6 @@ export async function handleEditLines(filePath: string, args: Record<string, unk
                 return errorContent(
                     `Range${where} (${start}\u2013${end}) covers ${span} lines, exceeding the hard cap of ${LARGE_RANGE_THRESHOLD}. ` +
                     'Split the change into multiple smaller edit_lines calls (a multi-edit array call counts each range separately).'
-                );
-            }
-
-            const gap = findUnreadGap(filePath, start, clampedEnd);
-
-            if (gap) {
-                return errorContent(
-                    `Refusing to edit lines ${gap[0]}\u2013${gap[1]} of ${filePath}: those lines have not been read in this session. ` +
-                    'Call read_lines or read_function on the target range first, then retry the edit. ' +
-                    '(Read-tracking is reset for a file after each successful edit_lines/create_file.)'
                 );
             }
         }

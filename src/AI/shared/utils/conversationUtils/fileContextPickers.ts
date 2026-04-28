@@ -44,7 +44,7 @@ function isString(value: unknown): value is string {
  * Telescope picker: choose a file context to remove. Resolves to the index in
  * `fileContexts` (or null if the user cancelled).
  */
-export async function selectContextToRemove(nvim: NeovimClient): Promise<number | null> {
+export async function selectContextToRemove(nvim: NeovimClient): Promise<number[] | null> {
     const channelId = await nvim.channelId;
     const displayItems = await Promise.all(
         fileContexts.map(async (context, index) => formatContextPickerItem(context, index))
@@ -52,12 +52,20 @@ export async function selectContextToRemove(nvim: NeovimClient): Promise<number 
 
     return new Promise((resolve) => {
         const handler = (method: string, args: unknown[]): void => {
-            if (method !== 'fzf_selected_index') {
+            if (method !== 'fzf_selected_indices') {
                 return;
             }
 
             nvim.removeListener('notification', handler);
-            resolve(typeof args[0] === 'number' ? args[0] : null);
+            const value = args[0];
+            if (Array.isArray(value)) {
+                const indices = value
+                    .map((v) => (typeof v === 'number' ? v : null))
+                    .filter((v): v is number => v !== null);
+                resolve(indices.length > 0 ? indices : null);
+                return;
+            }
+            resolve(null);
         };
 
         nvim.on('notification', handler);
@@ -68,19 +76,34 @@ export async function selectContextToRemove(nvim: NeovimClient): Promise<number 
             local action_state = require('telescope.actions.state')
 
             require('telescope.pickers').new({}, {
-                prompt_title = 'Select Context to Remove (ESC to cancel)',
+                prompt_title = 'Select Context(s) to Remove (Tab to multi-select, ESC to cancel)',
                 finder = require('telescope.finders').new_table(items),
                 sorter = require('telescope.sorters').get_generic_fuzzy_sorter(),
                 attach_mappings = function(prompt_bufnr, map)
                     actions.select_default:replace(function()
-                        local selection = action_state.get_selected_entry()
+                        local picker = action_state.get_current_picker(prompt_bufnr)
+                        local multi = picker:get_multi_selection()
+                        local indices = {}
+                        if multi and #multi > 0 then
+                            for _, entry in ipairs(multi) do
+                                local idx = tonumber(string.match(entry[1], "^(%d+)"))
+                                if idx then table.insert(indices, idx - 1) end
+                            end
+                        else
+                            local selection = action_state.get_selected_entry()
+                            local idx = selection and tonumber(string.match(selection[1], "^(%d+)"))
+                            if idx then table.insert(indices, idx - 1) end
+                        end
                         actions.close(prompt_bufnr)
-                        local index = selection and tonumber(string.match(selection[1], "^(%d+)"))
-                        vim.fn.rpcnotify(${channelId}, 'fzf_selected_index', index and index - 1 or nil)
+                        vim.fn.rpcnotify(${channelId}, 'fzf_selected_indices', indices)
                     end)
+                    map('i', '<Tab>', actions.toggle_selection)
+                    map('n', '<Tab>', actions.toggle_selection)
+                    map('i', '<S-Tab>', actions.toggle_selection)
+                    map('n', '<S-Tab>', actions.toggle_selection)
                     map('i', '<Esc>', function()
                         actions.close(prompt_bufnr)
-                        vim.fn.rpcnotify(${channelId}, 'fzf_selected_index', nil)
+                        vim.fn.rpcnotify(${channelId}, 'fzf_selected_indices', {})
                     end)
                     return true
                 end

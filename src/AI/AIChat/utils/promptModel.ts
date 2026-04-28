@@ -2,8 +2,6 @@ import { StreamController } from '@/AI/shared/types/aiTypes';
 import { getProviderApiKey, getProviderBaseURL } from '@/AI/shared/data/providers';
 import OpenAI from 'openai';
 
-const formattingRules = '\nRespond without adding chat entries, we format that on our end.';
-
 export async function promptModel(
     provider: string,
     model: string,
@@ -32,7 +30,7 @@ async function createOpenAIStream(
         const completion = await openai.chat.completions.create({
             messages: [
                 { role: 'system', content: system },
-                { role: 'user', content: prompt + formattingRules },
+                { role: 'user', content: prompt },
             ],
             model: llmModel,
             temperature: temperature,
