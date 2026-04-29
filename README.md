@@ -134,7 +134,7 @@ kra ai
 ### 🛠️ **Available Commands**
 | Command    | Description                                                                                                                                                                                                                       |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, and **socket-based communication**. Press `Enter` in normal mode to send prompts. Provider models are sourced from the same **live catalog** the agent uses (cached 24h, network-free fallback). |
+| **chat** 🗨️   | Launch new AI chat session in Neovim with **real-time streaming**, **file context management**, **built-in web tools** (`web_search` + `web_fetch` with Jina / DuckDuckGo / Wayback fallbacks), and **socket-based communication**. Press `Enter` in normal mode to send prompts; press `<leader>h` to inspect the tool-call history. Provider models are sourced from the same **live catalog** the agent uses (cached 24h, network-free fallback). |
 | **agent** 🧠 | Launch an agent session in Neovim with a **provider picker** (Copilot SDK *or* BYOK / OpenAI-compatible), **project-local MCP servers**, an **inline diff editor**, and **per-file revert** from session diff history. |
 | **load** 📂   | Browse saved conversations with **AI-generated summaries**. Preview summaries before loading full chat sessions.                                                                                                              |
 | **delete** 🧽 | Manage saved chats with **searchable deletion interface** and confirmation prompts.                                                                                                        |
@@ -142,6 +142,7 @@ kra ai
 ### **Key Technical Features**
 - ⚡ **Real-time streaming responses** with user-controlled abort capability
 - 📁 **Advanced file context system** - Add entire files or visual selections as context
+- 🌐 **Built-in web tools in chat** - Models can call `web_search` and `web_fetch` mid-conversation. Search uses **Jina → DuckDuckGo Lite**; fetch uses **Jina Reader → direct** (handles JS-rendered and paywalled pages). Set `JINA_API` to enable the Jina backends.
 - 🧠 **Multi-provider AI support** - OpenAI, Anthropic, Gemini, and custom providers
 - 🤖 **Agent mode (Copilot + BYOK)** — Agentic tool use, MCP support, an inline diff editor, and interactive ask-user requests inside Neovim
 - 💾 **Intelligent conversation persistence** with automatic summary generation

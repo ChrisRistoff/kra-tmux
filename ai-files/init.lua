@@ -88,7 +88,6 @@ require("lazy").setup({
                 bullet = {
                     enabled = true,
                     icons = { "•", "◦", "▸", "▹" },
-                    ordered_icons = { "₁", "₂", "₃", "₄", "₅", "₆" },
                     left_pad = 1,
                     right_pad = 1,
                     highlight = "RenderMarkdownBullet",

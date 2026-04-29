@@ -61,3 +61,13 @@ export function getMistralKey(): string {
 
     return apiKey;
 }
+
+export function getOpenCodeKey(): string {
+    const apiKey = process.env.OPEN_CODE;
+
+    if (!apiKey) {
+        throw new Error('OPEN_CODE environment variable is not set');
+    }
+
+    return apiKey;
+}

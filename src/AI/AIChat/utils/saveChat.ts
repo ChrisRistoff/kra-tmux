@@ -46,7 +46,7 @@ export async function saveChat(
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 
     console.log('Preparing summary...')
-    const summary = await promptModel('gemini', 'gemini-2.5-flash', finalSummaryPrompt, temperature, aiRoles[role]);
+    const summary = await promptModel('gemini', 'gemini-2.5-flash', [{ role: 'user', content: finalSummaryPrompt }], temperature, aiRoles[role]);
 
     let fullResponse = '';
     for await (const chunk of summary) {

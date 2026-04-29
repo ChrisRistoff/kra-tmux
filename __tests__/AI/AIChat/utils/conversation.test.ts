@@ -109,13 +109,14 @@ describe('converse', () => {
         expect(promptModel).toHaveBeenCalledWith(
             provider,
             model,
-            expect.stringContaining('USER message'),
+            expect.arrayContaining([expect.objectContaining({ role: 'user', content: expect.stringContaining('USER message') })]),
             temperature,
             aiRoles[role],
             expect.objectContaining({
                 abort: expect.any(Function),
                 isAborted: expect.any(Boolean)
-            })
+            }),
+            expect.objectContaining({ chatFile: expect.any(String) })
         );
 
         if (nvimEvents.disconnect) {
@@ -155,13 +156,14 @@ describe('converse', () => {
         expect(promptModel).toHaveBeenCalledWith(
             provider,
             model,
-            expect.stringContaining('USER message'),
+            expect.arrayContaining([expect.objectContaining({ role: 'user', content: expect.stringContaining('USER message') })]),
             temperature,
             aiRoles[role],
             expect.objectContaining({
                 abort: expect.any(Function),
                 isAborted: expect.any(Boolean)
-            })
+            }),
+            expect.objectContaining({ chatFile: expect.any(String) })
         );
 
         if (nvimEvents.disconnect) {
@@ -192,13 +194,14 @@ describe('converse', () => {
         expect(promptModel).toHaveBeenCalledWith(
             provider,
             model,
-            expect.stringContaining('USER message'),
+            expect.arrayContaining([expect.objectContaining({ role: 'user', content: expect.stringContaining('USER message') })]),
             temperature,
             aiRoles[role],
             expect.objectContaining({
                 abort: expect.any(Function),
                 isAborted: expect.any(Boolean)
-            })
+            }),
+            expect.objectContaining({ chatFile: expect.any(String) })
         );
 
         if (nvimEvents.disconnect) {

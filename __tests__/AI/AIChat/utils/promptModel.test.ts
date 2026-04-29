@@ -42,7 +42,7 @@ describe('promptModel', () => {
             const instance = buildOpenAIInstance(createMockStream());
             mockOpenAI.mockImplementation(() => instance as never);
 
-            await promptModel(provider, 'model-x', 'test prompt', 0.7, 'test system');
+            await promptModel(provider, 'model-x', [{ role: 'user', content: 'test prompt' }], 0.7, 'test system');
 
             expect(mockGetApiKey).toHaveBeenCalledWith(provider);
             expect(mockGetBaseURL).toHaveBeenCalledWith(provider);
@@ -57,7 +57,8 @@ describe('promptModel', () => {
         const instance = buildOpenAIInstance(createMockStream());
         mockOpenAI.mockImplementation(() => instance as never);
 
-        await promptModel('deep-infra', 'gpt-3.5-turbo', 'test prompt', 0.7, 'test system');
+        const result = await promptModel('deep-infra', 'gpt-3.5-turbo', [{ role: 'user', content: 'test prompt' }], 0.7, 'test system');
+        for await (const _ of result) { /* drain */ }
 
         expect(instance.chat.completions.create).toHaveBeenCalledWith({
             messages: [
@@ -78,7 +79,7 @@ describe('promptModel', () => {
         ]);
         mockOpenAI.mockImplementation(() => buildOpenAIInstance(stream) as never);
 
-        const result = await promptModel('open-ai', 'gpt-4', 'test', 0.7, 'system');
+        const result = await promptModel('open-ai', 'gpt-4', [{ role: 'user', content: 'test' }], 0.7, 'system');
         const chunks: string[] = [];
 
         for await (const chunk of result) {
@@ -87,8 +88,7 @@ describe('promptModel', () => {
 
         expect(chunks).toEqual(['Hello', ' world', '!']);
     });
-
-    it('treats missing/null content as empty string', async () => {
+    it('skips missing/null content chunks', async () => {
         const stream = createMockStream([
             { choices: [{ delta: {} }] },
             { choices: [{ delta: { content: null } }] },
@@ -96,13 +96,13 @@ describe('promptModel', () => {
         ]);
         mockOpenAI.mockImplementation(() => buildOpenAIInstance(stream) as never);
 
-        const result = await promptModel('open-ai', 'gpt-4', 'test', 0.7, 'system');
+        const result = await promptModel('open-ai', 'gpt-4', [{ role: 'user', content: 'test' }], 0.7, 'system');
         const chunks: string[] = [];
 
         for await (const chunk of result) {
             chunks.push(chunk);
         }
 
-        expect(chunks).toEqual(['', '', 'Hello']);
+        expect(chunks).toEqual(['Hello']);
     });
 });

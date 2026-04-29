@@ -118,6 +118,24 @@ const STATIC_MISTRAL: Record<string, { contextWindow: number; pricing: ModelPric
     'open-mixtral-8x22b': { contextWindow: 64_000, pricing: { inputPerM: 2.00, outputPerM: 6.00 } },
 };
 
+// OpenCode Zen — pricing/context from https://opencode.ai/docs/zen.
+// Only the openai-compatible models are reachable via /chat/completions and listed here.
+// `-pro` / `-thinking` style suffixes denote reasoning-on variants (selected by model id, not a flag).
+const STATIC_OPENCODE: Record<string, { contextWindow: number; pricing?: ModelPricing }> = {
+    'minimax-m2.7': { contextWindow: 205_000, pricing: { inputPerM: 0.30, outputPerM: 1.20, cachedInputPerM: 0.06 } },
+    'minimax-m2.5': { contextWindow: 205_000, pricing: { inputPerM: 0.30, outputPerM: 1.20, cachedInputPerM: 0.06 } },
+    'minimax-m2.5-free': { contextWindow: 205_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'kimi-k2.6': { contextWindow: 262_144, pricing: { inputPerM: 0.95, outputPerM: 4.00, cachedInputPerM: 0.16 } },
+    'glm-5.1': { contextWindow: 200_000, pricing: { inputPerM: 1.40, outputPerM: 4.40, cachedInputPerM: 0.26 } },
+    'glm-5': { contextWindow: 200_000, pricing: { inputPerM: 1.00, outputPerM: 3.20, cachedInputPerM: 0.20 } },
+    'qwen3.6-plus': { contextWindow: 256_000, pricing: { inputPerM: 0.50, outputPerM: 3.00, cachedInputPerM: 0.05 } },
+    'big-pickle': { contextWindow: 200_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'hy3-preview-free': { contextWindow: 200_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'ling-2.6-flash-free': { contextWindow: 200_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'nemotron-3-super-free': { contextWindow: 200_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'trinity-large-preview-free': { contextWindow: 200_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+};
+
 const STATIC_FALLBACK_MODELS: Record<SupportedProvider, ModelInfo[]> = {
     'deep-infra': [
         { id: 'moonshotai/Kimi-K2-Instruct', label: 'moonshotai/Kimi-K2-Instruct', contextWindow: 128_000, pricing: { inputPerM: 0.75, outputPerM: 4.00, cachedInputPerM: 0.15 } },
@@ -144,6 +162,12 @@ const STATIC_FALLBACK_MODELS: Record<SupportedProvider, ModelInfo[]> = {
         { id: 'mistral-large-latest', label: 'mistral-large-latest', contextWindow: 128_000, pricing: STATIC_MISTRAL['mistral-large-latest'].pricing },
         { id: 'mistral-small-latest', label: 'mistral-small-latest', contextWindow: 128_000, pricing: STATIC_MISTRAL['mistral-small-latest'].pricing },
         { id: 'codestral-latest', label: 'codestral-latest', contextWindow: 256_000, pricing: STATIC_MISTRAL['codestral-latest'].pricing },
+    ],
+    'open-code': [
+        { id: 'kimi-k2.6', label: 'kimi-k2.6', contextWindow: 262_144, pricing: STATIC_OPENCODE['kimi-k2.6'].pricing! },
+        { id: 'glm-5.1', label: 'glm-5.1', contextWindow: 200_000, pricing: STATIC_OPENCODE['glm-5.1'].pricing! },
+        { id: 'minimax-m2.7', label: 'minimax-m2.7', contextWindow: 205_000, pricing: STATIC_OPENCODE['minimax-m2.7'].pricing! },
+        { id: 'qwen3.6-plus', label: 'qwen3.6-plus', contextWindow: 256_000, pricing: STATIC_OPENCODE['qwen3.6-plus'].pricing! },
     ],
 };
 
@@ -340,6 +364,45 @@ async function fetchMistral(apiKey: string): Promise<ModelInfo[]> {
     });
 }
 
+async function fetchOpenCode(apiKey: string): Promise<ModelInfo[]> {
+    const res = await fetch('https://opencode.ai/zen/go/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!res.ok) {
+        throw new Error(`OpenCode /models returned ${res.status}`);
+    }
+
+    const json = await res.json() as { data: Array<{ id: string }> };
+
+    const models = json.data.map((m): ModelInfo => {
+        let meta = STATIC_OPENCODE[m.id];
+
+        if (!meta) {
+            meta = {
+                contextWindow: 200_000,
+                pricing: { inputPerM: 0, outputPerM: 0 },
+            };
+        };
+
+        return {
+            id: m.id,
+            label: m.id,
+            contextWindow: meta.contextWindow,
+            ...(meta.pricing),
+        };
+    })
+
+    models.push({
+        id: 'opencode/big-pickle',
+        label: 'big-pickle',
+        contextWindow: 200_000,
+        pricing: { inputPerM: 0, outputPerM: 0 },
+    });
+
+    return models;
+}
+
 async function fetchLive(provider: SupportedProvider): Promise<ModelInfo[]> {
     switch (provider) {
         case 'open-router':
@@ -354,6 +417,8 @@ async function fetchLive(provider: SupportedProvider): Promise<ModelInfo[]> {
             return fetchOpenAI(getProviderApiKey(provider));
         case 'mistral':
             return fetchMistral(getProviderApiKey(provider));
+        case 'open-code':
+            return fetchOpenCode(getProviderApiKey(provider));
         default: {
             const exhaustive: never = provider;
 
@@ -384,7 +449,8 @@ export async function getModelCatalog(
 
             return models;
         }
-    } catch {
+    } catch (error) {
+        console.log(error)
         // fall through to stale cache / static fallback
     }
 

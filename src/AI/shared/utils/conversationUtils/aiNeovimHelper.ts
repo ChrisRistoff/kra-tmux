@@ -83,6 +83,7 @@ export async function addCommands(nvim: NeovimClient): Promise<void> {
     await nvim.command(`command! -nargs=0 StopGeneration call StopStream()`);
     await nvim.command(`command! -nargs=0 ClearContexts call ClearContexts()`);
     await nvim.command(`command! -nargs=0 RemoveFileContext call RemoveFileContext()`);
+    await nvim.command(`command! -nargs=0 AgentToolHistory lua require('kra_agent.ui').show_history()`);
 }
 
 export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
@@ -98,6 +99,7 @@ export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
             map('n', 'f', '<Cmd>call ShowFileContextsPopup()<CR>', vim.tbl_extend('force', opts, { desc = 'Show active file contexts' }))
             map('n', '<C-x>', '<Cmd>call ClearContexts()<CR>', vim.tbl_extend('force', opts, { desc = 'Clear file contexts' }))
             map('n', 'r', '<Cmd>call RemoveFileContext()<CR>', vim.tbl_extend('force', opts, { desc = 'Remove a file context' }))
+            map('n', '<leader>h', '<Cmd>AgentToolHistory<CR>', vim.tbl_extend('force', opts, { desc = 'Show tool call history' }))
         `, []);
 
         return;
@@ -109,6 +111,7 @@ export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
     await nvim.command(`nnoremap f :call ShowFileContextsPopup()<CR>`);
     await nvim.command(`nnoremap <C-x> :call ClearContexts()<CR>`);
     await nvim.command(`nnoremap r :call RemoveFileContext()<CR>`);
+    await nvim.command(`nnoremap <leader>h :AgentToolHistory<CR>`);
 }
 
 export async function setupChatSplitLayout(nvim: NeovimClient, channelId: number): Promise<void> {

@@ -13,6 +13,8 @@ A sophisticated AI interface built on Neovim with advanced file context manageme
 - **🔄 Tmux Integration**: Seamless tmux split-pane support
 - **🎯 Visual Selection**: Select specific code portions using Neovim's visual mode
 - **📊 Context Management**: Visual popup interface for managing file contexts
+- **🌐 Built-in Web Tools**: Models can call `web_search` (Jina or DuckDuckGo) and `web_fetch` (with Jina Reader + Wayback fallbacks for JS/paywalled pages) directly from chat
+- **🪜 Tool History**: `<leader>h` opens the same tool-call history popup the agent uses, showing every web call made in the conversation
 
 ## 🏗️ System Architecture
 
@@ -89,6 +91,7 @@ graph TB
 | `Ctrl+X` | 🧹 Clear All | Remove all file contexts |
 | `Ctrl+C` | ⏹️ Stop Stream | Abort AI response generation |
 | `Space` | ✂️ Add Selection | Add visual selection to context (visual mode) |
+| `<leader>h` | 🕶️ Tool History | Open the AgentToolHistory popup listing every web tool call (shared with agent mode) |
 
 ## 📁 File Context System
 
@@ -270,6 +273,36 @@ if (process.env.TMUX) {
 - Buffer-specific key mappings
 - Popup window styling
 - Dedicated proposal-review commands for Copilot SDK sessions
+
+### 🌐 Web Tools
+
+Chat models can call two web tools through the OpenAI function-calling interface during a turn:
+
+- **`web_search(query, max_results?)`** — returns a ranked list of results with title, URL, and snippet.
+- **`web_fetch(url, max_length?)`** — fetches a URL and returns plain text / Markdown of the main content (chrome stripped).
+
+The model decides when to call them. A one-line marker is written into the chat file for each call (`` `✓ web_search: nodejs release notes` ``), and the full call/response history is available via `<leader>h` (the same `AgentToolHistory` popup the agent uses).
+
+#### Search backend chain (`runWebSearch`)
+1. **Jina Search** (`s.jina.ai`) — used when `JINA_API` env var is set. Reliable, JSON results, ~200 RPM with a key.
+2. **DuckDuckGo Lite** (`lite.duckduckgo.com/lite/`) — fallback when no key is set or Jina fails. Free, no key, slim HTML layout.
+
+#### Fetch backend chain (`runWebFetch`)
+1. **Jina Reader** (`r.jina.ai/<url>`) — primary. Server-side renders the page (handles JS-only sites) and returns Markdown with links preserved, so the model can navigate index pages → articles. Anonymous tier ~20 RPM; with `JINA_API` set, ~200 RPM.
+2. **Direct fetch** — fallback when Jina Reader fails or returns <200 chars. Plain `fetch()` against the origin, run through our own HTML → text extractor (`extractMainContent` + `htmlToText`).
+
+Each fallback adds a `Fetched-Via:` line in the tool result so it's clear which path served the response.
+
+#### Environment variables
+| Variable | Purpose | Required? |
+|----------|---------|-----------|
+| `JINA_API` | Jina AI API key. Enables `s.jina.ai` for search and raises Reader limits to ~200 RPM. | Optional but strongly recommended — DuckDuckGo blocks cloud/repeated IPs aggressively. |
+
+Get a free key at <https://jina.ai/> (10M tokens/month shared between Search + Reader on the free tier).
+
+#### Token cost notes
+Tool result blobs are **not** persisted to the saved chat file — they only live in the in-memory `messages` array for one turn. After the turn ends, only the model's own text remains. Within a turn, however, every prior tool result is re-sent on each subsequent API call (the OpenAI function-calling API is stateless), so a chained `search → fetch → fetch` turn can grow to 15–20k input tokens. OpenAI/DeepInfra auto-cache stable prefixes ≥1024 tokens at ~50% off, which absorbs most of the cost.
+
 
 ## 🔄 Session Lifecycle
 
