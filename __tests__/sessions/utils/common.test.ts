@@ -34,10 +34,6 @@ describe('tmux-session', () => {
         mockBash.execCommand.mockResolvedValue({ stdout: '', stderr: '' });
         mockUtils.sleep.mockResolvedValue(undefined);
         mockUtils.loadSettings.mockResolvedValue({
-            watchCommands: {
-                work: { active: false, watch: { windowName: '', command: '' } },
-                personal: { active: false, watch: { windowName: '', command: '' } }
-            },
             autosave: { active: true, currentSession: '', timeoutMs: 5000 }
         });
         mockUtils.saveSettings.mockResolvedValue(undefined);
@@ -184,10 +180,6 @@ describe('tmux-session', () => {
     describe('updateCurrentSession', () => {
         it('should update current session in settings', async () => {
             const mockSettings = {
-                watchCommands: {
-                    work: { active: false, watch: { windowName: 'work-window', command: 'npm start' } },
-                    personal: { active: true, watch: { windowName: 'personal-window', command: 'vim' } }
-                },
                 autosave: { active: true, currentSession: 'old-session', timeoutMs: 5000 }
             };
             mockUtils.loadSettings.mockResolvedValue(mockSettings);
@@ -196,10 +188,6 @@ describe('tmux-session', () => {
 
             expect(mockUtils.loadSettings).toHaveBeenCalledTimes(1);
             expect(mockUtils.saveSettings).toHaveBeenCalledWith({
-                watchCommands: {
-                    work: { active: false, watch: { windowName: 'work-window', command: 'npm start' } },
-                    personal: { active: true, watch: { windowName: 'personal-window', command: 'vim' } }
-                },
                 autosave: { active: true, currentSession: 'new-session', timeoutMs: 5000 }
             });
         });
@@ -214,10 +202,6 @@ describe('tmux-session', () => {
 
         it('should handle settings saving failure', async () => {
             const mockSettings = {
-                watchCommands: {
-                    work: { active: false, watch: { windowName: '', command: '' } },
-                    personal: { active: false, watch: { windowName: '', command: '' } }
-                },
                 autosave: { active: true, currentSession: 'old', timeoutMs: 3000 }
             };
             mockUtils.loadSettings.mockResolvedValue(mockSettings);

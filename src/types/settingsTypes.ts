@@ -83,11 +83,6 @@ export type DocsSettings = {
 }
 
 export type Settings = {
-    watchCommands: {
-        work: WatchOptions,
-        personal: WatchOptions,
-    },
-
     autosave: Autosave,
 
     ai?: {

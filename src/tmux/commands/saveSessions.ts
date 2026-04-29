@@ -53,7 +53,7 @@ export async function saveSessionsToFile(): Promise<void> {
 function cleanUpStaleNvimSaves(sessions: TmuxSessions): void {
     Object.keys(sessions).forEach((session) => {
         sessions[session].windows.forEach((window, windowIndex) => {
-            window.panes.forEach(async (pane, paneIndex) => {
+            window.panes.forEach(async (pane, paneIndex): Promise<void> => {
                 if (pane.currentCommand !== 'nvim') {
                     const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}`
                     try {

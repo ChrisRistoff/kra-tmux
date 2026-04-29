@@ -1,17 +1,3 @@
-[watchCommands.work]
-active = false
-
-[watchCommands.work.watch]
-windowName = ""
-command = ""
-
-[watchCommands.personal]
-active = true
-
-[watchCommands.personal.watch]
-windowName = ""
-command = ""
-
 [autosave]
 active = true
 currentSession = "this will update automatically on load/save session"

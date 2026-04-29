@@ -14,10 +14,6 @@ describe('agentSettings', () => {
 
     it('maps only active MCP servers into SDK config', async () => {
         mockedLoadSettings.mockResolvedValue({
-            watchCommands: {
-                work: { active: false, watch: { windowName: '', command: '' } },
-                personal: { active: false, watch: { windowName: '', command: '' } },
-            },
             autosave: {
                 active: true,
                 currentSession: 'session',
