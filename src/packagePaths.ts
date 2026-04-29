@@ -58,5 +58,12 @@ export const aiLuaDir = path.join(aiFilesDir, 'lua');
 export const autoSaveManagerJsPath = assetPath('dest', 'automationScripts', 'autosave', 'autoSaveManager.js');
 export const autosaveJsPath = assetPath('dest', 'automationScripts', 'autosave', 'autosave.js');
 
+// Compiled docs coordinator entry point
+export const docsCoordinatorJsPath = assetPath('dest', 'src', 'AI', 'AIAgent', 'shared', 'docs', 'coordinator.js');
+
+// Python worker that wraps Crawl4AI (shipped as raw .py)
+export const docsPythonWorkerPath = path.join(automationScriptsDir, 'python', 'kra_docs_worker.py');
+export const docsPythonRequirementsPath = path.join(automationScriptsDir, 'python', 'requirements-lean.txt');
+
 // Default settings template that ships with the package
 export const settingsExamplePath = assetPath('settings.toml.example');

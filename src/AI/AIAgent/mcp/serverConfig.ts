@@ -36,6 +36,7 @@ export async function buildCoreMcpServers(): Promise<Record<string, MCPServerCon
             'update_memory',
             'edit_memory',
             'semantic_search',
+            'docs_search',
         ]),
     };
 }

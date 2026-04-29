@@ -12,8 +12,10 @@ import { runStdioMcpServer } from '../../mcp/stdioServer';
 import 'module-alias/register';
 import { editMemory, recall, remember, updateMemory } from '../memory/notes';
 import { semanticSearch } from '../memory/search';
+import { docsSearch } from '../docs/search';
 import { MEMORY_KINDS, MEMORY_LOOKUP_KINDS, MEMORY_STATUSES } from '../memory/types';
-
+import { loadSettings } from '@/utils/common';
+import type { DocsSource } from '@/types/settingsTypes';
 
 const REMEMBER_TOOL = {
     name: 'remember',
@@ -122,15 +124,77 @@ const EDIT_MEMORY_TOOL = {
         required: ['id'],
     },
 };
-const TOOLS = [
-    REMEMBER_TOOL,
-    RECALL_TOOL,
-    UPDATE_MEMORY_TOOL,
-    EDIT_MEMORY_TOOL,
-    SEMANTIC_SEARCH_TOOL,
-];
 
-type ToolName = (typeof TOOLS)[number]['name'];
+const DOCS_SEARCH_TOOL_BASE = {
+    name: 'docs_search',
+    description: [
+        'PREFERRED first-step lookup for any question about an external library, framework, SDK, or service whose docs are listed below.',
+        'Vector search over the indexed documentation corpus populated by `kra ai update-docs` (local LanceDB, no network).',
+        'Returns one entry per matched page (deduped by URL) with the best-scoring sections inlined as markdown,',
+        'so you can read the docs directly in the response without a follow-up fetch.',
+        'Pass `sourceAlias` to scope to a single configured source.',
+        'Always try this BEFORE `web_search` / `web_fetch` when the topic matches one of the available sources listed below \u2014 it is faster, offline, and version-pinned to what the user actually has installed.',
+        'Use `semantic_search` instead for questions about THIS repo\u2019s own code. In case semantic search is denied, use confirm_task_complete to ask the user instead.',
+    ].join(' '),
+};
+
+export function buildDocsSearchTool(sources: DocsSource[]) {
+    const aliasLines = sources
+        .map((s) => {
+            const blurb = s.description?.trim() || s.url;
+            return `  - ${s.alias} \u2014 ${blurb}`;
+        })
+        .join('\n');
+    const aliases = sources.map((s) => s.alias);
+
+    const description = [
+        DOCS_SEARCH_TOOL_BASE.description,
+        '',
+        'Available sources (configured for this repo \u2014 only these aliases are valid for `sourceAlias`):',
+        aliasLines,
+    ].join('\n');
+
+    return {
+        name: DOCS_SEARCH_TOOL_BASE.name,
+        description,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Natural-language description of what you are looking for.' },
+                k: { type: 'number', description: 'Max pages returned (default 8, hard cap 50).' },
+                sourceAlias: {
+                    type: 'string',
+                    enum: aliases,
+                    description: 'Optional alias filter. Must be one of the configured aliases listed in this tool\u2019s description.',
+                },
+            },
+            required: ['query'],
+        },
+    };
+}
+export async function buildToolList(): Promise<Array<{ name: string }>> {
+    const tools: Array<{ name: string }> = [
+        REMEMBER_TOOL,
+        RECALL_TOOL,
+        UPDATE_MEMORY_TOOL,
+        EDIT_MEMORY_TOOL,
+        SEMANTIC_SEARCH_TOOL,
+    ];
+
+    try {
+        const settings = await loadSettings();
+        const docsCfg = settings?.ai?.docs;
+        const sources = docsCfg?.enabled ? (docsCfg.sources ?? []) : [];
+        if (sources.length > 0) {
+            tools.push(buildDocsSearchTool(sources));
+        }
+    } catch {
+    }
+
+    return tools;
+}
+
+type ToolName = 'remember' | 'recall' | 'update_memory' | 'edit_memory' | 'semantic_search' | 'docs_search';
 
 async function dispatchTool(name: ToolName, args: Record<string, unknown>): Promise<unknown> {
     switch (name) {
@@ -149,34 +213,48 @@ async function dispatchTool(name: ToolName, args: Record<string, unknown>): Prom
         case 'semantic_search':
             return semanticSearch(args as unknown as Parameters<typeof semanticSearch>[0]);
 
+        case 'docs_search':
+            return docsSearch(args as unknown as Parameters<typeof docsSearch>[0]);
+
         default:
             throw new Error(`Unknown tool: ${name}`);
     }
 }
 
-runStdioMcpServer({
-    serverName: 'kra-memory',
-    tools: TOOLS,
-    handleToolCall: async ({ toolName, params }) => {
-        const callParams = (params ?? {}) as { arguments?: unknown };
-        const rawArgs = callParams.arguments;
-        const args = (typeof rawArgs === 'object' && rawArgs !== null ? rawArgs : {}) as Record<string, unknown>;
-        const result = await dispatchTool(toolName, args);
+async function startServer(): Promise<void> {
+    const TOOLS = await buildToolList();
 
-        return {
-            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-            isError: false,
-        };
-    },
-    onInternalError: (error) => {
-        const message = error instanceof Error ? error.message : String(error);
+    runStdioMcpServer({
+        serverName: 'kra-memory',
+        tools: TOOLS,
+        handleToolCall: async ({ toolName, params }) => {
+            const callParams = (params ?? {}) as { arguments?: unknown };
+            const rawArgs = callParams.arguments;
+            const args = (typeof rawArgs === 'object' && rawArgs !== null ? rawArgs : {}) as Record<string, unknown>;
+            const result = await dispatchTool(toolName as ToolName, args);
 
-        return {
-            kind: 'result',
-            result: {
-                content: [{ type: 'text', text: `Error: ${message}` }],
-                isError: true,
-            },
-        };
-    },
-});
+            return {
+                content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+                isError: false,
+            };
+        },
+        onInternalError: (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+
+            return {
+                kind: 'result',
+                result: {
+                    content: [{ type: 'text', text: `Error: ${message}` }],
+                    isError: true,
+                },
+            };
+        },
+    });
+}
+
+if (require.main === module) {
+    startServer().catch((err) => {
+        console.error('memoryMcpServer failed to start:', err);
+        process.exit(1);
+    });
+}

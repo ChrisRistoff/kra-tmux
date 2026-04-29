@@ -1,6 +1,6 @@
 import { type ModelInfo } from '@github/copilot-sdk';
 import * as conversation from '@/AI/AIAgent/shared/main/agentConversation';
-import { getAgentDefaultModel, getGithubToken } from '@/AI/AIAgent/shared/utils/agentSettings';
+import { getGithubToken } from '@/AI/AIAgent/shared/utils/agentSettings';
 import * as ui from '@/UI/generalUI';
 import type { ReasoningEffort } from '@/AI/AIAgent/shared/types/agentTypes';
 import { CopilotClientWrapper } from '@/AI/AIAgent/providers/copilot/copilotClient';
@@ -46,14 +46,6 @@ async function pickReasoningEffort(model: ModelInfo): Promise<ReasoningEffort | 
 
 async function pickCopilotModel(client: CopilotClientWrapper): Promise<PickedModel> {
     const models = sortModels(await client.listModels());
-    const defaultModelId = await getAgentDefaultModel();
-
-    if (defaultModelId && models.some((model) => model.id === defaultModelId)) {
-        const defaultModel = models.find((m) => m.id === defaultModelId)!;
-        const reasoningEffort = await pickReasoningEffort(defaultModel);
-
-        return { modelId: defaultModelId, ...(reasoningEffort ? { reasoningEffort } : {}) };
-    }
 
     const labelToModel = new Map<string, ModelInfo>();
     const itemsArray = models.map((model) => {

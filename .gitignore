@@ -26,3 +26,7 @@ local_cache/
 
 .env
 settings.toml
+
+# Python bytecode
+__pycache__/
+*.pyc

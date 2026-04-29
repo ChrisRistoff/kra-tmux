@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 
 export enum IPCsockets {
     AutosaveSocket = '/tmp/autosave.sock',
+    DocsCoordinatorSocket = '/tmp/kra-docs.sock',
 }
 
 export enum IPCEvents {

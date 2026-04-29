@@ -6,6 +6,7 @@ export enum LockFiles {
     LoadInProgress = 'LoadInProgress',
     AutoSaveInProgress = 'AutoSaveInProgress',
     ServerKillInProgress = 'ServerKillInProgress',
+    DocsWriteInProgress = 'DocsWriteInProgress',
 }
 
 export async function deleteLockFile(type: LockFiles): Promise<void> {
@@ -31,7 +32,8 @@ export async function lockFileExist(type: LockFiles): Promise<boolean> {
         const timeouts = {
             [LockFiles.LoadInProgress]: 10 * 1000,          // 5s - loading takes ms, this should be more than safe to assume
             [LockFiles.AutoSaveInProgress]: await loadSettings().then((set) => set.autosave.timeoutMs) + 10000, // autosave timeout + 10 sec buffer
-            [LockFiles.ServerKillInProgress]: 5 * 1000   // 5s - kill session is instant, 5s is enough to complete the autosave
+            [LockFiles.ServerKillInProgress]: 5 * 1000,   // 5s - kill session is instant, 5s is enough to complete the autosave
+            [LockFiles.DocsWriteInProgress]: 60 * 1000,   // 60s - docs coordinator refreshes the lock every 30s while crawling
         };
 
         // check if lock is stale (older than X seconds)

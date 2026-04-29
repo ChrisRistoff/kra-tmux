@@ -47,7 +47,6 @@ export type LspServerSettings = {
 }
 
 type AgentSettings = {
-    defaultModel?: string,
     mcpServers?: Record<string, McpServerSettings>,
     memory?: {
         enabled?: boolean,
@@ -62,6 +61,27 @@ type AgentSettings = {
     },
 }
 
+export type DocsSource = {
+    alias: string,
+    url: string,
+    description?: string,
+    maxDepth?: number,
+    maxPages?: number,
+    includePatterns?: string[],
+    excludePatterns?: string[],
+    mode?: 'auto' | 'http' | 'browser',
+    concurrency?: number,
+    pageTimeoutMs?: number,
+}
+
+export type DocsSettings = {
+    enabled?: boolean,
+    maxConcurrentSources?: number,
+    idleTimeoutMs?: number,
+    cacheRawMarkdown?: boolean,
+    sources?: DocsSource[],
+}
+
 export type Settings = {
     watchCommands: {
         work: WatchOptions,
@@ -69,8 +89,10 @@ export type Settings = {
     },
 
     autosave: Autosave,
+
     ai?: {
         agent?: AgentSettings,
+        docs?: DocsSettings,
     },
     lsp?: Record<string, LspServerSettings>,
 }
