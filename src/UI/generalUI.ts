@@ -2,22 +2,17 @@ import { SearchOptions } from '@/types/uiTypes';
 import blessed from 'blessed';
 import figlet from 'figlet';
 import { UserCancelled } from '@/UI/menuChain';
+import { Key } from 'readline';
 
 /**
  * Shared helpers
  */
-function createScreen(title: string) {
+function createScreen(title: string): blessed.Widgets.Screen {
     return blessed.screen({ smartCSR: true, title });
 }
 
-function getListSelectedValue(list: blessed.Widgets.ListElement): string {
-    const idx = (list as any).selected ?? 0;
-    const item = list.getItem(idx);
 
-    return (item.getText()) || (item.content ?? '');
-}
-
-function uniqueStrings(items: string[]) {
+function uniqueStrings(items: string[]): string[] {
     const seen = new Set<string>();
     const out: string[] = [];
     for (const s of items) {
@@ -51,10 +46,10 @@ function cleanSettle<T>(
     screen: blessed.Widgets.Screen,
     resolve: (v: T) => void,
     reject: (e: unknown) => void
-) {
+): { finish: (v: T) => void; cancel: () => void } {
     let done = false;
 
-    const settle = (fn: () => void) => {
+    const settle = (fn: () => void): void => {
         if (done) return;
         done = true;
         try { screen.destroy(); } catch { /* noop */ }
@@ -66,6 +61,155 @@ function cleanSettle<T>(
         cancel: () => settle(() => reject(new UserCancelled())),
     };
 }
+
+/**
+ * Reusable overlay-style list renderer.
+ *
+ * Renders each item as its own blessed.box child, ROW_HEIGHT rows tall,
+ * with a solid background colour on the selected item (no inline tag tricks).
+ * Caller controls items + selection via the returned API; we just paint.
+ */
+export interface OverlayListOpts {
+    parent: blessed.Widgets.Node;
+    top: number | string;
+    left?: number | string;
+    width: number | string;
+    height: number | string;
+    rowHeight?: number;
+    shiftLeftRatio?: number;
+    borderColor?: string;
+    selectedBg?: string;
+}
+
+export interface OverlayList {
+    container: blessed.Widgets.BoxElement;
+    setItems: (items: string[]) => void;
+    getItems: () => string[];
+    getSelectedIdx: () => number;
+    getSelectedValue: () => string;
+    setSelectedIdx: (idx: number) => void;
+    move: (direction: 'up' | 'down' | 'pageup' | 'pagedown') => void;
+    render: () => void;
+}
+
+export function createOverlayList(opts: OverlayListOpts): OverlayList {
+    const ROW_HEIGHT = opts.rowHeight ?? 3;
+    const shiftRatio = opts.shiftLeftRatio ?? 0.05;
+    const borderColor = opts.borderColor ?? 'red';
+    const selectedBg = opts.selectedBg ?? 'red';
+
+    const container = blessed.box({
+        parent: opts.parent,
+        top: opts.top,
+        left: opts.left ?? 'center',
+        width: opts.width,
+        height: opts.height,
+        border: { type: 'line' },
+        style: { fg: 'white', bg: 'black', border: { fg: borderColor } },
+    });
+
+    let items: string[] = [];
+    let selectedIdx = 0;
+    let scrollOffset = 0;
+    let itemBoxes: blessed.Widgets.BoxElement[] = [];
+
+    const screen = container.screen;
+
+    const render = (): void => {
+        itemBoxes.forEach((b) => b.destroy());
+        itemBoxes = [];
+
+        const inner = Math.max(1, (container.width as number) - 2);
+        const visibleRows = Math.max(ROW_HEIGHT, (container.height as number) - 2);
+        const maxVisible = Math.max(1, Math.floor(visibleRows / ROW_HEIGHT));
+
+        if (items.length === 0) {
+            const box = blessed.box({
+                parent: container,
+                top: 0, left: 0, width: inner, height: 1,
+                content: '  <no results>',
+                style: { fg: 'white', bg: 'black' },
+            });
+            itemBoxes.push(box);
+            screen.render();
+
+            return;
+        }
+
+        if (selectedIdx < 0) selectedIdx = 0;
+        if (selectedIdx >= items.length) selectedIdx = items.length - 1;
+
+        if (selectedIdx < scrollOffset) scrollOffset = selectedIdx;
+        if (selectedIdx >= scrollOffset + maxVisible) {
+            scrollOffset = selectedIdx - maxVisible + 1;
+        }
+        scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, items.length - maxVisible)));
+
+        const maxW = Math.max(1, ...items.map((s) => s.length));
+        const centerPad = Math.max(0, Math.floor((inner - maxW) / 2));
+        const shift = Math.floor(inner * shiftRatio);
+        const leftPad = Math.max(0, centerPad - shift);
+        const padStr = ' '.repeat(leftPad);
+        const blank = ' '.repeat(inner);
+
+        const end = Math.min(items.length, scrollOffset + maxVisible);
+        for (let i = scrollOffset; i < end; i++) {
+            const isSel = i === selectedIdx;
+            const text = items[i] ?? '';
+            const line = (padStr + text).padEnd(inner, ' ');
+            const content = ROW_HEIGHT >= 3
+                ? [blank, line, blank].join('\n')
+                : line;
+            const box = blessed.box({
+                parent: container,
+                top: (i - scrollOffset) * ROW_HEIGHT,
+                left: 0,
+                width: inner,
+                height: ROW_HEIGHT,
+                content,
+                style: isSel
+                    ? { bg: selectedBg, fg: 'white', bold: true }
+                    : { bg: 'black', fg: 'white', bold: true },
+            });
+            itemBoxes.push(box);
+        }
+
+        screen.render();
+    };
+
+    return {
+        container,
+        setItems(next) {
+            items = next.slice();
+            selectedIdx = 0;
+            scrollOffset = 0;
+        },
+        getItems() { return items; },
+        getSelectedIdx() { return selectedIdx; },
+        getSelectedValue() { return items[selectedIdx] ?? ''; },
+        setSelectedIdx(idx) { selectedIdx = idx; },
+        move(direction) {
+            const count = items.length;
+            if (count === 0) return;
+            switch (direction) {
+                case 'up':
+                    selectedIdx = selectedIdx <= 0 ? count - 1 : selectedIdx - 1;
+                    break;
+                case 'down':
+                    selectedIdx = selectedIdx >= count - 1 ? 0 : selectedIdx + 1;
+                    break;
+                case 'pageup':
+                    selectedIdx = Math.max(0, selectedIdx - 5);
+                    break;
+                case 'pagedown':
+                    selectedIdx = Math.min(count - 1, selectedIdx + 5);
+                    break;
+            }
+        },
+        render,
+    };
+}
+
 
 /**
  * Read-only info screen. Displays `content` in a scrollable, vim-keyed box.
@@ -152,7 +296,8 @@ export async function promptUserYesOrNo(message: string): Promise<boolean> {
             verticalLayout: 'default'
         });
 
-        const question = blessed.box({
+        blessed.box({
+            parent: screen,
             top: 0,
             left: 'center',
             width: '100%',
@@ -161,46 +306,35 @@ export async function promptUserYesOrNo(message: string): Promise<boolean> {
             tags: true,
             align: 'center',
             valign: 'middle',
-            style: {
-                fg: 'red',
-                bg: 'black'
-            }
+            style: { fg: 'red', bg: 'black' }
         });
 
         const headerLines = headerText.split('\n').length;
 
-        const box = blessed.box({
+        blessed.box({
             parent: screen,
             top: headerLines + 2,
             left: 'center',
-            width: '60%',
-            height: '50%',
+            width: '80%',
+            height: 5,
             tags: true,
             border: { type: 'line' },
+            align: 'center',
+            valign: 'middle',
             style: { fg: 'white', bg: 'black', border: { fg: 'red' } },
-            content: `${message}\n\nUse ↑/↓ and Enter, or press Y / N.`
+            content: `{bold}${message}{/bold}\n\nUse ↑/↓ and Enter, or press Y / N.`
         });
 
-        const list = blessed.list({
-            parent: box,
-            top: 5,
-            left: 'center',
-            width: '50%',
-            height: 4,
-            items: ['Yes', 'No'],
-            keys: true,
-            vi: true,
-            mouse: true,
-            style: {
-                fg: 'white',
-                bg: 'black',
-                border: { fg: 'red' },
-                selected: { bg: 'red' }
-            },
-            border: { type: 'line' }
+        const list = createOverlayList({
+            parent: screen,
+            top: headerLines + 8,
+            shiftLeftRatio: 0,
+            width: '40%',
+            height: 11,
         });
+        list.setItems(['Yes', 'No']);
 
-        const status = blessed.box({
+        blessed.box({
             parent: screen,
             bottom: 0,
             left: 'center',
@@ -210,22 +344,31 @@ export async function promptUserYesOrNo(message: string): Promise<boolean> {
             style: { fg: 'white', bg: 'black' }
         });
 
-        screen.append(question);
-        screen.append(box);
-        screen.append(status);
-
-        list.on('select', (_item, index) => {
-            finish(index === 0);
+        const keyHandler = blessed.box({
+            parent: screen,
+            top: 0,
+            left: 0,
+            width: 0,
+            height: 0,
         });
 
-        // Global quick keys + quit
+        keyHandler.key(['up', 'down'], (_ch, key) => {
+            list.move(key.name as 'up' | 'down');
+            list.render();
+        });
+        keyHandler.key(['enter'], () => {
+            finish(list.getSelectedIdx() === 0);
+        });
+
         screen.key(['y', 'Y'], () => finish(true));
         screen.key(['n', 'N'], () => finish(false));
         screen.key(['escape'], () => cancel());
         screen.key(['C-c'], () => process.exit(0));
 
-        list.focus();
+        keyHandler.focus();
         screen.render();
+        list.render();
+        screen.on('resize', () => list.render());
     });
 }
 
@@ -244,7 +387,8 @@ export async function askUserForInput(message: string): Promise<string> {
             verticalLayout: 'default'
         });
 
-        const question = blessed.box({
+        blessed.box({
+            parent: screen,
             top: 0,
             left: 'center',
             width: '100%',
@@ -253,38 +397,43 @@ export async function askUserForInput(message: string): Promise<string> {
             tags: true,
             align: 'center',
             valign: 'middle',
-            style: {
-                fg: 'red',
-                bg: 'black'
-            }
+            style: { fg: 'red', bg: 'black' }
         });
 
         const headerLines = headerText.split('\n').length;
 
-        const box = blessed.box({
+        blessed.box({
             parent: screen,
             top: headerLines + 2,
             left: 'center',
-            width: '70%',
-            height: '50%',
+            width: '80%',
+            height: 5,
             tags: true,
             border: { type: 'line' },
+            align: 'center',
+            valign: 'middle',
             style: { fg: 'white', bg: 'black', border: { fg: 'red' } },
-            content: message
+            content: `{bold}${message}{/bold}`
         });
 
         const input = blessed.textbox({
-            parent: box,
-            top: '70%',
+            parent: screen,
+            top: headerLines + 8,
             left: 'center',
-            width: '80%',
+            width: '50%',
             height: 3,
             inputOnFocus: true,
             border: { type: 'line' },
-            style: { fg: 'white', bg: 'black', border: { fg: 'red' }, focus: { bg: 'red' } }
+            style: {
+                fg: 'white',
+                bg: 'black',
+                bold: true,
+                border: { fg: 'red' },
+                focus: { bg: 'red' }
+            }
         });
 
-        const status = blessed.box({
+        blessed.box({
             parent: screen,
             bottom: 0,
             left: 'center',
@@ -294,17 +443,10 @@ export async function askUserForInput(message: string): Promise<string> {
             style: { fg: 'white', bg: 'black' }
         });
 
-        screen.append(question);
-        screen.append(box);
-        screen.append(status);
-
-        // Handle Enter from the textbox only; let screen handle Esc/Ctrl+C
         input.key(['enter'], () => {
-            const value = input.getValue();
-            finish(value);
+            finish(input.getValue());
         });
 
-        // Global quit keys
         screen.key(['escape'], () => cancel());
         screen.key(['C-c'], () => process.exit(0));
 
@@ -321,7 +463,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
         const screen = createScreen('Search and Select');
         const { finish, cancel } = cleanSettle<string>(screen, resolve, reject);
 
-        let items = uniqueStrings(options.itemsArray || []);
+        let items = uniqueStrings(options.itemsArray);
         if (!items.length) items = ['<no items>'];
 
         const headerText = figlet.textSync(options.prompt, {
@@ -331,6 +473,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
         });
 
         const question = blessed.box({
+            parent: screen,
             top: 0,
             left: 'center',
             width: '100%',
@@ -339,10 +482,7 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
             tags: true,
             align: 'center',
             valign: 'middle',
-            style: {
-                fg: 'red',
-                bg: 'black'
-            }
+            style: { fg: 'red', bg: 'black' }
         });
 
         const headerLines = headerText.split('\n').length;
@@ -351,33 +491,22 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
             parent: screen,
             top: headerLines + 1,
             left: 'center',
-            width: '60%',
+            width: '80%',
             height: 3,
             inputOnFocus: false,
             border: { type: 'line' },
             style: { fg: 'white', bg: 'black', border: { fg: 'red' } }
         });
 
-        const listBox = blessed.list({
+        const list = createOverlayList({
             parent: screen,
             top: headerLines + 4,
-            left: 'center',
-            width: '60%',
+            width: '80%',
             height: '60%',
-            items,
-            keys: true,
-            vi: true,
-            mouse: true,
-            border: { type: 'line' },
-            style: {
-                fg: 'white',
-                bg: 'black',
-                border: { fg: 'red' },
-                selected: { bg: 'red' }
-            }
         });
+        list.setItems(items);
 
-        const status = blessed.box({
+        blessed.box({
             parent: screen,
             bottom: 0,
             left: 'center',
@@ -388,25 +517,20 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
             style: { fg: 'white', bg: 'black' }
         });
 
-        screen.append(question);
-        screen.append(searchBox);
-        screen.append(listBox);
-        screen.append(status);
+        // 'question' is appended via parent: screen above
+        void question;
 
-        const applyFilter = (raw: string) => {
+        const applyFilter = (raw: string): void => {
             const term = raw.toLowerCase();
             const filtered =
                 term.trim().length === 0
                     ? items
                     : items.filter((s) => s.toLowerCase().includes(term));
-
-            listBox.clearItems();
-            listBox.setItems(filtered.length ? filtered : ['<no results>']);
-            listBox.fuzzyFind(raw);
-            screen.render();
+            list.setItems(filtered);
+            list.render();
         };
 
-        searchBox.on('keypress', (ch, key) => {
+        searchBox.on('keypress', (ch, key: Key) => {
             if (key.name === 'enter') return;
 
             if (key.name === 'backspace') {
@@ -426,48 +550,29 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
             }
         });
 
-        searchBox.key(['up', 'down', 'pageup', 'pagedown'], (_ch, key) => {
-            switch (key.name) {
-                case 'up':
-                    listBox.up(1);
-                    break;
-                case 'down':
-                    listBox.down(1);
-                    break;
-                case 'pageup':
-                    listBox.up((listBox.height as number) - 1);
-                    break;
-                case 'pagedown':
-                    listBox.down((listBox.height as number) - 1);
-                    break;
-            }
 
-            screen.render();
+        searchBox.key(['up', 'down', 'pageup', 'pagedown'], (_ch, key) => {
+            list.move(key.name as 'up' | 'down' | 'pageup' | 'pagedown');
+            list.render();
         });
 
-        searchBox.key(['enter'], async () => {
+        searchBox.key(['enter'], async (): Promise<void> => {
             const typedValue = searchBox.getValue();
-            const selectedValue = getListSelectedValue(listBox);
+            const selectedValue = list.getSelectedValue();
 
             if (
                 typedValue &&
                 selectedValue &&
-                selectedValue !== '<no results>'
+                selectedValue !== '<no results>' &&
+                selectedValue !== '<no items>'
             ) {
                 const useTyped = await promptUserYesOrNo(
                     `Use typed value "${typedValue}" instead of selected "${selectedValue}"?`
                 );
-
-                if (useTyped) {
-                    finish(typedValue);
-                } else {
-                    finish(selectedValue);
-                }
+                finish(useTyped ? typedValue : selectedValue);
             } else if (typedValue) {
                 finish(typedValue);
-            } else if (
-                selectedValue !== '<no results>'
-            ) {
+            } else if (selectedValue && selectedValue !== '<no results>' && selectedValue !== '<no items>') {
                 finish(selectedValue);
             } else {
                 finish('');
@@ -479,6 +584,8 @@ export async function searchAndSelect(options: SearchOptions): Promise<string> {
 
         searchBox.focus();
         screen.render();
+        list.render();
+        screen.on('resize', () => list.render());
     });
 }
 
@@ -492,59 +599,50 @@ export async function searchSelectAndReturnFromArray(
         const screen = createScreen('Search and Select');
         const { finish, cancel } = cleanSettle<string>(screen, resolve, reject);
 
-        let items = uniqueStrings(options.itemsArray || []);
+        let items = uniqueStrings(options.itemsArray);
         if (!items.length) items = ['<no items>'];
 
         const headerText = figlet.textSync(options.prompt, {
-            font: 'Banner', // try: 'Big', 'Standard', 'Banner', 'Block', etc.
+            font: 'Banner',
             horizontalLayout: 'default',
             verticalLayout: 'default'
         });
 
-        const question = blessed.box({
+        blessed.box({
+            parent: screen,
             top: 0,
             left: 'center',
             width: '100%',
-            height: 7,          // taller box for big text
+            height: 7,
             content: '{bold}' + headerText + '{/bold}',
             tags: true,
             align: 'center',
             valign: 'middle',
-            style: {
-                fg: 'red',
-                bg: 'black'
-            }
+            style: { fg: 'red', bg: 'black' }
         });
 
         const headerLines = headerText.split('\n').length;
 
         const searchBox = blessed.textbox({
             parent: screen,
-            top: headerLines + 1,  // place just below the header
+            top: headerLines + 1,
             left: 'center',
-            width: '60%',
+            width: '80%',
             height: 3,
             inputOnFocus: false,
             border: { type: 'line' },
             style: { fg: 'white', bg: 'black', border: { fg: 'red' } }
         });
 
-        const listBox = blessed.list({
+        const list = createOverlayList({
             parent: screen,
-            top: headerLines + 4, // below search box
-            left: 'center',
-            width: '60%',
+            top: headerLines + 4,
+            width: '80%',
             height: '60%',
-            items,
-            keys: true,
-            vi: true,
-            mouse: true,
-            border: { type: 'line' },
-            style: { fg: 'white', bg: 'black', border: { fg: 'red' }, selected: { bg: 'red' } }
         });
+        list.setItems(items);
 
-
-        const status = blessed.box({
+        blessed.box({
             parent: screen,
             bottom: 0,
             left: 'center',
@@ -555,25 +653,18 @@ export async function searchSelectAndReturnFromArray(
             style: { fg: 'white', bg: 'black' }
         });
 
-        screen.append(question);
-        screen.append(searchBox);
-        screen.append(listBox);
-        screen.append(status);
-
-        const applyFilter = (raw: string) => {
+        const applyFilter = (raw: string): void => {
             const term = raw.toLowerCase();
             const filtered =
                 term.trim().length === 0
                     ? items
                     : items.filter((s) => s.toLowerCase().includes(term));
-
-            listBox.clearItems();
-            listBox.setItems(filtered.length ? filtered : ['<no results>']);
-            listBox.fuzzyFind(raw);
-            screen.render();
+            list.setItems(filtered);
+            list.render();
         };
 
-        searchBox.on('keypress', (ch, key) => {
+
+        searchBox.on('keypress', (ch, key: Key) => {
             if (key.name === 'enter') return;
 
             if (key.name === 'backspace') {
@@ -594,27 +685,12 @@ export async function searchSelectAndReturnFromArray(
         });
 
         searchBox.key(['up', 'down', 'pageup', 'pagedown'], (_ch, key) => {
-            switch (key.name) {
-                case 'up':
-                    listBox.up(1);
-                    break;
-                case 'down':
-                    listBox.down(1);
-                    break;
-                case 'pageup':
-                    listBox.up((listBox.height as number) - 1);
-                    break;
-                case 'pagedown':
-                    listBox.down((listBox.height as number) - 1);
-                    break;
-            }
-
-            screen.render();
+            list.move(key.name as 'up' | 'down' | 'pageup' | 'pagedown');
+            list.render();
         });
 
         searchBox.key(['enter'], () => {
-            const value = getListSelectedValue(listBox);
-            finish(value === '<no results>' ? '' : value);
+            finish(list.getSelectedValue());
         });
 
         screen.key(['escape'], () => cancel());
@@ -622,5 +698,7 @@ export async function searchSelectAndReturnFromArray(
 
         searchBox.focus();
         screen.render();
+        list.render();
+        screen.on('resize', () => list.render());
     });
 }
