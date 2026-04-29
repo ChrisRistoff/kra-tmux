@@ -139,24 +139,6 @@ includePatterns = ["**postgresql.org/docs/**"]
 excludePatterns = []
 
 [[ai.docs.sources]]
-alias = "winston"
-url = "https://github.com/winstonjs/winston#readme"
-description = "Winston Node.js logger — transports, formats, levels, child loggers, exception handling."
-maxDepth = 0
-maxPages = 1
-includePatterns = []
-excludePatterns = []
-
-[[ai.docs.sources]]
-alias = "mocha"
-url = "https://mochajs.org/"
-description = "Mocha JavaScript test framework — suites, hooks, async, CLI flags, reporters, configuration."
-maxDepth = 2
-maxPages = 80
-includePatterns = ["**/mochajs.org/**"]
-excludePatterns = []
-
-[[ai.docs.sources]]
 alias = "sinon"
 url = "https://sinonjs.org/releases/latest/"
 description = "Sinon.JS — spies, stubs, mocks, fakes, fake timers, sandboxes for JavaScript tests."
@@ -164,6 +146,69 @@ maxDepth = 2
 maxPages = 150
 includePatterns = ["**/sinonjs.org/releases/latest/**"]
 excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-sqs"
+url = "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/welcome.html"
+description = "Amazon SQS — standard/FIFO queues, dead-letter queues, visibility timeout, idempotency, backpressure, batch operations."
+maxDepth = 3
+maxPages = 400
+includePatterns = ["**/AWSSimpleQueueService/latest/SQSDeveloperGuide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-sns"
+url = "https://docs.aws.amazon.com/sns/latest/dg/welcome.html"
+description = "Amazon SNS — topics, subscriptions, fanout to SQS, filtering, FIFO topics, mobile push."
+maxDepth = 3
+maxPages = 300
+includePatterns = ["**/sns/latest/dg/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-secrets-manager"
+url = "https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html"
+description = "AWS Secrets Manager — storing credentials, automatic rotation, caching, Lambda integration, IAM policies."
+maxDepth = 3
+maxPages = 200
+includePatterns = ["**/secretsmanager/latest/userguide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-kms"
+url = "https://docs.aws.amazon.com/kms/latest/developerguide/overview.html"
+description = "AWS KMS — encryption keys, key policies, envelope encryption, grants, integration with Secrets Manager and DynamoDB."
+maxDepth = 3
+maxPages = 250
+includePatterns = ["**/kms/latest/developerguide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "zod"
+url = "https://zod.dev"
+description = "Zod — schema declaration, validation, type inference, transforms, refinements, error handling."
+maxDepth = 2
+maxPages = 40
+includePatterns = ["**/zod.dev/**"]
+excludePatterns = ["**/github.com/**", "**/twitter.com/**", "**/discord.com/**"]
+
+[[ai.docs.sources]]
+alias = "nodejs"
+url = "https://nodejs.org/en/docs"
+description = "Node.js runtime — streams, crypto, Buffer, EventEmitter, process, fs, path, worker_threads, async_hooks."
+maxDepth = 2
+maxPages = 300
+includePatterns = ["**/nodejs.org/en/docs/**", "**/nodejs.org/api/**"]
+excludePatterns = ["**/blog/**", "**/download/**"]
+
+[[ai.docs.sources]]
+alias = "winston"
+url = "https://github.com/winstonjs/winston/tree/master/docs"
+description = "Winston Node.js logger — transports, formats, levels, child loggers, exception/rejection handling, querying, streaming."
+maxDepth = 1
+maxPages = 20
+includePatterns = ["**/winstonjs/winston/**"]
+excludePatterns = ["**/issues/**", "**/pulls/**", "**/commit/**", "**/actions/**", "**/releases/**"]
 
 # Each [[ai.docs.sources]] entry is one site to crawl.
 #   alias            – stable id, shown in the `kra ai docs` menu and `docs_search`
