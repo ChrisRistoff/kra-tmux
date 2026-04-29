@@ -53,7 +53,7 @@ export async function addAgentCommands(nvimClient: neovim.NeovimClient): Promise
         await nvimClient.command(`command! -nargs=0 ${commandName} call ${commandName}()`);
     }
 
-    await nvimClient.command(`command! -nargs=0 AgentToolHistory lua require('kra_agent_ui').show_history()`);
+    await nvimClient.command(`command! -nargs=0 AgentToolHistory lua require('kra_agent.ui').show_history()`);
     await nvimClient.command(`command! -nargs=0 AgentCommands lua require('which-key').show({ global = false })`);
 }
 

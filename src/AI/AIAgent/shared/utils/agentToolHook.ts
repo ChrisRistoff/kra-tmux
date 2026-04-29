@@ -101,7 +101,7 @@ export async function handleAgentUserInput(
         nvimClient.on('notification', handler);
 
         void nvimClient.executeLua(
-            `require('kra_agent_ui').request_user_input(...)`,
+            `require('kra_agent.ui').request_user_input(...)`,
             [channelId, question, choices ?? [], allowFreeform] as VimValue[]
         ).catch(() => {
             nvimClient.removeListener('notification', handler);
@@ -415,7 +415,7 @@ export async function promptToolApproval(
 
         nvimClient.on('notification', handler);
 
-        void nvimClient.executeLua(`require('kra_agent_ui').request_permission(...)`, [
+        void nvimClient.executeLua(`require('kra_agent.ui').request_permission(...)`, [
             channelId,
             {
                 details: payload.details,
