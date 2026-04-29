@@ -186,7 +186,7 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
     local function send(answer, is_freeform)
         guard.clear_pending("user_input")
         guard.clear_pending("freeform")
-        freeform_state = nil
+        close_freeform_input()
         close_user_input()
         rpc.safe_notify(channel_id, "user_input_response", answer, is_freeform or false)
     end
@@ -232,6 +232,24 @@ function M.request_user_input(channel_id, question, choices, allow_freeform)
                 guard.guard_window("freeform", input_popup.winid, _tok)
                 local fbuf = input_popup.bufnr
                 if fbuf and vim.api.nvim_buf_is_valid(fbuf) then
+                    -- Override nui's prompt callbacks so the freeform guard is
+                    -- cleared SYNCHRONOUSLY before nui:unmount() fires WinClosed.
+                    -- Without this, the guard's WinClosed handler runs first on
+                    -- the scheduler queue and reopens the popup before our
+                    -- on_submit/on_close ever get a chance to send the answer.
+                    vim.fn.prompt_setcallback(fbuf, function(value)
+                        guard.clear_pending("freeform")
+                        input_popup._.pending_submit_value = value
+                        pcall(function()
+                            input_popup:unmount()
+                        end)
+                    end)
+                    vim.fn.prompt_setinterrupt(fbuf, function()
+                        guard.clear_pending("freeform")
+                        pcall(function()
+                            input_popup:unmount()
+                        end)
+                    end)
                     vim.keymap.set("n", "<leader>t", function()
                         vim.schedule(function()
                             local ok, ui = pcall(require, "kra_agent.ui")

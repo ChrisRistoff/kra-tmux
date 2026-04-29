@@ -122,12 +122,13 @@ describe('nvim-utils', () => {
             it('should add all required commands', async () => {
                 await addCommands(mockNvim);
 
-                expect(mockNvim.command).toHaveBeenCalledTimes(5);
+                expect(mockNvim.command).toHaveBeenCalledTimes(6);
                 expect(mockNvim.command).toHaveBeenCalledWith('command! -nargs=0 SubmitPrompt call SaveAndSubmit()');
                 expect(mockNvim.command).toHaveBeenCalledWith('command! -nargs=0 AddFile call AddFileContext()');
                 expect(mockNvim.command).toHaveBeenCalledWith('command! -nargs=0 StopGeneration call StopStream()');
                 expect(mockNvim.command).toHaveBeenCalledWith('command! -nargs=0 ClearContexts call ClearContexts()');
                 expect(mockNvim.command).toHaveBeenCalledWith('command! -nargs=0 RemoveFileContext call RemoveFileContext()');
+                expect(mockNvim.command).toHaveBeenCalledWith("command! -nargs=0 AgentToolHistory lua require('kra_agent.ui').show_history()");
             });
         });
 

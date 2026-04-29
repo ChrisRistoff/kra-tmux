@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as neovim from 'neovim';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { aiRoles } from '@/AI/shared/data/roles';
 import { promptModel } from '@/AI/AIChat/utils/promptModel';
 import { saveChat } from '@/AI/AIChat/utils/saveChat';
@@ -155,7 +156,12 @@ async function handleSubmit(
 
     // Load fresh file contexts right before sending to LLM.
     const fileContextPrompt = await fileContext.getFileContextsForPrompt();
-    const fullPrompt = conversationHistory + promptCompletion + fileContextPrompt + '\n';
+    const priorMessages = chatHistoryToMessages(parseChatHistory(conversationHistory));
+    const newUserMessage = trimmedPrompt + (fileContextPrompt ? `\n\n${fileContextPrompt}` : '');
+    const messages: ChatCompletionMessageParam[] = [
+        ...priorMessages,
+        { role: 'user', content: newUserMessage },
+    ];
 
     await appendToChat(chatFile, formatAssistantHeader(model, turnTimestamp));
     await aiNeovimHelper.refreshChatLayout(nvim);
@@ -168,10 +174,11 @@ async function handleSubmit(
         const response = await promptModel(
             provider,
             model,
-            fullPrompt,
+            messages,
             temperature,
             aiRoles[role],
-            currentStreamController
+            currentStreamController,
+            { nvim, chatFile },
         );
 
         await handleStreamingResponse(response, chatFile, nvim, currentStreamController);
@@ -199,6 +206,23 @@ async function handleStreamingResponse(
     let pendingBuffer = '';
     let lastUpdate = Date.now();
     const updateInterval = 100;
+    let trailingNewlines = 0;
+
+    const normalize = (chunk: string): string => {
+        let out = '';
+        for (const ch of chunk) {
+            if (ch === '\n') {
+                if (trailingNewlines < 2) {
+                    out += ch;
+                }
+                trailingNewlines++;
+            } else {
+                trailingNewlines = 0;
+                out += ch;
+            }
+        }
+        return out;
+    };
 
     try {
         for await (const chunk of response) {
@@ -206,12 +230,14 @@ async function handleStreamingResponse(
                 break;
             }
 
-            pendingBuffer += chunk;
+            pendingBuffer += normalize(chunk);
 
             if (Date.now() - lastUpdate >= updateInterval) {
-                await appendToChat(chatFile, pendingBuffer);
-                await aiNeovimHelper.refreshChatLayout(nvim);
-                pendingBuffer = '';
+                if (pendingBuffer) {
+                    await appendToChat(chatFile, pendingBuffer);
+                    await aiNeovimHelper.refreshChatLayout(nvim);
+                    pendingBuffer = '';
+                }
                 lastUpdate = Date.now();
             }
         }
@@ -257,6 +283,7 @@ This file contains the conversation history between the user and AI.
         #   f              -> Show Current File Contexts
         #   <C-x>          -> Clear Contexts
         #   <C-c>          -> Stop Stream
+        #   <leader>h      -> Show tool call history (web_fetch / web_search)
         #
         # Tip: Type your next message in the bottom prompt split.
 `;
@@ -312,6 +339,26 @@ function parseChatHistory(historyString: string): ChatHistory[] {
     flushMessage();
 
     return chatMessages;
+}
+
+const TOOL_MARKER_LINE = /^\s*`[✓✗]\s[^`]*`\s*$/;
+
+function stripToolMarkers(message: string): string {
+    return message
+        .split('\n')
+        .filter((line) => !TOOL_MARKER_LINE.test(line))
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function chatHistoryToMessages(history: ChatHistory[]): ChatCompletionMessageParam[] {
+    return history
+        .map<ChatCompletionMessageParam>((entry) => ({
+            role: entry.role === Role.User ? 'user' : 'assistant',
+            content: entry.role === Role.User ? entry.message : stripToolMarkers(entry.message),
+        }))
+        .filter((m) => typeof m.content === 'string' && m.content.length > 0);
 }
 
 function extractTimestamp(line: string): string | null {

@@ -14,6 +14,7 @@ import * as keys from '@/AI/AIChat/data/keys';
 
 export const SUPPORTED_PROVIDERS = [
     'deep-infra',
+    'open-code',
     'deep-seek',
     'open-router',
     'gemini',
@@ -25,6 +26,8 @@ export type SupportedProvider = typeof SUPPORTED_PROVIDERS[number];
 
 export function getProviderBaseURL(provider: string): string {
     switch (provider) {
+        case 'open-code':
+            return 'https://opencode.ai/zen/go/v1';
         case 'deep-infra':
             return 'https://api.deepinfra.com/v1/openai';
         case 'deep-seek':
@@ -54,6 +57,8 @@ export function getProviderApiKey(provider: string): string {
             return keys.getGeminiKey();
         case 'mistral':
             return keys.getMistralKey();
+        case 'open-code':
+            return keys.getOpenCodeKey();
         case 'open-ai': {
             const fromEnv = process.env['OPENAI_API_KEY'];
 
