@@ -94,10 +94,9 @@ async function getFileNameFromUser(): Promise<string> {
         }) || '';
     }
 
-    console.log(`Please write a name for your save, it will look like this: ${branchName}-<your-input>`);
     const sessionName = await generalUI.searchAndSelect({
         itemsArray,
-        prompt: 'Please write a name for save: ',
+        prompt: 'Please write a name for your save, it will look like this: ${branchName}-<your-input>: ',
     });
 
     return `${branchName}-${sessionName}-${getDateString()}`;
