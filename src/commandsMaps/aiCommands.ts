@@ -10,6 +10,7 @@ export const aiCommands : AiCommands = {
     'quota-agent': ai.showQuota,
     'index': ai.indexCodebase,
     'memory': ai.manageMemory,
+    'docs': ai.manageDocs,
 };
 
 export function handleAiCommandNotExist(commandName: string): void {

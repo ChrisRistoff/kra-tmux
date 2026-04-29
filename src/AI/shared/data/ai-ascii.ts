@@ -29,5 +29,7 @@ export const aiAscii = `
         | index       | 🗂️  Index the current codebase for semantic search (writes to per-repo .kra-memory + global registry).                  |
         |-------------|--------------------------------------------------------------------------------------------------------------------------|
         | memory      | 🧰 Manage indexed codebases and long-term memories (findings/revisits) interactively.                                    |
+        |-------------|--------------------------------------------------------------------------------------------------------------------------|
+        | docs        | 📚 Interactive menu for the docs pipeline: install Crawl4AI, list sources, crawl, watch live progress, stop coordinator.    |
         +----------+-----------------------------------------------------------------------------------------------------------------------------+
 `

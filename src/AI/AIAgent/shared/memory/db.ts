@@ -16,6 +16,7 @@
 import path from 'path';
 import { connect, type Connection, type Table } from '@lancedb/lancedb';
 import type { CodeChunkRow, MemoryRow } from './types';
+import type { DocChunkRow } from '../docs/types';
 
 const MEMORY_FINDINGS_TABLE = 'memory_findings';
 const MEMORY_REVISITS_TABLE = 'memory_revisits';
@@ -24,8 +25,10 @@ let dbCache: Connection | null = null;
 let memoryFindingsTableCache: Table | null = null;
 let memoryRevisitsTableCache: Table | null = null;
 let codeChunksTableCache: Table | null = null;
+let docChunksTableCache: Table | null = null;
 
 const CODE_CHUNKS_TABLE = 'code_chunks';
+const DOC_CHUNKS_TABLE = 'doc_chunks';
 const LEGACY_MEMORY_TABLE = 'memory';
 let legacyDropAttempted = false;
 
@@ -200,6 +203,70 @@ export async function getCodeChunksTable(seedRow: CodeChunkRow | null): Promise<
  */
 export async function countCodeChunks(): Promise<number> {
     const { table } = await getCodeChunksTable(null);
+
+    if (!table) return 0;
+
+    try {
+        return await table.countRows();
+    } catch {
+        return 0;
+    }
+}
+
+export interface GetDocChunksTableResult {
+    table: Table | null;
+    justCreated: boolean;
+}
+
+/**
+ * Returns the doc_chunks table. Mirrors `getCodeChunksTable`: pass a seed
+ * row when about to write so the table can be created on first use; pass
+ * `null` for read-only callers and handle `table === null`. Shares the
+ * module-level `mutex` chain so writes to both tables are serialized
+ * within a single process.
+ */
+export async function getDocChunksTable(seedRow: DocChunkRow | null): Promise<GetDocChunksTableResult> {
+    if (docChunksTableCache) {
+        return { table: docChunksTableCache, justCreated: false };
+    }
+
+    const next = mutex.then(async (): Promise<GetDocChunksTableResult> => {
+        if (docChunksTableCache) {
+            return { table: docChunksTableCache, justCreated: false };
+        }
+
+        const db = await getDb();
+        const tableNames = await db.tableNames();
+
+        if (tableNames.includes(DOC_CHUNKS_TABLE)) {
+            docChunksTableCache = await db.openTable(DOC_CHUNKS_TABLE);
+
+            return { table: docChunksTableCache, justCreated: false };
+        }
+
+        if (!seedRow) {
+            return { table: null, justCreated: false };
+        }
+
+        docChunksTableCache = await db.createTable(
+            DOC_CHUNKS_TABLE,
+            [seedRow as unknown as Record<string, unknown>],
+        );
+
+        return { table: docChunksTableCache, justCreated: true };
+    });
+
+    mutex = next.catch(() => undefined);
+
+    return next;
+}
+
+/**
+ * Total number of doc chunks currently stored. Returns 0 if the table has
+ * never been created.
+ */
+export async function countDocChunks(): Promise<number> {
+    const { table } = await getDocChunksTable(null);
 
     if (!table) return 0;
 

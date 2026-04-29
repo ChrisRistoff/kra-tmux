@@ -62,7 +62,7 @@ const main = async (): Promise<void> => {
     }
 
     try {
-        await command();
+        await command(args.slice(2));
     } catch (error) {
         throw error;
     }

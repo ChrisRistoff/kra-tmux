@@ -36,9 +36,6 @@ import {
     type MemoryEntry,
 } from '@/AI/AIAgent/shared/memory/types';
 
-const QUIT = 'Quit';
-
-
 /**
  * Open `initial` in nvim for editing. Returns the saved contents (or the
  * original if the user wrote nothing). Throws on nvim non-zero exit.
@@ -63,12 +60,11 @@ export async function manageMemory(): Promise<void> {
                 itemsArray: [
                     'Manage indexed codebases',
                     'Manage long-term memories',
-                    QUIT,
                 ],
                 prompt: 'kra-memory',
             });
 
-            if (!choice || choice === QUIT) throw new UserCancelled();
+            if (!choice) throw new UserCancelled();
 
             return choice;
         })

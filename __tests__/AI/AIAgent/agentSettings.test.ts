@@ -1,4 +1,4 @@
-import { getAgentDefaultModel, getConfiguredMcpServers } from '@/AI/AIAgent/shared/utils/agentSettings';
+import { getConfiguredMcpServers } from '@/AI/AIAgent/shared/utils/agentSettings';
 import { loadSettings } from '@/utils/common';
 
 jest.mock('@/utils/common', () => ({
@@ -10,27 +10,6 @@ describe('agentSettings', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-    });
-
-    it('returns the configured default model', async () => {
-        mockedLoadSettings.mockResolvedValue({
-            watchCommands: {
-                work: { active: false, watch: { windowName: '', command: '' } },
-                personal: { active: false, watch: { windowName: '', command: '' } },
-            },
-            autosave: {
-                active: true,
-                currentSession: 'session',
-                timeoutMs: 20000,
-            },
-            ai: {
-                agent: {
-                    defaultModel: 'gpt-5-mini',
-                },
-            },
-        });
-
-        await expect(getAgentDefaultModel()).resolves.toBe('gpt-5-mini');
     });
 
     it('maps only active MCP servers into SDK config', async () => {

@@ -173,7 +173,7 @@ kra ai
 
 **Agent-first coding workflow:**
 1. **Provider selection** — pick `copilot` (GitHub Copilot SDK) or `byok` (any OpenAI-compatible API)
-2. **Model selection** — live catalog with context window + pricing annotations; Copilot also picks a reasoning effort. Set `ai.agent.defaultModel` in `settings.toml` to skip the picker.
+2. **Model selection** — live catalog with context window + pricing annotations; Copilot also picks a reasoning effort.
 3. **Repo workspace** — the agent writes changes directly to your repo as uncommitted git diffs; nothing is staged automatically
 4. **Diff review in Neovim** — review the generated `git diff`, optionally edit the agent's proposed change in the 3-pane diff editor, then explicitly apply or reject
 5. **Per-file revert** — `<leader>s` opens session diff history with an `ORIG` entry per file so you can undo a single file at any time

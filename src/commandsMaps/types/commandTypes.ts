@@ -37,6 +37,7 @@ export type AiCommandName = {
     'quota-agent': Command,
     'index': Command,
     'memory': Command,
+    'docs': Command,
 }
 
 export type SystemCommands = Record<keyof SystemCommandName, Command>;

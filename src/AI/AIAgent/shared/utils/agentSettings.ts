@@ -52,12 +52,6 @@ function mapServerConfig(server: McpServerSettings): MCPServerConfig {
     return localConfig;
 }
 
-export async function getAgentDefaultModel(): Promise<string | undefined> {
-    const settings = await loadSettings();
-
-    return settings.ai?.agent?.defaultModel;
-}
-
 export async function getConfiguredMcpServers(): Promise<Record<string, MCPServerConfig>> {
     const settings = await loadSettings();
     const configuredServers = settings.ai?.agent?.mcpServers ?? {};

@@ -20,6 +20,9 @@ import {
     type WebSearchArgs,
     type WebToolResult,
 } from '@/AI/shared/utils/webTools';
+import { loadSettings } from '@/utils/common';
+import { buildDocsSearchTool } from '@/AI/AIAgent/shared/utils/memoryMcpServer';
+import { docsSearch } from '@/AI/AIAgent/shared/docs/search';
 import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import { summarizeToolCall, formatToolLine } from '@/AI/AIAgent/shared/utils/agentUi';
 
@@ -35,6 +38,12 @@ const TOOL_AWARENESS_PREAMBLE = [
     'that does NOT execute anything. If you find yourself typing a tool name, stop and emit a real tool call instead.',
     'Lines like `✓ web_search: …` that you may see in earlier turns are passive log markers from the runtime,',
     'not a calling convention you should imitate.',
+].join(' ');
+
+const DOCS_SEARCH_PREAMBLE = [
+    '',
+    'You also have a `docs_search` tool: vector search over documentation pages indexed locally via `kra ai docs`.',
+    'PREFER `docs_search` over `web_search` / `web_fetch` whenever the user’s question matches one of the configured sources listed in the tool’s description — it is faster, offline, and version-pinned to what is installed.',
 ].join(' ');
 
 const CHAT_TOOLS: ChatCompletionTool[] = [
@@ -132,6 +141,21 @@ async function executeToolCall(
         return runWebSearch(args);
     }
 
+    if (toolName === 'docs_search') {
+        if (typeof parsed.query !== 'string') {
+            return { output: 'docs_search missing required argument: query', isError: true };
+        }
+        const docsArgs: { query: string, k?: number, sourceAlias?: string } = { query: parsed.query };
+        if (typeof parsed.k === 'number') docsArgs.k = parsed.k;
+        if (typeof parsed.sourceAlias === 'string') docsArgs.sourceAlias = parsed.sourceAlias;
+        try {
+            const hits = await docsSearch(docsArgs);
+            return { output: JSON.stringify(hits, null, 2), isError: false };
+        } catch (err) {
+            return { output: `docs_search failed: ${(err as Error).message}`, isError: true };
+        }
+    }
+
     return { output: `Unknown tool: ${toolName}`, isError: true };
 }
 
@@ -145,8 +169,31 @@ async function createOpenAIStream(
     toolContext?: ChatToolContext,
 ): Promise<AsyncIterable<string>> {
     const useTools = !!toolContext;
+
+    const chatTools: ChatCompletionTool[] = [...CHAT_TOOLS];
+    let docsPreamble = '';
+    if (useTools) {
+        try {
+            const settings = await loadSettings();
+            const docsCfg = settings?.ai?.docs;
+            const sources = docsCfg?.enabled ? (docsCfg.sources ?? []) : [];
+            if (sources.length > 0) {
+                const docsTool = buildDocsSearchTool(sources);
+                chatTools.push({
+                    type: 'function',
+                    function: {
+                        name: docsTool.name,
+                        description: docsTool.description,
+                        parameters: docsTool.inputSchema as unknown as Record<string, unknown>,
+                    },
+                });
+                docsPreamble = '\n\n' + DOCS_SEARCH_PREAMBLE;
+            }
+        } catch { /* docs settings missing — leave web tools only */ }
+    }
+
     const systemContent = useTools
-        ? `${system ? `${system}\n\n` : ''}${TOOL_AWARENESS_PREAMBLE}`
+        ? `${system ? `${system}\n\n` : ''}${TOOL_AWARENESS_PREAMBLE}${docsPreamble}`
         : system;
     const messages: ChatCompletionMessageParam[] = [
         { role: 'system', content: systemContent },
@@ -162,7 +209,7 @@ async function createOpenAIStream(
                 temperature,
                 stream: true,
                 ...(useTools && !toolsDisabled
-                    ? { tools: CHAT_TOOLS, tool_choice: 'auto' as const }
+                    ? { tools: chatTools, tool_choice: 'auto' as const }
                     : {}),
             });
         } catch (error) {

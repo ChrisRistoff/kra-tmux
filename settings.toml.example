@@ -17,9 +17,6 @@ active = true
 currentSession = "this will update automatically on load/save session"
 timeoutMs = 20000
 
-[ai.agent]
-defaultModel = "gpt-5-mini"
-
 # ─── Persistent project memory (kra-memory MCP) ───────────────────────────────
 # The kra-memory layer gives the agent persistent notes (`remember` / `recall`
 # / `update_memory`) and conceptual codebase search (`semantic_search`) backed
@@ -39,6 +36,182 @@ gitignoreMemory = true      # documentation-only: whether you keep .kra-memory/ 
 # chunkOverlap = 5
 # includeExtensions = [".ts", ".js", ".py", ".go", ".rs", ".md"]
 # excludeGlobs = ["node_modules/**", "dest/**", "coverage/**", ".kra-memory/**"]
+
+# ─── Documentation indexing (kra ai docs) ───────────────────────────────────────────
+# Crawls the documentation sites listed below with Crawl4AI, embeds each page,
+# and stores chunks in a `doc_chunks` LanceDB table next to `code_chunks`.
+# The agent retrieves docs via the same kra-memory `semantic_search` MCP tool.
+#
+# Run `kra ai docs` to open the interactive menu. From there you can:
+#   - install/re-install the isolated Crawl4AI venv (~507 MB at ~/.kra/crawl4ai-venv/)
+#   - list configured sources (with chunk counts) and crawl/drop them per-source
+#   - crawl all sources (with optional --full bypass of the incremental cache)
+#   - watch live progress (auto-refreshing) and stop the coordinator cleanly
+[ai.docs]
+enabled = true                  # opt-in; flip to true once Crawl4AI is installed
+maxConcurrentSources = 2        # how many Crawl4AI subprocesses run in parallel
+idleTimeoutMs = 30000           # coordinator self-exits after this idle period
+cacheRawMarkdown = true         # keep raw .md per page so re-chunking skips re-crawl
+
+[[ai.docs.sources]]
+alias = "aws-lambda"
+url = "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html"
+description = "AWS Lambda Developer Guide — runtimes, triggers, layers, deployment, IAM, monitoring, pricing."
+maxDepth = 3
+maxPages = 600
+includePatterns = ["**/lambda/latest/dg/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-dynamodb"
+url = "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html"
+description = "AWS DynamoDB Developer Guide — tables, items, indexes, streams, transactions, capacity modes, DAX."
+maxDepth = 3
+maxPages = 600
+includePatterns = ["**/amazondynamodb/latest/developerguide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-eventbridge"
+url = "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html"
+description = "AWS EventBridge User Guide — event buses, rules, targets, schemas, pipes, scheduler."
+maxDepth = 3
+maxPages = 400
+includePatterns = ["**/eventbridge/latest/userguide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-stepfunctions"
+url = "https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html"
+description = "AWS Step Functions Developer Guide — state machines, ASL, tasks, integrations, error handling."
+maxDepth = 3
+maxPages = 500
+includePatterns = ["**/step-functions/latest/dg/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-apigateway"
+url = "https://docs.aws.amazon.com/apigateway/latest/developerguide/welcome.html"
+description = "AWS API Gateway Developer Guide — REST/HTTP/WebSocket APIs, integrations, authorizers, stages, throttling."
+maxDepth = 3
+maxPages = 600
+includePatterns = ["**/apigateway/latest/developerguide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-xray"
+url = "https://docs.aws.amazon.com/xray/latest/devguide/aws-xray.html"
+description = "AWS X-Ray Developer Guide — tracing, segments, subsegments, SDK integration, sampling."
+maxDepth = 3
+maxPages = 300
+includePatterns = ["**/xray/latest/devguide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-iam"
+url = "https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html"
+description = "AWS IAM User Guide — users, roles, policies, permissions, identity providers, best practices."
+maxDepth = 3
+maxPages = 600
+includePatterns = ["**/IAM/latest/UserGuide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-cloudwatch"
+url = "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html"
+description = "AWS CloudWatch Monitoring Guide — metrics, alarms, dashboards, logs (Logs Insights), events."
+maxDepth = 3
+maxPages = 500
+includePatterns = ["**/AmazonCloudWatch/latest/monitoring/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "aws-sdk-js-v3"
+url = "https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/welcome.html"
+description = "AWS SDK for JavaScript v3 Developer Guide — clients, commands, middleware, credentials, paginators."
+maxDepth = 3
+maxPages = 400
+includePatterns = ["**/sdk-for-javascript/v3/developer-guide/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "terraform"
+url = "https://developer.hashicorp.com/terraform/docs"
+description = "Terraform docs — language (HCL), CLI, modules, state, providers, workflows."
+maxDepth = 3
+maxPages = 800
+includePatterns = ["**/developer.hashicorp.com/terraform/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "postgresql"
+url = "https://www.postgresql.org/docs/current/index.html"
+description = "PostgreSQL official docs (current stable) — SQL reference, server admin, internals, extensions."
+maxDepth = 2
+maxPages = 500
+includePatterns = ["**postgresql.org/docs/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "winston"
+url = "https://github.com/winstonjs/winston#readme"
+description = "Winston Node.js logger — transports, formats, levels, child loggers, exception handling."
+maxDepth = 0
+maxPages = 1
+includePatterns = []
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "mocha"
+url = "https://mochajs.org/"
+description = "Mocha JavaScript test framework — suites, hooks, async, CLI flags, reporters, configuration."
+maxDepth = 2
+maxPages = 80
+includePatterns = ["**/mochajs.org/**"]
+excludePatterns = []
+
+[[ai.docs.sources]]
+alias = "sinon"
+url = "https://sinonjs.org/releases/latest/"
+description = "Sinon.JS — spies, stubs, mocks, fakes, fake timers, sandboxes for JavaScript tests."
+maxDepth = 2
+maxPages = 150
+includePatterns = ["**/sinonjs.org/releases/latest/**"]
+excludePatterns = []
+
+# Each [[ai.docs.sources]] entry is one site to crawl.
+#   alias            – stable id, shown in the `kra ai docs` menu and `docs_search`
+#   url              – starting URL
+#   description      – short blurb shown to the AI agent in the docs_search
+#                      tool description so it knows what each source covers
+#                      (kept to one line; omit to fall back to the URL)
+#   maxDepth         – 0 = single page, 1 = follow links one level, etc.
+#   maxPages         – hard cap on pages crawled per source
+#   includePatterns  – glob list; only URLs matching are kept (optional)
+#   excludePatterns  – glob list; URLs matching are skipped (optional)
+#   mode             – 'auto' (default), 'http' (no Chrome, ~10x faster on
+#                      server-rendered docs), or 'browser' (full Chromium for
+#                      JS-rendered SPAs). 'auto' probes the entrypoint and
+#                      picks based on how much text the raw HTML has.
+#   concurrency      – parallel pages per source (default 8 for http, 4 for
+#                      browser). Tune down if a site rate-limits you.
+#   pageTimeoutMs    – per-page render timeout in ms (default 20000). Crank
+#                      up only if pages legitimately need >20s to load.
+# [[ai.docs.sources]]
+# alias = "lancedb"
+# url = "https://lancedb.github.io/lancedb/"
+# description = "LanceDB vector store — table API, indexing, embeddings."
+# maxDepth = 2
+# maxPages = 200
+# includePatterns = ["**/lancedb/**"]
+# excludePatterns = []
+#
+# [[ai.docs.sources]]
+# alias = "fastembed"
+# url = "https://github.com/qdrant/fastembed#readme"
+# description = "fastembed Python/Rust embedder — model list, BGE-Small usage."
+# maxDepth = 0
+# maxPages = 1
 
 [ai.agent.mcpServers.filesystem]
 active = false

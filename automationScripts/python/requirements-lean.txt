@@ -1,0 +1,55 @@
+# Lean Crawl4AI dependency set used by `kra ai docs` (Setup menu entry).
+#
+# Installed into an isolated venv at ~/.kra/crawl4ai-venv/ so it never
+# touches the user's global Python. Total disk usage including
+# `playwright install chromium-headless-shell` is ~507 MB
+# (Python deps ≈ 318 MB, headless Chromium ≈ 189 MB).
+#
+# Install strategy: `pip install -r requirements-lean.txt` (WITH deps so
+# pydantic-core / annotated-types / typing-inspection etc. are pulled in),
+# followed by `pip uninstall -y` of a hard-coded list of heavy optional
+# packages that the worker never imports. The uninstall list lives in
+# src/AI/AIAgent/commands/docsSetup.ts (heavyOptional) so it stays in sync
+# with the runtime code. Trimmed packages: unclecode-litellm + litellm +
+# openai (LLM extraction strategies), patchright + tf-playwright-stealth +
+# playwright-stealth (anti-bot evasion), alphashape + shapely + scipy
+# (geometric clustering used by some experimental extractors), networkx
+# (graph analysis for link discovery). If a real user hits a 403/429 wall
+# we can document an opt-in `pip install patchright tf-playwright-stealth`.
+#
+# Pin Crawl4AI itself so a future release does not silently add a hard
+# import we depend on dropping.
+
+
+crawl4ai==0.7.6
+pydantic>=2.6
+aiohttp>=3.9
+aiofiles>=23.2
+aiosqlite>=0.20
+httpx>=0.27
+truststore>=0.10  # bridges Python ssl to OS trust store; needed behind TLS-intercepting corporate proxies (Zscaler/Netskope/etc.)
+beautifulsoup4>=4.12
+lxml>=5.2
+playwright>=1.45
+pillow>=10.3
+rich>=13.7
+click>=8.1
+pyyaml>=6.0
+psutil>=5.9
+chardet>=5.2
+brotli>=1.1
+humanize>=4.9
+lark>=1.1
+python-dotenv>=1.0
+pyOpenSSL>=24.0
+requests>=2.32
+xxhash>=3.4
+cssselect>=1.2
+fake-useragent>=1.5
+anyio>=4.4
+packaging>=24.0
+numpy>=1.26
+nltk>=3.8
+rank-bm25>=0.2.2
+snowballstemmer>=2.2
+tiktoken>=0.7
