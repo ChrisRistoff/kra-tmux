@@ -138,81 +138,122 @@ export async function selectFileOrFolder(nvim: NeovimClient): Promise<FilePicker
 
         const luaCode = `
             local ok, err = pcall(function()
-                local actions = require('telescope.actions')
-                local action_state = require('telescope.actions.state')
-                local pickers = require('telescope.pickers')
-                local finders = require('telescope.finders')
-                local conf = require('telescope.config').values
-                local make_entry = require('telescope.make_entry')
-
-                local find_cmd
-                if vim.fn.executable('fd') == 1 then
-                    find_cmd = { 'fd', '--hidden', '--follow',
-                                 '--exclude', '.git', '--exclude', 'node_modules' }
-                else
-                    find_cmd = { 'find', '.',
-                                 '-not', '-path', '*/.git/*',
-                                 '-not', '-path', '*/node_modules/*' }
+                if vim.fn.executable('fzf') ~= 1 then
+                    error('fzf executable not found in PATH')
                 end
 
-                pickers.new({}, {
-                    prompt_title = 'Select File or Folder  [↑↓:move  <Tab>:toggle multi  <CR>:confirm  <Esc>:cancel]',
-                    finder = finders.new_oneshot_job(find_cmd, {
-                        entry_maker = make_entry.gen_from_file({}),
-                    }),
-                    sorter = conf.file_sorter({}),
-                    previewer = conf.file_previewer({}),
-                    attach_mappings = function(prompt_bufnr, map)
-                        local function finish_selection()
-                            local picker = action_state.get_current_picker(prompt_bufnr)
-                            local multi = picker:get_multi_selection()
-                            local selected = {}
-                            local seen = {}
+                local cwd = vim.fn.getcwd()
+                local tmpfile = vim.fn.tempname()
+                local input_file = vim.fn.tempname()
 
-                            local function add_item(item)
-                                if not item then
-                                    return
-                                end
+                local entries = {}
+                local seen_entry = {}
+                local function add_entry(p)
+                    if p == nil or p == '' or p == '.' then return end
+                    if not seen_entry[p] then
+                        seen_entry[p] = true
+                        table.insert(entries, p)
+                    end
+                end
 
-                                local path = vim.fn.fnamemodify(item.value or '', ':p')
-                                if path == '' or seen[path] then
-                                    return
-                                end
-
-                                table.insert(selected, {
-                                    path = path,
-                                    isDir = vim.fn.isdirectory(path) == 1,
-                                })
-                                seen[path] = true
-                            end
-
-                            if multi and #multi > 0 then
-                                for _, item in ipairs(multi) do
-                                    add_item(item)
-                                end
-                            else
-                                add_item(action_state.get_selected_entry())
-                            end
-
-                            actions.close(prompt_bufnr)
-                            vim.fn.rpcnotify(${channelId}, 'unified_selection', #selected > 0 and vim.fn.json_encode(selected) or nil)
+                if vim.fn.isdirectory(cwd .. '/.git') == 1 and vim.fn.executable('git') == 1 then
+                    local files = vim.fn.systemlist({ 'git', '-C', cwd, 'ls-files', '--cached', '--others', '--exclude-standard' })
+                    for _, f in ipairs(files) do
+                        add_entry(f)
+                        local dir = f
+                        while true do
+                            dir = vim.fn.fnamemodify(dir, ':h')
+                            if dir == '.' or dir == '/' or dir == '' then break end
+                            add_entry(dir)
                         end
+                    end
+                    table.sort(entries)
+                    vim.fn.writefile(entries, input_file)
+                else
+                    local list_cmd
+                    if vim.fn.executable('fd') == 1 then
+                        list_cmd = { 'fd', '--type', 'f', '--type', 'd', '--hidden', '--follow', '--exclude', '.git', '.', cwd }
+                    elseif vim.fn.executable('fdfind') == 1 then
+                        list_cmd = { 'fdfind', '--type', 'f', '--type', 'd', '--hidden', '--follow', '--exclude', '.git', '.', cwd }
+                    else
+                        list_cmd = { 'find', cwd, '-not', '-path', '*/.git/*', '-not', '-path', '*/node_modules/*' }
+                    end
+                    local out = vim.fn.systemlist(list_cmd)
+                    vim.fn.writefile(out, input_file)
+                end
 
-                        local function cancel_selection()
-                            actions.close(prompt_bufnr)
+                local fzf_opts = table.concat({
+                    '--multi',
+                    "--prompt='Files/Folders> '",
+                    "--header='<Tab>: toggle multi  <CR>: confirm  <Esc>: cancel'",
+                    '--height=100%',
+                    '--layout=reverse',
+                    '--border',
+                    '--ansi',
+                    "--preview='if [ -d {} ]; then ls -la {} 2>/dev/null; else (bat --style=numbers --color=always --line-range=:200 {} 2>/dev/null || cat {} 2>/dev/null); fi'",
+                    '--preview-window=right:60%',
+                }, ' ')
+
+                local fzf_cmd = 'cat ' .. vim.fn.shellescape(input_file) .. ' | fzf ' .. fzf_opts .. ' > ' .. vim.fn.shellescape(tmpfile)
+
+
+                local width = math.floor(vim.o.columns * 0.9)
+                local height = math.floor(vim.o.lines * 0.9)
+                local buf = vim.api.nvim_create_buf(false, true)
+                local win = vim.api.nvim_open_win(buf, true, {
+                    relative = 'editor',
+                    width = width,
+                    height = height,
+                    col = math.floor((vim.o.columns - width) / 2),
+                    row = math.floor((vim.o.lines - height) / 2),
+                    style = 'minimal',
+                    border = 'rounded',
+                })
+
+                vim.fn.termopen({ 'sh', '-c', fzf_cmd }, {
+                    cwd = cwd,
+                    on_exit = function(_, code)
+                        pcall(vim.api.nvim_win_close, win, true)
+                        pcall(vim.api.nvim_buf_delete, buf, { force = true })
+                        pcall(os.remove, input_file)
+
+
+                        if code ~= 0 then
+                            pcall(os.remove, tmpfile)
                             vim.fn.rpcnotify(${channelId}, 'unified_selection', nil)
+                            return
                         end
 
-                        actions.select_default:replace(finish_selection)
-                        map('i', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
-                        map('n', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
-                        map('i', '<Esc>', cancel_selection)
-                        map('n', 'q', cancel_selection)
-                        map('i', '<C-c>', cancel_selection)
-                        map('n', '<C-c>', cancel_selection)
-                        return true
+                        local lines = {}
+                        if vim.fn.filereadable(tmpfile) == 1 then
+                            lines = vim.fn.readfile(tmpfile)
+                        end
+                        pcall(os.remove, tmpfile)
+
+
+                        local selected = {}
+                        local seen = {}
+                        for _, raw in ipairs(lines) do
+                            local p = vim.fn.trim(raw)
+                            if p ~= '' then
+                                if p:sub(1,1) ~= '/' then
+                                    p = cwd .. '/' .. p
+                                end
+                                local abspath = vim.fn.fnamemodify(p, ':p'):gsub('/$', '')
+                                if not seen[abspath] then
+                                    table.insert(selected, {
+                                        path = abspath,
+                                        isDir = vim.fn.isdirectory(abspath) == 1,
+                                    })
+                                    seen[abspath] = true
+                                end
+                            end
+                        end
+
+                        vim.fn.rpcnotify(${channelId}, 'unified_selection', #selected > 0 and vim.fn.json_encode(selected) or nil)
                     end,
-                }):find()
+                })
+                vim.cmd('startinsert')
             end)
             if not ok then
                 vim.notify('File/folder picker error: ' .. tostring(err), vim.log.levels.ERROR)
@@ -306,77 +347,99 @@ export async function selectFileFromFolder(nvim: NeovimClient, folderPath: strin
 
         const luaCode = `
             local ok, err = pcall(function()
-                local actions = require('telescope.actions')
-                local action_state = require('telescope.actions.state')
-                local pickers = require('telescope.pickers')
-                local finders = require('telescope.finders')
-                local conf = require('telescope.config').values
-                local make_entry = require('telescope.make_entry')
-
-                local folder = ${JSON.stringify(folderPath)}
-                local find_cmd
-                if vim.fn.executable('fd') == 1 then
-                    find_cmd = { 'fd', '.', '--type', 'f', '--hidden', folder }
-                else
-                    find_cmd = { 'find', folder, '-type', 'f' }
+                if vim.fn.executable('fzf') ~= 1 then
+                    error('fzf executable not found in PATH')
                 end
 
-                pickers.new({}, {
-                    prompt_title = 'Select File from Folder  [↑↓:move  <Tab>:toggle multi  <CR>:confirm  <Esc>:cancel]',
+                local folder = ${JSON.stringify(folderPath)}
+                local tmpfile = vim.fn.tempname()
+                local input_file = vim.fn.tempname()
+
+                local in_git = vim.fn.system({ 'git', '-C', folder, 'rev-parse', '--show-toplevel' })
+                local is_git = vim.v.shell_error == 0 and vim.fn.trim(in_git) ~= ''
+
+                local out
+                if is_git then
+                    out = vim.fn.systemlist({ 'sh', '-c', 'cd ' .. vim.fn.shellescape(folder) .. ' && git ls-files --cached --others --exclude-standard' })
+                elseif vim.fn.executable('fd') == 1 then
+                    out = vim.fn.systemlist({ 'fd', '--type', 'f', '--hidden', '--follow', '--exclude', '.git', '.', folder })
+                elseif vim.fn.executable('fdfind') == 1 then
+                    out = vim.fn.systemlist({ 'fdfind', '--type', 'f', '--hidden', '--follow', '--exclude', '.git', '.', folder })
+                elseif vim.fn.executable('rg') == 1 then
+                    out = vim.fn.systemlist({ 'rg', '--files', '--hidden', '--follow', '--glob', '!.git', folder })
+                else
+                    out = vim.fn.systemlist({ 'find', folder, '-type', 'f', '-not', '-path', '*/.git/*', '-not', '-path', '*/node_modules/*' })
+                end
+                vim.fn.writefile(out or {}, input_file)
+
+                local fzf_opts = table.concat({
+                    '--multi',
+                    "--prompt='Files> '",
+                    "--header='<Tab>: toggle multi  <CR>: confirm  <Esc>: cancel'",
+                    '--height=100%',
+                    '--layout=reverse',
+                    '--border',
+                    '--ansi',
+                    "--preview='bat --style=numbers --color=always --line-range=:200 {} 2>/dev/null || cat {} 2>/dev/null'",
+                    '--preview-window=right:60%',
+                }, ' ')
+
+                local fzf_cmd = 'cat ' .. vim.fn.shellescape(input_file) .. ' | fzf ' .. fzf_opts .. ' > ' .. vim.fn.shellescape(tmpfile)
+
+
+                local width = math.floor(vim.o.columns * 0.9)
+                local height = math.floor(vim.o.lines * 0.9)
+                local buf = vim.api.nvim_create_buf(false, true)
+                local win = vim.api.nvim_open_win(buf, true, {
+                    relative = 'editor',
+                    width = width,
+                    height = height,
+                    col = math.floor((vim.o.columns - width) / 2),
+                    row = math.floor((vim.o.lines - height) / 2),
+                    style = 'minimal',
+                    border = 'rounded',
+                })
+
+                vim.fn.termopen({ 'sh', '-c', fzf_cmd }, {
                     cwd = folder,
-                    finder = finders.new_oneshot_job(find_cmd, {
-                        entry_maker = make_entry.gen_from_file({}),
-                    }),
-                    sorter = conf.file_sorter({}),
-                    previewer = conf.file_previewer({}),
-                    attach_mappings = function(prompt_bufnr, map)
-                        local function finish_selection()
-                            local picker = action_state.get_current_picker(prompt_bufnr)
-                            local multi = picker:get_multi_selection()
-                            local selected = {}
-                            local seen = {}
+                    on_exit = function(_, code)
+                        pcall(vim.api.nvim_win_close, win, true)
+                        pcall(vim.api.nvim_buf_delete, buf, { force = true })
+                        pcall(os.remove, input_file)
 
-                            local function add_item(item)
-                                if not item then
-                                    return
-                                end
 
-                                local path = vim.fn.fnamemodify(item.value or '', ':p')
-                                if path == '' or seen[path] then
-                                    return
-                                end
-
-                                table.insert(selected, path)
-                                seen[path] = true
-                            end
-
-                            if multi and #multi > 0 then
-                                for _, item in ipairs(multi) do
-                                    add_item(item)
-                                end
-                            else
-                                add_item(action_state.get_selected_entry())
-                            end
-
-                            actions.close(prompt_bufnr)
-                            vim.fn.rpcnotify(${channelId}, 'folder_file_selected', #selected > 0 and vim.fn.json_encode(selected) or nil)
-                        end
-
-                        local function cancel_selection()
-                            actions.close(prompt_bufnr)
+                        if code ~= 0 then
+                            pcall(os.remove, tmpfile)
                             vim.fn.rpcnotify(${channelId}, 'folder_file_selected', nil)
+                            return
                         end
 
-                        actions.select_default:replace(finish_selection)
-                        map('i', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
-                        map('n', '<Tab>', function() actions.toggle_selection(prompt_bufnr) end)
-                        map('i', '<Esc>', cancel_selection)
-                        map('n', 'q', cancel_selection)
-                        map('i', '<C-c>', cancel_selection)
-                        map('n', '<C-c>', cancel_selection)
-                        return true
+                        local lines = {}
+                        if vim.fn.filereadable(tmpfile) == 1 then
+                            lines = vim.fn.readfile(tmpfile)
+                        end
+                        pcall(os.remove, tmpfile)
+
+                        local selected = {}
+                        local seen = {}
+                        for _, raw in ipairs(lines) do
+                            local p = vim.fn.trim(raw)
+                            if p ~= '' then
+                                if p:sub(1,1) ~= '/' then
+                                    p = folder .. '/' .. p
+                                end
+                                local abspath = vim.fn.fnamemodify(p, ':p'):gsub('/$', '')
+                                if not seen[abspath] then
+                                    table.insert(selected, abspath)
+                                    seen[abspath] = true
+                                end
+                            end
+                        end
+
+                        vim.fn.rpcnotify(${channelId}, 'folder_file_selected', #selected > 0 and vim.fn.json_encode(selected) or nil)
                     end,
-                }):find()
+                })
+                vim.cmd('startinsert')
             end)
             if not ok then
                 vim.notify('Folder file picker error: ' .. tostring(err), vim.log.levels.ERROR)
