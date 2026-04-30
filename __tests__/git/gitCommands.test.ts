@@ -1,21 +1,42 @@
 import * as bash from '@/utils/bashHelper';
 import * as ui from '@/UI/generalUI';
-import * as vim from '@/utils/neovimHelper';
 import { handleConflicts } from '@/git/commands/gitConflicts';
 import { restoreFile } from '@/git/commands/gitRestore';
 import { applyOrDropStash, dropMultipleStashes } from '@/git/commands/gitStash';
-import { GIT_COMMANDS } from '@/git/config/gitConstants';
-import { allFiles } from '@//git/utils/gitFileUtils';
+import { pickList } from '@/UI/dashboard/pickList';
+import { browseFiles, runInherit } from '@/UI/dashboard/screen';
+import {
+    allFiles,
+    getConflictedFiles,
+    getModifiedFiles,
+    getStashes,
+} from '@/git/utils/gitFileUtils';
 
-// Mock dependencies
 jest.mock('@/utils/bashHelper');
 jest.mock('@/UI/generalUI');
-jest.mock('@/utils/neovimHelper');
+jest.mock('@/UI/dashboard/pickList', () => ({ pickList: jest.fn() }));
+jest.mock('@/UI/dashboard/screen', () => ({
+    browseFiles: jest.fn(),
+    runInherit: jest.fn(),
+    withTempScreen: jest.fn(async (_title: string, cb: (screen: unknown) => Promise<void>) => cb({})),
+}));
+jest.mock('@/git/utils/gitFileUtils', () => ({
+    allFiles: 'All',
+    getConflictedFiles: jest.fn(),
+    getModifiedFiles: jest.fn(),
+    getStashes: jest.fn(),
+}));
 
 describe('Git Commands', () => {
     const mockExecCommand = jest.mocked(bash.execCommand);
+    const mockGrepFileForString = jest.mocked(bash.grepFileForString);
     const mockSearchSelect = jest.mocked(ui.searchSelectAndReturnFromArray);
-    const mockOpenVim = jest.mocked(vim.openVim);
+    const mockPickList = jest.mocked(pickList);
+    const mockBrowseFiles = jest.mocked(browseFiles);
+    const mockRunInherit = jest.mocked(runInherit);
+    const mockGetConflictedFiles = jest.mocked(getConflictedFiles);
+    const mockGetModifiedFiles = jest.mocked(getModifiedFiles);
+    const mockGetStashes = jest.mocked(getStashes);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -23,37 +44,35 @@ describe('Git Commands', () => {
 
     describe('handleConflicts', () => {
         it('should handle no conflicts scenario', async () => {
-            mockExecCommand.mockResolvedValueOnce({ stdout: '', stderr: '' }); // No conflicted files
-
-            const consoleSpy = jest.spyOn(console, 'log');
+            mockGetConflictedFiles.mockResolvedValueOnce([]);
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
 
             await handleConflicts();
 
             expect(consoleSpy).toHaveBeenCalledWith('No Conflicts to Handle!');
-            expect(mockOpenVim).not.toHaveBeenCalled();
-
+            expect(mockBrowseFiles).not.toHaveBeenCalled();
             consoleSpy.mockRestore();
         });
 
         it('should handle conflicts resolution', async () => {
             const conflictedFile = 'src/test.ts';
-
-            mockExecCommand
-                .mockResolvedValueOnce({ stdout: conflictedFile + '\n', stderr: '' }) // Initial conflicts check
-                .mockResolvedValueOnce({ stdout: '', stderr: '' }); // No conflicts after resolution
-
-            mockSearchSelect.mockResolvedValueOnce(conflictedFile);
+            mockGetConflictedFiles.mockResolvedValueOnce([conflictedFile]);
+            mockGrepFileForString.mockResolvedValueOnce(false);
+            mockBrowseFiles.mockImplementationOnce(async (_screen, opts) => {
+                await opts.view(conflictedFile);
+            });
+            jest.spyOn(console, 'table').mockImplementation(() => undefined);
 
             await handleConflicts();
 
-            expect(mockOpenVim).toHaveBeenCalledWith(conflictedFile, '-c', 'Gvdiffsplit!');
-            expect(mockExecCommand).toHaveBeenCalledWith(GIT_COMMANDS.GET_CONFLICTS);
+            expect(mockRunInherit).toHaveBeenCalledWith('nvim', [conflictedFile, '-c', 'Gvdiffsplit!'], expect.anything());
+            expect(mockGrepFileForString).toHaveBeenCalledWith(conflictedFile, '<<<<<<<|=======|>>>>>>>');
         });
     });
 
     describe('restoreFile', () => {
         it('should restore all files when "All" is selected', async () => {
-            mockExecCommand.mockResolvedValueOnce({ stdout: 'file1.ts\nfile2.ts', stderr: '' });
+            mockGetModifiedFiles.mockResolvedValueOnce(['file1.ts', 'file2.ts']);
             mockSearchSelect.mockResolvedValueOnce(allFiles);
 
             await restoreFile();
@@ -63,7 +82,7 @@ describe('Git Commands', () => {
 
         it('should restore specific file when selected', async () => {
             const fileToRestore = 'src/test.ts';
-            mockExecCommand.mockResolvedValueOnce({ stdout: fileToRestore + '\n', stderr: '' });
+            mockGetModifiedFiles.mockResolvedValueOnce([fileToRestore]);
             mockSearchSelect.mockResolvedValueOnce(fileToRestore);
 
             await restoreFile();
@@ -72,12 +91,12 @@ describe('Git Commands', () => {
         });
 
         it('should handle empty selection', async () => {
-            mockExecCommand.mockResolvedValueOnce({ stdout: 'file1.ts\n', stderr: '' });
+            mockGetModifiedFiles.mockResolvedValueOnce(['file1.ts']);
             mockSearchSelect.mockResolvedValueOnce('');
 
             await restoreFile();
 
-            expect(mockExecCommand).toHaveBeenCalledTimes(1); // Only the initial files check
+            expect(mockExecCommand).not.toHaveBeenCalled();
         });
     });
 
@@ -85,11 +104,10 @@ describe('Git Commands', () => {
         describe('applyOrDropStash', () => {
             it('should apply selected stash', async () => {
                 const stashList = ['stash@{0}: WIP on main', 'stash@{1}: feature work'];
-
-                mockExecCommand.mockResolvedValueOnce({ stdout: stashList.join('\n'), stderr: '' });
-                mockSearchSelect
-                    .mockResolvedValueOnce(stashList[0]) // Select first stash
-                    .mockResolvedValueOnce('apply'); // Choose to apply
+                mockGetStashes.mockResolvedValueOnce(stashList);
+                mockPickList
+                    .mockResolvedValueOnce({ value: stashList[0] })
+                    .mockResolvedValueOnce({ value: 'apply' });
 
                 await applyOrDropStash();
 
@@ -98,11 +116,10 @@ describe('Git Commands', () => {
 
             it('should drop selected stash', async () => {
                 const stashList = ['stash@{0}: WIP on main'];
-
-                mockExecCommand.mockResolvedValueOnce({ stdout: stashList.join('\n'), stderr: '' });
-                mockSearchSelect
-                    .mockResolvedValueOnce(stashList[0])
-                    .mockResolvedValueOnce('drop');
+                mockGetStashes.mockResolvedValueOnce(stashList);
+                mockPickList
+                    .mockResolvedValueOnce({ value: stashList[0] })
+                    .mockResolvedValueOnce({ value: 'drop' });
 
                 await applyOrDropStash();
 
@@ -113,14 +130,12 @@ describe('Git Commands', () => {
         describe('dropMultipleStashes', () => {
             it('should drop multiple stashes until stop is selected', async () => {
                 const stashList = ['stash@{0}: WIP', 'stash@{1}: feature'];
-
-                mockExecCommand
-                    .mockResolvedValueOnce({ stdout: stashList.join('\n'), stderr: '' })
-                    .mockResolvedValueOnce({ stdout: stashList[1], stderr: '' });
-
-                mockSearchSelect
-                    .mockResolvedValueOnce(stashList[0]) // Select first stash
-                    .mockResolvedValueOnce('stop'); // Stop after first drop
+                mockGetStashes
+                    .mockResolvedValueOnce(stashList)
+                    .mockResolvedValueOnce([stashList[1]]);
+                mockPickList
+                    .mockResolvedValueOnce({ value: stashList[0] })
+                    .mockResolvedValueOnce({ value: 'stop' });
 
                 await dropMultipleStashes();
 

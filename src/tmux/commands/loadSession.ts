@@ -14,15 +14,44 @@ import * as bash from '@/utils/bashHelper';
  * Main session loading workflow
  * Handles session selection, base session creation, script generation and execution
  */
-export async function loadSession(): Promise<void> {
+export async function loadSession(preselectedServerName?: string): Promise<void> {
     await createLockFile(LockFiles.LoadInProgress);
 
     try {
         const itemsArray = await getSavedSessionsNames();
 
-        const serverName = await generalUI.searchSelectAndReturnFromArray({
+        const serverName = preselectedServerName ?? await generalUI.searchSelectAndReturnFromArray({
             itemsArray,
-            prompt: "Select a session to load from the list:",
+            prompt: 'Select a session to load',
+            header: `${itemsArray.length} saved session file(s)`,
+            details: async (name) => {
+                try {
+                    const data = await getSessionsFromSaved(name);
+                    if (!data) return '(empty / unreadable)';
+                    const lines: string[] = [`save: ${name}`, ''];
+                    let totalWindows = 0;
+                    let totalPanes = 0;
+                    for (const [sessionName, session] of Object.entries(data)) {
+                        const windows = session.windows ?? [];
+                        totalWindows += windows.length;
+                        lines.push(`◆ ${sessionName}  (${windows.length} window(s))`);
+                        for (const w of windows) {
+                            const panes = w.panes ?? [];
+                            totalPanes += panes.length;
+                            lines.push(`  ▸ ${w.windowName}  [${panes.length} pane(s)]`);
+                            for (const p of panes) {
+                                const cmd = p.currentCommand ? ` (${p.currentCommand})` : '';
+                                lines.push(`      · ${p.currentPath ?? '?'}${cmd}`);
+                            }
+                        }
+                    }
+                    lines.splice(1, 0, `${Object.keys(data).length} session(s) · ${totalWindows} window(s) · ${totalPanes} pane(s)`, '');
+
+                    return lines.join('\n');
+                } catch (e: unknown) {
+                    return `Failed to read save: ${e instanceof Error ? e.message : String(e)}`;
+                }
+            },
         })
 
         const savedSessionsData = await getSessionsFromSaved(serverName);

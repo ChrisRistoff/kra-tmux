@@ -8,8 +8,7 @@ module.exports = {
     },
     moduleFileExtensions: ['ts', 'js', 'json'],
     clearMocks: true,
-    collectCoverage: true,
-    coverageDirectory: 'coverage',
+    collectCoverage: false,
     coveragePathIgnorePatterns: [
         '/node_modules/',
         '/src/AI/AIChat/data/keys.ts',

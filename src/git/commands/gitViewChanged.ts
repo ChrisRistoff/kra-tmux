@@ -1,18 +1,25 @@
 import * as gitFiles from '@/git/utils/gitFileUtils';
-import * as ui from '@/UI/generalUI';
-import * as nvim from '@/utils/neovimHelper';
+import { browseFiles, runInherit, withTempScreen } from '@/UI/dashboard/screen';
 
 export async function handleViewChanged(): Promise<void> {
-    const changedFiles = new Set([...await gitFiles.getModifiedFiles(), ...await gitFiles.getUntrackedFiles()]);
+    const files = [
+        ...await gitFiles.getModifiedFiles(),
+        ...await gitFiles.getUntrackedFiles(),
+    ];
+    if (files.length === 0) {
+        console.log('No changed files.');
 
-    while (changedFiles.size > 0) {
-        const file = await ui.searchSelectAndReturnFromArray({
-            itemsArray: Array.from(changedFiles),
-            prompt: "Pick a file to view: "
-        })
-
-        await nvim.openVim(file, '-c' ,'Gvdiffsplit');
-
-        changedFiles.delete(file);
+        return;
     }
+
+    await withTempScreen('git changed files', async (screen) => {
+        await browseFiles(screen, {
+            title: 'changed files',
+            files,
+            view: async (file) => {
+                await runInherit('nvim', [file, '-c', 'Gvdiffsplit'], screen);
+            },
+        });
+    });
 }
+

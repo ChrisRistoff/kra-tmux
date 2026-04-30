@@ -1,40 +1,36 @@
-import * as bash from "@/utils/bashHelper";
-import * as vim from "@/utils/neovimHelper";
-import * as ui from "@/UI/generalUI";
-import { getConflictedFiles } from "@/git/utils/gitFileUtils";
-import { Conflicts } from "@/types/gitTypes";
+import * as bash from '@/utils/bashHelper';
+import { getConflictedFiles } from '@/git/utils/gitFileUtils';
+import { browseFiles, runInherit, withTempScreen } from '@/UI/dashboard/screen';
+import { Conflicts } from '@/types/gitTypes';
 
 export async function handleConflicts(): Promise<void> {
     const conflictsArray = await getConflictedFiles();
-    const conflictedFilesSet = new Set(conflictsArray);
-
     if (!conflictsArray.length) {
         console.log('No Conflicts to Handle!');
 
         return;
     }
 
-    while (conflictedFilesSet.size !== 0) {
-        const fileName = await ui.searchSelectAndReturnFromArray({
-            itemsArray: Array.from(conflictedFilesSet),
-            prompt: 'Pick a file to resolve: '
+    await withTempScreen('git conflicts', async (screen) => {
+        await browseFiles(screen, {
+            title: 'conflicted files',
+            files: conflictsArray,
+            view: async (file) => {
+                await runInherit('nvim', [file, '-c', 'Gvdiffsplit!'], screen);
+                const remaining = await bash.grepFileForString(file, '<<<<<<<|=======|>>>>>>>');
+                if (remaining) {
+                    return false;
+                }
+
+                return true;
+            },
         });
-
-        await vim.openVim(fileName, '-c', 'Gvdiffsplit!');
-
-        const conflicts = await bash.grepFileForString(fileName, `<<<<<<<|=======|>>>>>>>`);
-
-        if (conflicts) {
-            console.table({'Conflicts Markers Still Found In': fileName})
-        } else {
-            conflictedFilesSet.delete(fileName);
-        }
-    }
-
-    const conflictsObject: Conflicts = {};
-    conflictsArray.forEach((conflict: string, index: number) => {
-        conflictsObject[`${index + 1}.File Name`] = conflict;
     });
 
+    const conflictsObject: Conflicts = {};
+    conflictsArray.forEach((conflict, index) => {
+        conflictsObject[`${index + 1}.File Name`] = conflict;
+    });
     console.table(conflictsObject);
 }
+

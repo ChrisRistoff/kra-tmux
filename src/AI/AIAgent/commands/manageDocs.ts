@@ -4,8 +4,8 @@
  * One entry point that mirrors `manageMemory()`:
  *   - Setup Crawl4AI venv (or re-install)
  *   - List configured sources, with a per-source action submenu
- *     (Crawl this, Crawl --full, Drop indexed chunks, Show details)
- *   - Crawl all sources
+ *     (Re-index this source, Drop indexed chunks, Show details)
+ *   - Re-index all sources
  *   - Live crawl progress (polls docs-status.json every ~500 ms)
  *   - Stop coordinator
  *
@@ -65,7 +65,7 @@ export async function manageDocs(): Promise<void> {
             const items: string[] = [];
             items.push(isCrawl4aiInstalled() ? 'Re-install Crawl4AI venv' : 'Setup Crawl4AI venv');
             items.push('List configured sources');
-            items.push('Crawl all sources');
+            items.push('Re-index all sources');
 
             const live = coordinatorAlive() || readSnapshot() !== null;
             items.push(live ? 'Live crawl progress' : 'Live crawl progress (no active crawl)');
@@ -85,13 +85,13 @@ export async function manageDocs(): Promise<void> {
                 await setupAction();
             } else if (action === 'List configured sources') {
                 await listSourcesMenu();
-            } else if (action === 'Crawl all sources') {
+            } else if (action === 'Re-index all sources') {
                 await crawlAllAction();
             } else if (action.startsWith('Live crawl progress')) {
                 if (action.includes('no active crawl')) {
                     await ui.showInfoScreen(
                         'Live progress',
-                        'No active crawl. Start one via "Crawl all sources" or pick a source from the list.\n',
+                        'No active crawl. Start one via "Re-index all sources" or pick a source from the list.\n',
                     );
                 } else {
                     await showLiveProgress();
@@ -189,7 +189,7 @@ async function sourceActions(src: DocsSource): Promise<void> {
         .step('action', async () => {
             const action = await ui.searchSelectAndReturnFromArray({
                 itemsArray: [
-                    'Crawl this source',
+                    'Re-index this source',
                     'Drop indexed chunks for this source',
                     'Show source details',
                 ],
@@ -201,11 +201,11 @@ async function sourceActions(src: DocsSource): Promise<void> {
             return action;
         })
         .step('_', async ({ action }) => {
-            if (action === 'Crawl this source') {
+            if (action === 'Re-index this source') {
                 const bypass = await ui.promptUserYesOrNo(
-                    'Bypass the incremental cache (full re-crawl)?\n\n'
+                    'Bypass the incremental cache (full re-index)?\n\n'
                     + 'yes = re-fetch every page, ignore the page-hash cache.\n'
-                    + 'no  = skip pages whose content hasn\'t changed since last crawl (recommended).',
+                    + 'no  = skip pages whose content has not changed since the last index (recommended).',
                 );
                 await crawlSources([src], { bypassIncremental: bypass });
 
@@ -272,20 +272,20 @@ async function crawlAllAction(): Promise<void> {
         return;
     }
     if (cfg.enabled === false) {
-        await ui.showInfoScreen('Disabled', '[ai.docs] is disabled in settings.toml. Set `enabled = true` to crawl.\n');
+        await ui.showInfoScreen('Disabled', '[ai.docs] is disabled in settings.toml. Set `enabled = true` to re-index sources.\n');
 
         return;
     }
 
     const proceed = await ui.promptUserYesOrNo(
-        `Crawl all ${cfg.sources.length} source(s)?`,
+        `Re-index all ${cfg.sources.length} source(s)?`,
     );
     if (!proceed) return;
 
     const bypass = await ui.promptUserYesOrNo(
-        'Bypass the incremental cache (full re-crawl)?\n\n'
+        'Bypass the incremental cache (full re-index)?\n\n'
         + 'yes = re-fetch every page, ignore the page-hash cache.\n'
-        + 'no  = skip pages whose content hasn\'t changed since last crawl (recommended).',
+        + 'no  = skip pages whose content has not changed since the last index (recommended).',
     );
 
     await crawlSources(cfg.sources, { bypassIncremental: bypass });
@@ -343,7 +343,7 @@ async function crawlSources(
         '',
         errors.length ? 'Errors:\n' + errors.map((e) => '  - ' + e).join('\n') : 'No errors.',
         '',
-        'Open "Live crawl progress" from the main menu to follow progress.',
+        'Open "Live crawl progress" from the main menu to follow re-index progress.',
         '',
     ].join('\n');
 

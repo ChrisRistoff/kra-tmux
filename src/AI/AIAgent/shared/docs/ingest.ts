@@ -99,6 +99,7 @@ export async function ingestPage(input: IngestPageInput): Promise<IngestPageResu
 
     if (built.length === 0) {
         await removePage(input.alias, input.url);
+
         return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: 0, pageHash: ph };
     }
 

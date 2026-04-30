@@ -150,6 +150,7 @@ async function executeToolCall(
         if (typeof parsed.sourceAlias === 'string') docsArgs.sourceAlias = parsed.sourceAlias;
         try {
             const hits = await docsSearch(docsArgs);
+
             return { output: JSON.stringify(hits, null, 2), isError: false };
         } catch (err) {
             return { output: `docs_search failed: ${(err as Error).message}`, isError: true };
@@ -175,7 +176,7 @@ async function createOpenAIStream(
     if (useTools) {
         try {
             const settings = await loadSettings();
-            const docsCfg = settings?.ai?.docs;
+            const docsCfg = settings.ai?.docs;
             const sources = docsCfg?.enabled ? (docsCfg.sources ?? []) : [];
             if (sources.length > 0) {
                 const docsTool = buildDocsSearchTool(sources);
@@ -246,7 +247,7 @@ async function createOpenAIStream(
                     }
 
                     const choice = chunk.choices[0];
-                    const delta = choice?.delta;
+                    const delta = choice.delta;
 
                     if (!delta) {
                         continue;
@@ -282,7 +283,7 @@ async function createOpenAIStream(
                         }
                     }
 
-                    if (choice?.finish_reason) {
+                    if (choice.finish_reason) {
                         finishReason = choice.finish_reason;
                     }
                 }

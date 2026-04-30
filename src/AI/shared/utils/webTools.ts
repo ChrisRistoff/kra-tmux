@@ -175,6 +175,7 @@ async function fetchDirect(url: string): Promise<{ ok: boolean; status: number; 
     const contentType = response.headers.get('content-type') ?? '';
     const raw = await response.text();
     const body = contentType.includes('html') ? htmlToText(extractMainContent(raw)) : raw;
+
     return {
         ok: response.ok,
         status: response.status,
@@ -196,12 +197,14 @@ async function fetchViaJina(url: string): Promise<{ ok: boolean; body: string; s
         },
     });
     const body = await response.text();
+
     return { ok: response.ok, body, status: response.status, statusText: response.statusText };
 }
 
 
 function buildOutput(parts: { url: string; status: number; statusText: string; contentType: string; body: string; maxLength: number; via?: string }): string {
     const truncated = parts.body.length > parts.maxLength;
+
     return [
         `URL: ${parts.url}`,
         `Status: ${parts.status} ${parts.statusText}`,
@@ -246,6 +249,7 @@ export async function runWebFetch(args: WebFetchArgs): Promise<WebToolResult> {
 
     try {
         const direct = await fetchDirect(args.url);
+
         return {
             output: buildOutput({
                 url: direct.finalUrl,
@@ -260,6 +264,7 @@ export async function runWebFetch(args: WebFetchArgs): Promise<WebToolResult> {
         };
     } catch (error) {
         const directError = error instanceof Error ? error.message : String(error);
+
         return {
             output: `Fetch failed: Jina Reader (${jinaError ?? 'no usable content'}) and direct fetch (${directError}) both failed.`,
             isError: true,
@@ -364,6 +369,7 @@ async function searchJina(query: string, limit: number): Promise<WebToolResult> 
 
         if (!response.ok) {
             const text = await response.text();
+
             return {
                 output: `Jina search failed: HTTP ${response.status} ${response.statusText} ${text.slice(0, 300)}`,
                 isError: true,
@@ -386,6 +392,7 @@ async function searchJina(query: string, limit: number): Promise<WebToolResult> 
         return { output: formatResults(query, results), isError: false };
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+
         return { output: `Jina search failed: ${message}`, isError: true };
     }
 }
@@ -422,9 +429,11 @@ async function searchDuckDuckGoLite(query: string, limit: number): Promise<WebTo
         }
 
         const results = parseDuckDuckGoLiteHtml(html, limit);
+
         return { output: formatResults(query, results), isError: false };
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+
         return { output: `Lite search failed: ${message}`, isError: true };
     }
 }

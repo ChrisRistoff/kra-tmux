@@ -95,10 +95,12 @@ describe('loadSession', () => {
 
             expect(mockCreateLockFile).toHaveBeenCalledWith(LockFiles.LoadInProgress);
             expect(mockGetSavedSessionsNames).toHaveBeenCalled();
-            expect(mockGeneralUI.searchSelectAndReturnFromArray).toHaveBeenCalledWith({
+            expect(mockGeneralUI.searchSelectAndReturnFromArray).toHaveBeenCalledWith(expect.objectContaining({
                 itemsArray: mockSessionNames,
-                prompt: "Select a session to load from the list:",
-            });
+                prompt: 'Select a session to load',
+                header: '2 saved session file(s)',
+                details: expect.any(Function),
+            }));
             expect(mockFs.readFile).toHaveBeenCalledWith('/mock/session/files/server1');
             expect(mockTmux.sourceTmuxConfig).toHaveBeenCalled();
             expect(mockTmux.updateCurrentSession).toHaveBeenCalledWith('server1');

@@ -221,6 +221,7 @@ async function handleStreamingResponse(
                 out += ch;
             }
         }
+
         return out;
     };
 

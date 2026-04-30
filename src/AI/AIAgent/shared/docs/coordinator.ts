@@ -115,6 +115,7 @@ function ensureStatus(alias: string, phase: DocsSourcePhase): DocsSourceStatus {
         };
         statuses.set(alias, s);
     }
+
     return s;
 }
 
@@ -143,6 +144,7 @@ function enqueueSource(req: DocsSourceRequest): 'accepted' | 'duplicate' {
     ensureStatus(req.alias, 'queued');
     cancelIdleExit();
     pump();
+
     return 'accepted';
 }
 
@@ -186,6 +188,7 @@ function workerArgs(req: DocsSourceRequest): string[] {
     for (const p of req.excludePatterns ?? []) {
         args.push('--exclude', p);
     }
+
     return args;
 }
 
@@ -278,6 +281,7 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
         msg = JSON.parse(trimmed) as DocsWorkerMessage;
     } catch {
         console.error(`docs-coordinator: bad JSONL from worker ${req.alias}: ${trimmed.slice(0, 200)}`);
+
         return;
     }
 
@@ -290,6 +294,7 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
             status.pagesDone = msg.pagesDone;
             status.pagesTotal = Math.max(status.pagesTotal, msg.pagesTotal);
             status.lastUrl = msg.currentUrl;
+
             return;
         }
         case 'worker-error': {
@@ -298,10 +303,12 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
             if (msg.fatal) {
                 status.phase = 'error';
             }
+
             return;
         }
         case 'mode-decided': {
             status.mode = msg.mode;
+
             return;
         }
         case 'page-fetched': {
@@ -328,6 +335,7 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
             } finally {
                 status.phase = 'crawling';
             }
+
             return;
         }
         case 'page-unchanged': {
@@ -338,11 +346,13 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
                 ...(msg.etag ? { etag: msg.etag } : {}),
                 ...(msg.lastModified ? { lastModified: msg.lastModified } : {}),
             });
+
             return;
         }
         case 'page-skipped': {
             status.pagesDone += 1;
             applyPageSkipped(docsState, req.alias, msg.url, Date.now());
+
             return;
         }
         case 'source-done': {
@@ -350,6 +360,7 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
             status.finishedAt = Date.now();
             status.pagesDone = msg.summary.pagesScraped + msg.summary.pagesSkipped;
             saveDocsState(docsState);
+
             return;
         }
     }
@@ -364,15 +375,18 @@ function handleClientMessage(raw: string): void {
         msg = JSON.parse(trimmed) as DocsClientMessage;
     } catch {
         console.error('docs-coordinator: invalid client message', trimmed.slice(0, 200));
+
         return;
     }
 
     switch (msg.type) {
         case 'source-enqueue':
             enqueueSource(msg);
+
             return;
         case 'shutdown-request':
             shutdown(0);
+
             return;
     }
 }
@@ -404,7 +418,7 @@ async function main(): Promise<void> {
     }
 
     const settings = await loadSettings();
-    const docsCfg = settings?.ai?.docs;
+    const docsCfg = settings.ai?.docs;
     maxConcurrent = Math.max(1, docsCfg?.maxConcurrentSources ?? DEFAULT_MAX_CONCURRENT);
     idleTimeoutMs = Math.max(5_000, docsCfg?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS);
 

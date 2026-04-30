@@ -13,9 +13,33 @@ export async function deleteChats(): Promise<void> {
             return;
         }
 
+        const items = filterGitKeep(savedChats);
         const chatToDelete = await ui.searchSelectAndReturnFromArray({
-            itemsArray: filterGitKeep(savedChats),
-            prompt: 'Select a chat to delete: '
+            itemsArray: items,
+            prompt: 'Select a chat to delete',
+            header: `${items.length} saved chat(s)`,
+            details: async (name) => {
+                try {
+                    const dataPath = `${aiHistoryPath}/${name}/${name}.json`;
+                    const data = JSON.parse(await fs.readFile(dataPath, 'utf-8')) as {
+                        provider?: string; model?: string; role?: string;
+                        temperature?: number; chatHistory?: unknown[]; summary?: string;
+                    };
+
+                    return [
+                        `chat: ${name}`,
+                        `provider: ${data.provider ?? '?'}`,
+                        `model: ${data.model ?? '?'}`,
+                        `role: ${data.role ?? '?'}`,
+                        `turns: ${data.chatHistory?.length ?? 0}`,
+                        '',
+                        '--- summary ---',
+                        (data.summary ?? '(no summary)').slice(0, 4000),
+                    ].join('\n');
+                } catch (e: unknown) {
+                    return `Failed to read chat: ${e instanceof Error ? e.message : String(e)}`;
+                }
+            },
         });
 
         await fs.rmdir(`${aiHistoryPath}/${chatToDelete}`, { recursive: true });

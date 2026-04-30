@@ -10,7 +10,19 @@ export async function executeScript(): Promise<void> {
 
     const scriptToRun = await ui.searchSelectAndReturnFromArray({
         itemsArray: availableScripts,
-        prompt: 'Choose a script from the list to run: '
+        prompt: 'Choose a script to run',
+        header: `${availableScripts.length} script(s) available`,
+        details: async (name) => {
+            try {
+                const buf = await fs.readFile(`${systemScriptsPath}/${name}`, 'utf-8');
+                const lines = buf.split('\n');
+                const head = lines.slice(0, 80).join('\n');
+
+                return `script: ${name}\nlines: ${lines.length}\n\n--- first 80 lines ---\n${head}`;
+            } catch (e: unknown) {
+                return `Failed to read script: ${e instanceof Error ? e.message : String(e)}`;
+            }
+        },
     })
 
     const scriptFilePath = `${systemScriptsPath}/${scriptToRun}`;

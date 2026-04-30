@@ -56,6 +56,7 @@ export function chunkMarkdown(markdown: string, opts: ChunkOptions = {}): Markdo
             });
         }
     }
+
     return out;
 }
 

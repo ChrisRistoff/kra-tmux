@@ -3,7 +3,7 @@ export const gitAscii = `
                                  .' ___  |             |_   _|          |  _   _  |
                                 / .'   \\_|               | |            |_/ | | \\_|
                                 | |    ____              | |                | |
-                                \\ '.___]  _|            _| |_              _| |_
+                                \\ '.___]  _|            _| |_              _| |_ 
                                  '._____.'             |_____|            |_____|
 
                                   _       _                       _   _
@@ -15,31 +15,33 @@ export const gitAscii = `
                                                    __/ |
                                                   |___/
 
-            +------------------------+------------------------------------------------------------------------------+
-            | Command                | Description                                                                  |
-            +------------------------+------------------------------------------------------------------------------+
-            | restore                | ♻️  Recover single or multiple files effortlessly                             |
-            |------------------------|------------------------------------------------------------------------------|
-            | cache-untracked        | 📦  Save untracked files in a branch-specific cache                          |
-            |------------------------|------------------------------------------------------------------------------|
-            | retrieve-untracked     | 🔄  Retrieve your previously cached untracked files                          |
-            |------------------------|------------------------------------------------------------------------------|
-            | hard-reset             | 🧹  Fetch and hard reset to sync your local branch                           |
-            |------------------------|------------------------------------------------------------------------------|
-            | log                    | 📜  View an interactive Git log with '{' and '}' navigation                  |
-            |------------------------|------------------------------------------------------------------------------|
-            | stash                  | 💼  Apply or drop stashes with an intuitive UI                               |
-            |------------------------|------------------------------------------------------------------------------|
-            | stash-drop-multiple    | 🗑️  Drop multiple stashes from a dynamic list                                |
-            |------------------------|------------------------------------------------------------------------------|
-            | conflict-handle        | ⚔️  Resolve merge conflicts with a three-way split in Neovim                  |
-            |------------------------|------------------------------------------------------------------------------|
-            | open-pr                | 🔗 Instantly open the associated pull request link in your browser.          |
-            |------------------------|------------------------------------------------------------------------------|
-            | view-changed           | 🔍  See file changes instantly and open them                                 |
-            |------------------------|------------------------------------------------------------------------------|
-            | create-branch          | 🌿  Checkout base branch, fetch/prune with hard reset, create & switch branch|
-            |------------------------|------------------------------------------------------------------------------|
-            | checkout               | ⏳  Prompt for days to filter branches, select from dynamic list & checkout  |
-            +------------------------+------------------------------------------------------------------------------+
-`
+            +------------------------+--------------------------------------------------------------------------------+
+            | Command                | Description                                                                    |
+            +------------------------+--------------------------------------------------------------------------------+
+            | restore                | ♻️  Restore tracked files after reviewing what changed.                         |
+            |------------------------|--------------------------------------------------------------------------------|
+            | cache-untracked        | 📦  Save an untracked file into the kra cache before switching or cleanup work. |
+            |------------------------|--------------------------------------------------------------------------------|
+            | retrieve-untracked     | 🔄  Restore a cached untracked file back into the working tree.                 |
+            |------------------------|--------------------------------------------------------------------------------|
+            | hard-reset             | 🧹  Discard tracked changes and return the repo to a clean checked-out state.   |
+            |------------------------|--------------------------------------------------------------------------------|
+            | log                    | 📜  Open the shared multi-pane commit history dashboard.                        |
+            |------------------------|--------------------------------------------------------------------------------|
+            | stash                  | 💼  Browse stashes and choose whether to apply or drop the selected entry.      |
+            |------------------------|--------------------------------------------------------------------------------|
+            | stash-drop-multiple    | 🗑️  Repeatedly drop stash entries from a live-updating cleanup list.            |
+            |------------------------|--------------------------------------------------------------------------------|
+            | conflict-handle        | ⚔️  Work through conflicted files and merge-marker cleanup.                     |
+            |------------------------|--------------------------------------------------------------------------------|
+            | open-pr                | 🔗  Open the current branch or PR target in the browser.                        |
+            |------------------------|--------------------------------------------------------------------------------|
+            | view-changed           | 🔍  Inspect changed files and diffs before committing or restoring.             |
+            |------------------------|--------------------------------------------------------------------------------|
+            | create-branch          | 🌿  Pick a base branch, then create the new branch from an interactive flow.    |
+            |------------------------|--------------------------------------------------------------------------------|
+            | checkout               | ⏳  Switch branches with recent activity and commit context beside the list.    |
+            +------------------------+--------------------------------------------------------------------------------+
+
+            Use: kra git <command>
+`;

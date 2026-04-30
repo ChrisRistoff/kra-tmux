@@ -97,7 +97,7 @@ describe('alias-scoped helpers', () => {
 
         const aws = knownPagesForAlias(state, 'aws');
         expect(Object.keys(aws).sort()).toEqual(['https://aws/a', 'https://aws/b']);
-        expect(aws['https://aws/a']?.pageHash).toBe('a');
+        expect(aws['https://aws/a'].pageHash).toBe('a');
         expect(aws['https://gcp/x']).toBeUndefined();
     });
 

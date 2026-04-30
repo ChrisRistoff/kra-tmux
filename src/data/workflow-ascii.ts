@@ -24,14 +24,16 @@ export const workflowAscii = `
                   +----------+------------------------------------------------------------------------------------------------------------------------------+
                   | Command  | Description                                                                                                                  |
                   +----------+------------------------------------------------------------------------------------------------------------------------------+
-                  | tmux     | 🧱  Tmux integration for saving, restoring, and managing full workspace servers with sessions, windows, and editor state.    |
+                  | tmux     | 🧱  Save, restore, inspect, and manage full tmux servers with sessions, panes, paths, and saved workspace layouts.            |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
-                  | git      | 🔧  Git integration for logging, stashing, resetting, and resolving conflicts.                                               |
+                  | git      | 🌿  Open shared git dashboards for log, checkout, stash, restore, conflict handling, branch creation, and remote links.      |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
-                  | ai       | 🤖  Built-in AI chatbot that runs in a Neovim buffer. Supports live prompts, summaries, and persistent chat history.         |
+                  | ai       | 🤖  Start AI chats and agent sessions, manage saved chats, inspect quota, and control code, memory, and docs indexing.      |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
-                  | sys      | 🛠️  System utilities like file search (grep), folder removal, and other quick project tools.                                 |
+                  | sys      | 🛠️  Run interactive file or directory cleanup flows and execute repo automation scripts.                                       |
                   |----------|------------------------------------------------------------------------------------------------------------------------------|
-                  | settings | ⚙️  Opens your configuration TOML file for customizing behavior.                                                             |
+                  | settings | ⚙️  Open the shared settings dashboard to browse sections, edit values, and preview generated TOML.                           |
                   +----------+------------------------------------------------------------------------------------------------------------------------------+
+
+                  Help: kra <group> -help    Groups: git | tmux | ai | sys | settings
 `;
