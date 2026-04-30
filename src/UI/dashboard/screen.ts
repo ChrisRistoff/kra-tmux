@@ -319,35 +319,43 @@ export async function pickFileModal(
 
         if (list) {
             attachWrappedListKeys(list, () => (filtered.length > 0 ? filtered.length : 1));
+            const submitListSelection = (): void => {
+                const idx = (list as unknown as { selected?: number }).selected ?? 0;
+                const v = filtered[idx];
+                if (!v || v === '<no matches>') return;
+                close({ file: v, fromVisited: false });
+            };
             list.key(['tab'], () => { if (visitedList) { visitedList.focus(); screen.render(); } });
             list.key(['escape'], () => close(null));
+            list.key(['enter'], () => submitListSelection());
             list.on('keypress', (ch: string, key: { name?: string; ctrl?: boolean; meta?: boolean } | undefined) => {
                 if (!key) return;
                 if (key.name === 'tab' || key.name === 'escape' || key.name === 'enter') return;
                 if (key.name === 'up' || key.name === 'down' || key.name === 'pageup' || key.name === 'pagedown') return;
                 if (key.name === 'j' || key.name === 'k' || key.name === 'g') return;
-                if (key.name === 'backspace') { applyFilter(filterText.slice(0, -1));
+                if (key.name === 'backspace') {
+                    applyFilter(filterText.slice(0, -1));
 
- return; }
+                    return;
+                }
                 if (ch && !key.ctrl && !key.meta && ch.length === 1 && ch >= ' ') {
                     applyFilter(filterText + ch);
                 }
             });
-            list.on('select', (_i, idx) => {
-                const v = filtered[idx];
-                if (!v || v === '<no matches>') return;
-                close({ file: v, fromVisited: false });
-            });
+            list.on('select', () => submitListSelection());
         }
 
         if (visitedList) {
             attachWrappedListKeys(visitedList, () => visited.length);
-            visitedList.key(['tab'], () => { if (list) { list.focus(); screen.render(); } else close(null); });
-            visitedList.key(['escape'], () => close(null));
-            visitedList.on('select', (_i, idx) => {
+            const submitVisitedSelection = (): void => {
+                const idx = (visitedList as unknown as { selected?: number }).selected ?? 0;
                 const v = visited[idx];
                 if (v) close({ file: v, fromVisited: true });
-            });
+            };
+            visitedList.key(['tab'], () => { if (list) { list.focus(); screen.render(); } else close(null); });
+            visitedList.key(['escape'], () => close(null));
+            visitedList.key(['enter'], () => submitVisitedSelection());
+            visitedList.on('select', () => submitVisitedSelection());
         }
 
         if (list) list.focus();
@@ -398,7 +406,7 @@ export async function browseFiles(
     if (opts.files.length === 0) return;
     const remaining = new Set(opts.files);
     const visited: string[] = [];
-    for (;;) {
+    for (; ;) {
         const items = [...remaining].sort();
         const r = await pickFileModal(screen, {
             title: `${opts.title} (${items.length} left, ${visited.length} viewed)`,
