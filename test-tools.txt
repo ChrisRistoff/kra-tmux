@@ -1,9 +1,0 @@
-This is a test file for tool testing. (third edit)
-This line was added in the second edit.
-some more lines (edited)
-
-even more lines
-
-very nice
-
-gg (third edit)
