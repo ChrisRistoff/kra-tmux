@@ -142,6 +142,7 @@ export function buildDocsSearchTool(sources: DocsSource[]) {
     const aliasLines = sources
         .map((s) => {
             const blurb = s.description?.trim() || s.url;
+
             return `  - ${s.alias} \u2014 ${blurb}`;
         })
         .join('\n');
@@ -183,7 +184,7 @@ export async function buildToolList(): Promise<Array<{ name: string }>> {
 
     try {
         const settings = await loadSettings();
-        const docsCfg = settings?.ai?.docs;
+        const docsCfg = settings.ai?.docs;
         const sources = docsCfg?.enabled ? (docsCfg.sources ?? []) : [];
         if (sources.length > 0) {
             tools.push(buildDocsSearchTool(sources));

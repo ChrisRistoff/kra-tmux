@@ -84,7 +84,18 @@ const selectFromMatchingFiles = async (): Promise<string | null> => {
 
     return await ui.searchSelectAndReturnFromArray({
         itemsArray: matchingFiles,
-        prompt: SYSTEM_CONSTANTS.MESSAGES.DIR_PROMPT
+        prompt: SYSTEM_CONSTANTS.MESSAGES.FILE_PROMPT,
+        header: `${matchingFiles.length} matching file(s)`,
+        details: async (file) => {
+            try {
+                const stat = await bash.execCommand(`ls -la ${JSON.stringify(file)}`);
+                const head = await bash.execCommand(`head -n 60 ${JSON.stringify(file)}`).catch(() => ({ stdout: '' }));
+
+                return `${stat.stdout}\n--- preview ---\n${head.stdout}`;
+            } catch (e: unknown) {
+                return `Failed to stat: ${e instanceof Error ? e.message : String(e)}`;
+            }
+        },
     });
 };
 
@@ -102,7 +113,18 @@ const selectFromMatchingDirectories = async (): Promise<string | null> => {
 
     return await ui.searchSelectAndReturnFromArray({
         itemsArray: matchingDirs,
-        prompt: SYSTEM_CONSTANTS.MESSAGES.DIR_PROMPT
+        prompt: SYSTEM_CONSTANTS.MESSAGES.DIR_PROMPT,
+        header: `${matchingDirs.length} matching directory(s)`,
+        details: async (dir) => {
+            try {
+                const ls = await bash.execCommand(`ls -la ${JSON.stringify(dir)}`);
+                const du = await bash.execCommand(`du -sh ${JSON.stringify(dir)} 2>/dev/null`).catch(() => ({ stdout: '' }));
+
+                return `${du.stdout}\n${ls.stdout}`;
+            } catch (e: unknown) {
+                return `Failed to stat: ${e instanceof Error ? e.message : String(e)}`;
+            }
+        },
     });
 };
 

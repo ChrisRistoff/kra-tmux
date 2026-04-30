@@ -7,6 +7,10 @@ export type GitCommands = {
 export type GitSearchOptions = {
     prompt: string;
     itemsArray: string[];
+    header?: string;
+    details?: (item: string, index: number) => string | Promise<string>;
+    selected?: string;
+    showDetailsPanel?: boolean;
 }
 
 export type PathInfoObject = {

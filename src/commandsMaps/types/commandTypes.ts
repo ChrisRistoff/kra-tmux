@@ -1,46 +1,48 @@
 export type Command = (args?: string[]) => Promise<void>;
 
-export type SystemCommandName = {
-    'grep-file-remove': Command,
-    'grep-dir-remove': Command,
-    'scripts': Command,
+export interface CommandDefinition {
+    run: Command;
+    description: string;
+    details?: string;
+    highlights?: readonly string[];
 }
 
-type TmuxCommandName = {
-    'save-server': Command,
-    'load-server': Command,
-    'list-sessions': Command,
-    'delete-server': Command,
-    'kill': Command,
-};
+export type CommandCatalog<T extends string> = Record<T, CommandDefinition>;
 
-export type GitCommandName = {
-    'restore': Command,
-    'cache-untracked': Command,
-    'retrieve-untracked': Command,
-    'hard-reset': Command,
-    'log': Command,
-    'stash': Command,
-    'stash-drop-multiple': Command,
-    'conflict-handle': Command,
-    'view-changed': Command,
-    'open-pr': Command,
-    'create-branch': Command,
-    'checkout': Command,
+export type SystemCommandName = 'grep-file-remove' | 'grep-dir-remove' | 'scripts';
+export type TmuxCommandName = 'save-server' | 'load-server' | 'list-sessions' | 'manage-server' | 'kill';
+export type GitCommandName =
+    | 'restore'
+    | 'cache-untracked'
+    | 'retrieve-untracked'
+    | 'hard-reset'
+    | 'log'
+    | 'stash'
+    | 'stash-drop-multiple'
+    | 'conflict-handle'
+    | 'view-changed'
+    | 'open-pr'
+    | 'create-branch'
+    | 'checkout';
+export type AiCommandName =
+    | 'chat'
+    | 'agent'
+    | 'load'
+    | 'delete'
+    | 'quota-agent'
+    | 'index'
+    | 'memory'
+    | 'docs';
+export type CommandType = 'sys' | 'tmux' | 'git' | 'ai' | 'settings';
+
+export type SystemCommands = CommandCatalog<SystemCommandName>;
+export type TmuxCommands = CommandCatalog<TmuxCommandName>;
+export type GitCommands = CommandCatalog<GitCommandName>;
+export type AiCommands = CommandCatalog<AiCommandName>;
+
+export interface MenuOption<T extends string> {
+    name: T;
+    description: string;
+    details?: string;
+    highlights?: readonly string[];
 }
-
-export type AiCommandName = {
-    'chat': Command,
-    'agent': Command,
-    'load': Command,
-    'delete': Command,
-    'quota-agent': Command,
-    'index': Command,
-    'memory': Command,
-    'docs': Command,
-}
-
-export type SystemCommands = Record<keyof SystemCommandName, Command>;
-export type TmuxCommands = Record<keyof TmuxCommandName, Command>;
-export type GitCommands = Record<keyof GitCommandName, Command>;
-export type AiCommands = Record<keyof AiCommandName, Command>;

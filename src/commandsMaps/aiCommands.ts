@@ -1,28 +1,85 @@
 import * as ai from "@/AI";
-import { aiAscii } from "@/AI/shared/data/ai-ascii";
-import { AiCommands } from "@/commandsMaps/types/commandTypes"
+import { AiCommands } from "@/commandsMaps/types/commandTypes";
 
-export const aiCommands : AiCommands = {
-    'chat': ai.startNewChat,
-    'agent': ai.startAgentChat,
-    'load': ai.loadChat,
-    'delete': ai.deleteChats,
-    'quota-agent': ai.showQuota,
-    'index': ai.indexCodebase,
-    'memory': ai.manageMemory,
-    'docs': ai.manageDocs,
+export const aiCommands: AiCommands = {
+    'chat': {
+        run: ai.startNewChat,
+        description: 'Start a fresh AI chat session',
+        details: 'Open the direct Neovim chat workflow for back-and-forth prompting with streaming responses, file context, and built-in web tools.',
+        highlights: [
+            'Real-time streaming chat inside Neovim.',
+            'Supports file context and visual selections as prompt context.',
+            'Includes built-in web search and fetch tooling during chat sessions.',
+        ],
+    },
+    'agent': {
+        run: ai.startAgentChat,
+        description: 'Launch an autonomous AI agent session',
+        details: 'Start the full agent workflow with provider selection, tool approvals, repo edits as uncommitted diffs, and interactive review in Neovim.',
+        highlights: [
+            'Supports Copilot and BYOK providers behind one command.',
+            'Includes diff review, apply or reject flow, and per-file revert history.',
+            'Can use project MCP servers and repo-aware tools while working.',
+        ],
+    },
+    'load': {
+        run: ai.loadChat,
+        description: 'Open a previously saved AI chat',
+        details: 'Browse saved chat sessions, inspect their metadata and summary, and reopen the selected conversation in the active chat workflow.',
+        highlights: [
+            'Shows saved conversation summaries before loading.',
+            'Useful for resuming long-running work without losing context.',
+            'Keeps saved-chat browsing inside the same shared picker patterns.',
+        ],
+    },
+    'delete': {
+        run: ai.deleteChats,
+        description: 'Delete saved AI chat sessions',
+        details: 'Review saved chat sessions and remove the ones you no longer need from disk.',
+        highlights: [
+            'Helps clean up saved AI history intentionally rather than by hand.',
+            'Uses the same saved-chat metadata used by the load flow.',
+            'Makes deletion explicit instead of hiding it in filesystem paths.',
+        ],
+    },
+    'quota-agent': {
+        run: ai.showQuota,
+        description: 'Inspect quota and usage for the AI layer',
+        details: 'Open the quota view to see how much AI usage budget remains before starting heavier chat or agent work.',
+        highlights: [
+            'Surfaces current usage information in one place.',
+            'Useful before longer agent sessions or expensive model choices.',
+            'Complements the runtime quota warnings with an explicit dashboard.',
+        ],
+    },
+    'index': {
+        run: ai.indexCodebase,
+        description: 'Index the repository for code-aware AI features',
+        details: 'Run the repo indexing flow that powers code-aware semantic search and other repo-context AI features.',
+        highlights: [
+            'Builds the local code index used by repo-aware AI lookups.',
+            'Useful when you want a fresh manual index outside auto or catch-up flows.',
+            'Works with the persistent memory and semantic-search tooling.',
+        ],
+    },
+    'memory': {
+        run: ai.manageMemory,
+        description: 'Open the AI memory management dashboard',
+        details: 'Shared dashboard for browsing findings and revisits, inspecting indexed repos, editing memory entries, and triggering repo re-indexing.',
+        highlights: [
+            'Manages both long-term memory entries and repo indexing state.',
+            'Includes the explicit repo re-index action the dashboard is meant to expose.',
+            'Acts as the main home for persistent AI memory maintenance.',
+        ],
+    },
+    'docs': {
+        run: ai.manageDocs,
+        description: 'Open the documentation indexing dashboard',
+        details: 'Manage external documentation crawling with setup, per-source or full re-indexing, live crawl progress, and coordinator controls.',
+        highlights: [
+            'Set up Crawl4AI and manage configured documentation sources.',
+            'Supports incremental crawls, full recrawls, and per-source actions.',
+            'Includes the shared live crawl progress dashboard and stop control.',
+        ],
+    },
 };
-
-export function handleAiCommandNotExist(commandName: string): void {
-    if (Object.keys(aiCommands).includes(commandName)) {
-        return;
-    }
-
-    console.log(aiAscii);
-
-    if (commandName) {
-        console.table({[`${commandName}`]: 'Is not a valid command'});
-    }
-
-    process.exit(1);
-}

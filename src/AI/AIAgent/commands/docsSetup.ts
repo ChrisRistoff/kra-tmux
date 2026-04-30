@@ -27,7 +27,7 @@ export type InstallCrawl4aiResult =
     | { kind: 'installed', venvDir: string }
     | { kind: 'error', message: string };
 
-function run(cmd: string, args: string[]): Promise<void> {
+async function run(cmd: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
         const child = spawn(cmd, args, { stdio: 'inherit', env: process.env });
         child.on('error', reject);
@@ -43,9 +43,11 @@ function findHostPython(): string | null {
     for (const candidate of candidates) {
         try {
             execSync(`${candidate} --version`, { stdio: 'ignore' });
+
             return candidate;
         } catch { /* try next */ }
     }
+
     return null;
 }
 

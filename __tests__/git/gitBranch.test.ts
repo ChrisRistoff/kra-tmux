@@ -1,16 +1,12 @@
 import * as bash from '@/utils/bashHelper';
-import * as neovim from '@/utils/neovimHelper';
 import { getCurrentBranch, getTopLevelPath, hardReset, getGitLog } from '@/git/core/gitBranch';
 import { GIT_COMMANDS } from '@/git/config/gitConstants';
 
 jest.mock('@/utils/bashHelper');
-jest.mock('@/utils/neovimHelper');
 
 describe('Git Branch Operations', () => {
     const originalTmux = process.env.TMUX;
     const mockExecCommand = jest.mocked(bash.execCommand);
-    const mockSendKeysToTmux = jest.mocked(bash.sendKeysToTmuxTargetSession);
-    const mockOpenVim = jest.mocked(neovim.openVim);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -60,7 +56,7 @@ describe('Git Branch Operations', () => {
 
     describe('hardReset', () => {
         it('should perform hard reset and show branch changes', async () => {
-            const consoleSpy = jest.spyOn(console, 'table').mockImplementation(() => {});
+            const consoleSpy = jest.spyOn(console, 'table').mockImplementation(() => undefined);
             mockExecCommand.mockResolvedValueOnce({ stdout: 'main\n', stderr: '' }) // getCurrentBranch
                 .mockResolvedValueOnce({ stdout: 'origin/branch1\n', stderr: '' }) // before fetch
                 .mockResolvedValueOnce({ stdout: '', stderr: '' }) // fetch
@@ -85,7 +81,7 @@ describe('Git Branch Operations', () => {
         });
 
         it('should handle errors during reset', async () => {
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
             mockExecCommand.mockRejectedValue(new Error('Network error'));
 
@@ -98,37 +94,13 @@ describe('Git Branch Operations', () => {
     });
 
     describe('getGitLog', () => {
-        it('should open git log in tmux when TMUX is set', async () => {
-            process.env.TMUX = '1';
-            mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
-
-            await getGitLog();
-
-            expect(mockExecCommand).toHaveBeenCalledWith(expect.stringContaining('git log --graph'));
-            expect(mockSendKeysToTmux).toHaveBeenCalledWith({
-                command: expect.stringContaining('nvim -c \'set filetype=git\'')
-            });
-            expect(mockOpenVim).not.toHaveBeenCalled();
-        });
-
-        it('should open git log with openVim when TMUX is not set', async () => {
-            delete process.env.TMUX;
-            mockExecCommand.mockResolvedValue({ stdout: '', stderr: '' });
-
-            await getGitLog();
-
-            expect(mockExecCommand).toHaveBeenCalledWith(expect.stringContaining('git log --graph'));
-            expect(mockOpenVim).toHaveBeenCalledWith('/tmp/git-log-XXXXXX.txt', '-c', 'set filetype=git');
-            expect(mockSendKeysToTmux).not.toHaveBeenCalled();
-        });
-
-        it('should handle errors when getting git log', async () => {
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        it('should delegate to gitLogDashboard and surface errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
             mockExecCommand.mockRejectedValue(new Error('Git log failed'));
 
             await getGitLog();
 
-            expect(consoleSpy).toHaveBeenCalledWith('Failed to run git log or open nvim:', expect.any(Error));
+            expect(consoleSpy).toHaveBeenCalledWith('Failed to render git log dashboard:', expect.any(Error));
 
             consoleSpy.mockRestore();
         });

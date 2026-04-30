@@ -15,7 +15,10 @@ jest.mock('@/utils/bashHelper');
 jest.mock('@/utils/neovimHelper');
 jest.mock('@/UI/generalUI');
 jest.mock('@/AI/AIChat/main/conversation');
-jest.mock('@/AI/AIChat/utils/aiUtils');
+jest.mock('@/AI/AIChat/utils/aiUtils', () => ({
+    formatChatEntry: jest.fn((_title: string, content: string) => content),
+    pickProviderAndModel: jest.fn(),
+}));
 jest.mock('@/utils/common', () => ({
     filterGitKeep: jest.fn((chats) => chats)
 }));
@@ -35,14 +38,18 @@ describe('loadChat', () => {
         temperature: 0.6,
         role: 'testRole',
         provider: 'gemini',
-        model: 'model1'
+        model: 'model1',
+        summary: 'Saved summary',
+        chatHistory: [],
     };
 
     const invalidChatData = {
         temperature: 0.6,
         role: 'testRole',
         provider: 'gemini',
-        model: 'invalidModel'
+        model: 'invalidModel',
+        summary: 'Saved summary',
+        chatHistory: [],
     };
 
     beforeAll(() => {
@@ -72,17 +79,24 @@ describe('loadChat', () => {
         consoleLogSpy.mockRestore();
     });
 
-    it('should load chat and call conversation.converse when provider is valid and TMUX is not set', async () => {
+    it('should load chat and call conversation.converse when provider is valid', async () => {
         (fs.readdir as jest.Mock).mockResolvedValue(fakeChats);
         (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue(savedChatName);
-        (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(true);
         (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify(validChatData));
         (fs.copyFile as jest.Mock).mockResolvedValue(undefined);
+        (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+        (fs.appendFile as jest.Mock).mockResolvedValue(undefined);
         (conversation.converse as jest.Mock).mockResolvedValue(undefined);
 
         await loadChat();
 
-        expect(nvim.openVim).toHaveBeenCalledWith(chatSummaryPath);
+        expect(ui.searchSelectAndReturnFromArray).toHaveBeenCalledWith(expect.objectContaining({
+            itemsArray: fakeChats,
+            prompt: 'Select a chat to load',
+            header: '1 saved chat(s)',
+            details: expect.any(Function),
+        }));
+        expect(fs.writeFile).toHaveBeenCalledWith(chatSummaryPath, 'Saved summary\n');
         expect(fs.copyFile).toHaveBeenCalledWith(chatHistoryPath, chatFile);
         expect(conversation.converse).toHaveBeenCalledWith(
             chatFile,
@@ -90,30 +104,31 @@ describe('loadChat', () => {
             validChatData.role,
             validChatData.provider,
             validChatData.model,
-            true
+            true,
         );
+        expect(nvim.openVim).not.toHaveBeenCalled();
     });
 
-    it('should call bash.execCommand with tmux command when TMUX is set', async () => {
+    it('should ignore TMUX and keep the same load flow', async () => {
         process.env.TMUX = '1';
         (fs.readdir as jest.Mock).mockResolvedValue(fakeChats);
         (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue(savedChatName);
-        (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(true);
         (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify(validChatData));
         (fs.copyFile as jest.Mock).mockResolvedValue(undefined);
+        (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+        (fs.appendFile as jest.Mock).mockResolvedValue(undefined);
         (conversation.converse as jest.Mock).mockResolvedValue(undefined);
 
         await loadChat();
 
-        expect(bash.execCommand).toHaveBeenCalled();
-        expect(nvim.openVim).not.toHaveBeenCalled();
+        expect(bash.execCommand).not.toHaveBeenCalled();
         expect(conversation.converse).toHaveBeenCalledWith(
             chatFile,
             validChatData.temperature,
             validChatData.role,
             validChatData.provider,
             validChatData.model,
-            true
+            true,
         );
     });
 
@@ -164,29 +179,25 @@ describe('loadChat', () => {
         );
     });
 
-    it('should recursively call loadChat if user declines to open the chat', async () => {
+    it('should open the selected chat without confirmation prompts', async () => {
         (fs.readdir as jest.Mock).mockResolvedValue(fakeChats);
         (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue(savedChatName);
-
-        const promptUserYesOrNoMock = ui.promptUserYesOrNo as jest.Mock;
-        promptUserYesOrNoMock
-            .mockResolvedValueOnce(false)
-            .mockResolvedValueOnce(true);
-
         (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify(validChatData));
         (fs.copyFile as jest.Mock).mockResolvedValue(undefined);
+        (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+        (fs.appendFile as jest.Mock).mockResolvedValue(undefined);
         (conversation.converse as jest.Mock).mockResolvedValue(undefined);
 
         await loadChat();
 
-        expect(promptUserYesOrNoMock).toHaveBeenCalledTimes(2);
+        expect(ui.promptUserYesOrNo).not.toHaveBeenCalled();
         expect(conversation.converse).toHaveBeenCalledWith(
             chatFile,
             validChatData.temperature,
             validChatData.role,
             validChatData.provider,
             validChatData.model,
-            true
+            true,
         );
     });
 

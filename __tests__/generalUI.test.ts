@@ -2,216 +2,154 @@ import {
     askUserForInput,
     promptUserYesOrNo,
     searchAndSelect,
-    searchSelectAndReturnFromArray
+    searchSelectAndReturnFromArray,
 } from '@/UI/generalUI';
 import { UserCancelled } from '@/UI/menuChain';
 
-// Mock blessed and figlet
-const mockWidgets: { [type: string]: any[] } = {
-    screen: [],
-    box: [],
-    list: [],
-    textbox: []
-};
-
-const createMockWidget = (type: string, options: any) => {
-    const handlers: { [key: string]: (...args: any[]) => void } = {};
-    let value = '';
-    let items: any[] = options?.items || [];
-    let selected = 0;
-
-    const widget: any = {
-        ...options,
-        on: jest.fn((event, handler) => {
-            handlers[event] = handler;
-        }),
-        key: jest.fn((key, handler) => {
-            if (Array.isArray(key)) {
-                key.forEach((k) => {
-                    handlers[`key ${k}`] = handler;
-                });
-            } else {
-                handlers[`key ${key}`] = handler;
-            }
-
-            return widget; // for chaining
-        }),
-        focus: jest.fn(),
-        append: jest.fn(),
-        render: jest.fn(),
-        destroy: jest.fn(),
-        getValue: jest.fn(() => value),
-        setValue: jest.fn((v) => {
-            value = v;
-        }),
-        getItem: jest.fn((idx) => ({
-            getText: () => items[idx],
-            content: items[idx]
-        })),
-        get selected() {
-            return selected;
-        },
-        set selected(v) {
-            selected = v;
-        },
-        up: jest.fn(),
-        down: jest.fn(),
-        fuzzyFind: jest.fn(),
-        clearItems: jest.fn(() => {
-            items = [];
-        }),
-        setItems: jest.fn((newItems) => {
-            items = newItems;
-        }),
-        _emit: (event: string, ...args: any[]) => {
-            if (handlers[event]) {
-                handlers[event](...args);
-            }
-        },
-        _handlers: handlers,
-        _items: () => items
-    };
-    mockWidgets[type].push(widget);
-
-    return widget;
-};
+const mockConfirmDashboard = jest.fn();
+const mockInputDashboard = jest.fn();
+const mockPickList = jest.fn();
 
 jest.mock('blessed', () => ({
-    screen: jest.fn((options) => createMockWidget('screen', options)),
-    box: jest.fn((options) => createMockWidget('box', options)),
-    list: jest.fn((options) => createMockWidget('list', options)),
-    textbox: jest.fn((options) => createMockWidget('textbox', options))
+    screen: jest.fn(),
+    box: jest.fn(),
+    list: jest.fn(),
+    textbox: jest.fn(),
 }));
 
 jest.mock('figlet', () => ({
-    textSync: jest.fn((text) => text)
+    textSync: jest.fn((text) => text),
+}));
+
+jest.mock('@/UI/dashboard/pickList', () => ({
+    confirmDashboard: (...args: unknown[]) => mockConfirmDashboard(...args),
+    inputDashboard: (...args: unknown[]) => mockInputDashboard(...args),
+    pickList: (...args: unknown[]) => mockPickList(...args),
 }));
 
 describe('generalUI', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockWidgets.screen = [];
-        mockWidgets.box = [];
-        mockWidgets.list = [];
-        mockWidgets.textbox = [];
     });
 
     describe('promptUserYesOrNo', () => {
-        it('should return true when user confirms with "y" key', async () => {
-            const promise = promptUserYesOrNo('Are you sure?');
-            mockWidgets.screen[0]._handlers['key y']();
-            await expect(promise).resolves.toBe(true);
+        it('delegates to confirmDashboard', async () => {
+            mockConfirmDashboard.mockResolvedValue(true);
+
+            await expect(promptUserYesOrNo('Are you sure?')).resolves.toBe(true);
+            expect(mockConfirmDashboard).toHaveBeenCalledWith({
+                title: 'Confirm',
+                prompt: 'Are you sure?',
+            });
         });
 
-        it('should return false when user declines with "n" key', async () => {
-            const promise = promptUserYesOrNo('Are you sure?');
-            mockWidgets.screen[0]._handlers['key n']();
-            await expect(promise).resolves.toBe(false);
-        });
+        it('returns false when the dashboard resolves false', async () => {
+            mockConfirmDashboard.mockResolvedValue(false);
 
-        it('should return true when user selects "Yes"', async () => {
-            const promise = promptUserYesOrNo('Are you sure?');
-            mockWidgets.list[0]._emit('select', {}, 0); // 0 is the index for 'Yes'
-            await expect(promise).resolves.toBe(true);
-        });
-
-        it('should return false when user selects "No"', async () => {
-            const promise = promptUserYesOrNo('Are you sure?');
-            mockWidgets.list[0]._emit('select', {}, 1); // 1 is the index for 'No'
-            await expect(promise).resolves.toBe(false);
-        });
-
-        it('should reject with UserCancelled on escape', async () => {
-            const promise = promptUserYesOrNo('Are you sure?');
-            mockWidgets.screen[0]._handlers['key escape']();
-            await expect(promise).rejects.toBeInstanceOf(UserCancelled);
+            await expect(promptUserYesOrNo('Nope?')).resolves.toBe(false);
         });
     });
 
     describe('askUserForInput', () => {
-        it('should return user input on enter', async () => {
-            const promise = askUserForInput('Enter value:');
-            const textbox = mockWidgets.textbox[0];
-            textbox.setValue('test input');
-            textbox._handlers['key enter']();
-            await expect(promise).resolves.toBe('test input');
+        it('delegates to inputDashboard and returns the entered value', async () => {
+            mockInputDashboard.mockResolvedValue('test input');
+
+            await expect(askUserForInput('Enter value:')).resolves.toBe('test input');
+            expect(mockInputDashboard).toHaveBeenCalledWith({
+                title: 'Input',
+                prompt: 'Enter value:',
+            });
         });
 
-        it('should reject with UserCancelled on escape', async () => {
-            const promise = askUserForInput('Enter value:');
-            mockWidgets.screen[0]._handlers['key escape']();
-            await expect(promise).rejects.toBeInstanceOf(UserCancelled);
+        it('rejects with UserCancelled when the dashboard returns null', async () => {
+            mockInputDashboard.mockResolvedValue(null);
+
+            await expect(askUserForInput('Enter value:')).rejects.toBeInstanceOf(UserCancelled);
+        });
+    });
+    describe('searchAndSelect', () => {
+        it('uses pickList as the shared UI source', async () => {
+            mockPickList.mockResolvedValue({ value: 'option2' });
+
+            await expect(searchAndSelect({
+                itemsArray: ['option1', 'option2', 'option2'],
+                prompt: 'Select option:',
+            })).resolves.toBe('option2');
+
+            expect(mockPickList).toHaveBeenCalledWith(expect.objectContaining({
+                title: 'Select option:',
+                header: 'Select option:',
+                items: ['option1', 'option2'],
+                submitSearchQuery: true,
+            }));
+        });
+
+        it('can return the typed search query after confirmation', async () => {
+            mockPickList.mockResolvedValue({ value: 'option1', action: 'search-submit', query: 'typed' });
+            mockConfirmDashboard.mockResolvedValue(true);
+
+            await expect(searchAndSelect({
+                itemsArray: ['option1', 'option2'],
+                prompt: 'Select option:',
+            })).resolves.toBe('typed');
+
+            expect(mockConfirmDashboard).toHaveBeenCalledWith({
+                title: 'Confirm',
+                prompt: 'Use typed value "typed" instead of selected "option1"?',
+            });
         });
     });
 
     describe('searchSelectAndReturnFromArray', () => {
-        const options = {
-            itemsArray: ['option1', 'option2', 'option3'],
-            prompt: 'Select option:'
-        };
+        it('maps required options to pickList and returns the selected value', async () => {
+            mockPickList.mockResolvedValue({ value: 'option2' });
 
-        it('should return selected option on enter', async () => {
-            const promise = searchSelectAndReturnFromArray(options);
-            const searchBox = mockWidgets.textbox[0];
-            const list = mockWidgets.list[0];
-            list.selected = 1; // user navigates to 'option2'
-            searchBox._handlers['key enter']();
-            await expect(promise).resolves.toBe('option2');
+            await expect(searchSelectAndReturnFromArray({
+                itemsArray: ['option1', 'option2', 'option3'],
+                prompt: 'Select option:',
+            })).resolves.toBe('option2');
+
+            const pickerArgs = mockPickList.mock.calls[0]?.[0];
+            expect(pickerArgs).toEqual(expect.objectContaining({
+                title: 'Select option:',
+                header: 'Select option:',
+                items: ['option1', 'option2', 'option3'],
+                detailsUseTags: true,
+                details: expect.any(Function),
+            }));
+            expect(pickerArgs.details('option2', 1)).toContain('{cyan-fg}selected{/cyan-fg}');
         });
+        it('forwards optional picker settings', async () => {
+            const details = jest.fn(async () => 'details');
+            mockPickList.mockResolvedValue({ value: 'option1' });
 
-        it('should filter options based on search input', async () => {
-            const promise = searchSelectAndReturnFromArray({
-                itemsArray: ['test1', 'test2', 'other'],
-                prompt: 'Select:'
+            await expect(searchSelectAndReturnFromArray({
+                itemsArray: ['option1', 'option2'],
+                prompt: 'Select option:',
+                header: 'Custom header',
+                details,
+                selected: 'option2',
+                showDetailsPanel: false,
+                pageSize: 25,
+            })).resolves.toBe('option1');
+
+            expect(mockPickList).toHaveBeenCalledWith({
+                title: 'Select option:',
+                header: 'Custom header',
+                items: ['option1', 'option2'],
+                details,
+                selected: 'option2',
+                showDetailsPanel: false,
+                pageSize: 25,
             });
-            const searchBox = mockWidgets.textbox[0];
-            const list = mockWidgets.list[0];
-
-            // Simulate typing 'test'
-            searchBox._emit('keypress', 't', { name: 't', ctrl: false, meta: false });
-            searchBox._emit('keypress', 'e', { name: 'e', ctrl: false, meta: false });
-            searchBox._emit('keypress', 's', { name: 's', ctrl: false, meta: false });
-            searchBox._emit('keypress', 't', { name: 't', ctrl: false, meta: false });
-
-            expect(list.setItems).toHaveBeenLastCalledWith(['test1', 'test2']);
-
-            // To resolve promise
-            searchBox._handlers['key enter']();
-            await promise;
         });
-    });
+        it('rejects with UserCancelled when the picker is cancelled', async () => {
+            mockPickList.mockResolvedValue({ value: null });
 
-    describe('searchAndSelect', () => {
-        const options = {
-            itemsArray: ['item1', 'item2'],
-            prompt: 'Select:'
-        };
-
-        it('should return selected item on enter', async () => {
-            const mockSearchAndSelect = jest.fn().mockResolvedValue('item1');
-            const originalSearchAndSelect = searchAndSelect;
-            (searchAndSelect as any) = mockSearchAndSelect;
-
-            const promise = searchAndSelect(options);
-
-            await expect(promise).resolves.toBe('item1');
-
-            (searchAndSelect as any) = originalSearchAndSelect;
-        });
-
-        it('should filter items when user types', async () => {
-            const mockSearchAndSelect = jest.fn().mockResolvedValue('existing1');
-            const originalSearchAndSelect = searchAndSelect;
-            (searchAndSelect as any) = mockSearchAndSelect;
-
-            const promise = searchAndSelect({
-                itemsArray: ['existing1', 'existing2', 'another'],
-                prompt: 'Select:'
-            });
-
-            await expect(promise).resolves.toBe('existing1');
-
-            (searchAndSelect as any) = originalSearchAndSelect;
+            await expect(searchSelectAndReturnFromArray({
+                itemsArray: ['option1'],
+                prompt: 'Select option:',
+            })).rejects.toBeInstanceOf(UserCancelled);
         });
     });
 });

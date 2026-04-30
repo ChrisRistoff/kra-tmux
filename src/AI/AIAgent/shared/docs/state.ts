@@ -34,9 +34,11 @@ export function loadDocsState(): DocsStateFile {
         if (!parsed || typeof parsed !== 'object' || parsed.version !== STATE_VERSION || !parsed.pages) {
             return { version: STATE_VERSION, pages: {} };
         }
+
         return parsed;
     } catch (err) {
         console.error('docs-state: failed to load, starting fresh:', err);
+
         return { version: STATE_VERSION, pages: {} };
     }
 }
@@ -66,6 +68,7 @@ export function knownPagesForAlias(state: DocsStateFile, alias: string): Record<
             out[k.slice(prefix.length)] = v;
         }
     }
+
     return out;
 }
 

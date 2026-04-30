@@ -1,6 +1,6 @@
-import { runDynamicSettings } from '@/UI/dynamicSettings/render';
+import { dynamicSettingsDashboard } from '@/UI/dynamicSettings/dashboard';
 
 export async function handleChangeSettings(): Promise<void> {
-    await runDynamicSettings();
+    await dynamicSettingsDashboard();
 }
 

@@ -34,7 +34,6 @@ export default [
                 allowDirectConstAssertionInArrowFunctions: true,
             }],
 
-            '@typescript-eslint/no-misused-promises': 'error',
             '@typescript-eslint/promise-function-async': 'warn',
 
             // Spacing and formatting

@@ -41,10 +41,12 @@ describe('deleteChats', () => {
 
         await deleteChats();
 
-        expect(ui.searchSelectAndReturnFromArray).toHaveBeenCalledWith({
+        expect(ui.searchSelectAndReturnFromArray).toHaveBeenCalledWith(expect.objectContaining({
             itemsArray: ['chat1'],
-            prompt: 'Select a chat to delete: '
-        });
+            prompt: 'Select a chat to delete',
+            header: '1 saved chat(s)',
+            details: expect.any(Function),
+        }));
         expect(fs.rmdir).toHaveBeenCalledWith(`${aiHistoryPath}/chat1`, { recursive: true });
         expect(consoleLogSpy).toHaveBeenCalledWith('Chat chat1 has been deleted.');
 

@@ -11,8 +11,6 @@ import {
     formatUserHeader,
 } from '@/AI/shared/utils/conversationUtils/chatHeaders';
 import * as ui from '@/UI/generalUI';
-import * as nvim from '@/utils/neovimHelper';
-import * as bash from '@/utils/bashHelper';
 import { filterGitKeep } from '@/utils/common';
 import { aiHistoryPath } from '@/filePaths';
 import { getFileExtension } from '@/AI/shared/conversation';
@@ -26,31 +24,46 @@ export async function loadChat(): Promise<void> {
 
             return;
         }
-
         const selectedChat = await ui.searchSelectAndReturnFromArray({
             itemsArray: filterGitKeep(savedChats),
-            prompt: 'Select a chat to load: '
+            prompt: 'Select a chat to load',
+            header: `${filterGitKeep(savedChats).length} saved chat(s)`,
+            details: async (name) => {
+                try {
+                    const dataPath = path.join(aiHistoryPath, name, `${name}.json`);
+                    const data: ChatData = JSON.parse(await fs.readFile(dataPath, 'utf-8'));
+                    const turns = data.chatHistory?.length ?? 0;
+                    const lines: string[] = [
+                        `chat: ${name}`,
+                        `provider: ${data.provider ?? '?'}`,
+                        `model: ${data.model ?? '?'}`,
+                        `role: ${data.role ?? '?'}`,
+                        `temperature: ${data.temperature ?? '?'}`,
+                        `turns: ${turns}`,
+                        '',
+                        '--- summary ---',
+                        (data.summary ?? '(no summary)').slice(0, 4000),
+                    ];
+
+                    return lines.join('\n');
+                } catch (e: unknown) {
+                    return `Failed to read chat: ${e instanceof Error ? e.message : String(e)}`;
+                }
+            },
         });
 
         const timestamp = Date.now();
         const chatFile = `/tmp/ai-chat-${timestamp}.md`;
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
         const chatData: ChatData = JSON.parse(await fs.readFile(chatDataPath, 'utf-8'));
+        const chatHistory = chatData.chatHistory ?? [];
         const chatSummaryPath = path.join(aiHistoryPath, selectedChat, 'summary.md');
 
-        await fs.writeFile(chatSummaryPath, formatChatEntry('Chat Summary', chatData.summary! + '\n', true));
+        await fs.writeFile(chatSummaryPath, formatChatEntry('Chat Summary', `${chatData.summary ?? ''}\n`, true));
 
-        const shouldLoadTheChat = await openSummaryAndPromptUserYesOrNo(chatSummaryPath);
-
-        if (!shouldLoadTheChat) {
-            return await loadChat();
-        }
-
-        let chatTranscript;
-
-        if (chatData.chatHistory && chatData.chatHistory.length) {
-
-            chatTranscript = formatFullChat(chatData);
+        let chatTranscript: string | undefined;
+        if (chatHistory.length > 0) {
+            chatTranscript = formatFullChat({ ...chatData, chatHistory });
         }
 
         if (chatTranscript) {
@@ -111,21 +124,6 @@ async function checkProviderAndModelValid(provider: string, model: string): Prom
 
     return models.some((m) => m.id === model);
 }
-
-async function openSummaryAndPromptUserYesOrNo(chatSummaryPath: string): Promise<boolean> {
-    if (process.env.TMUX) {
-        const tmuxCommand = `tmux split-window -v -p 90 -c "#{pane_current_path}" \; \
-            tmux send-keys -t :. 'sh -c "trap \\"exit 0\\" TERM; nvim  \\"${chatSummaryPath}\\";
-            tmux send-keys exit C-m"' C-m`
-
-        bash.execCommand(tmuxCommand);
-    } else {
-        nvim.openVim(chatSummaryPath);
-    }
-
-    return await ui.promptUserYesOrNo('Do you want to open this chat?');
-}
-
 async function restoreFileContexts(chatFile: string, savedContexts: SavedFileContext[]): Promise<void> {
     for (const context of savedContexts) {
         try {

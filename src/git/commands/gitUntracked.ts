@@ -36,8 +36,22 @@ export async function loadUntracked(): Promise<void> {
     savedUntrackedFiles.unshift(allFiles);
 
     const fileToLoadName = await ui.searchSelectAndReturnFromArray({
-        prompt: "Pick a file to retrieve from stored untracked files: ",
+        prompt: 'Pick a stored untracked file to retrieve',
         itemsArray: savedUntrackedFiles,
+        header: `branch: ${gitBranchName} · ${savedUntrackedFiles.length - 1} stored file(s)`,
+        details: async (item) => {
+            if (item === allFiles) return 'Restore EVERY stored untracked file for this branch.';
+            try {
+                const filePath = path.join(branchPath, item);
+                const stat = fs.statSync(filePath);
+                const sizeKb = (stat.size / 1024).toFixed(1);
+                const head = fs.readFileSync(filePath, 'utf-8').split('\n').slice(0, 80).join('\n');
+
+                return `file: ${item}\nsize: ${sizeKb} KB\nmtime: ${stat.mtime.toISOString()}\n\n--- preview ---\n${head}`;
+            } catch (e: unknown) {
+                return `Failed to read file: ${e instanceof Error ? e.message : String(e)}`;
+            }
+        },
     });
 
     if (fileToLoadName === allFiles) {
@@ -54,10 +68,24 @@ async function getFileToMoveFromUser(): Promise<string | string[]> {
     const itemsArray = [allFiles, ...await getUntrackedFiles()];
 
     const fileToSave = await ui.searchSelectAndReturnFromArray({
-        prompt: "Pick a file to save and remove from project: ",
+        prompt: 'Pick a file to save and remove from project',
         itemsArray,
-    });
+        header: `${itemsArray.length - 1} untracked file(s)`,
+        details: async (item) => {
+            if (item === allFiles) return 'Save EVERY untracked file under the current branch.';
+            try {
+                const top = await getTopLevelPath();
+                const filePath = path.join(top, item);
+                const stat = fs.statSync(filePath);
+                const sizeKb = (stat.size / 1024).toFixed(1);
+                const head = fs.readFileSync(filePath, 'utf-8').split('\n').slice(0, 80).join('\n');
 
+                return `file: ${item}\nsize: ${sizeKb} KB\n\n--- preview ---\n${head}`;
+            } catch (e: unknown) {
+                return `Failed to read file: ${e instanceof Error ? e.message : String(e)}`;
+            }
+        },
+    });
     if (fileToSave === allFiles) {
         itemsArray.shift();
 
