@@ -1,5 +1,6 @@
 import * as systemFileManager from "@/system/commands/systemFileManager";
 import * as scripts from "@/system/commands/scripts/executeScripts";
+import * as systemProcessManager from "@/system/commands/systemProcessManager";
 import { SystemCommands } from "@/commandsMaps/types/commandTypes";
 
 export const systemCommands: SystemCommands = {
@@ -31,6 +32,16 @@ export const systemCommands: SystemCommands = {
             'Central entry point for repo-specific automation helpers.',
             'Lets you browse available scripts before running them.',
             'Keeps script execution grouped with the other system utilities.',
+        ],
+    },
+    'process-manager': {
+        run: systemProcessManager.openProcessManager,
+        description: 'Browse and kill OS processes interactively',
+        details: 'Open a multi-pane TUI dashboard showing all running processes with stats. Search by PID, user, or command name. Send SIGTERM or SIGKILL to selected processes with confirmation.',
+        highlights: [
+            'Interactive process inspection with full details on demand.',
+            'Kill processes safely with y/n confirmation prompts.',
+            'Refresh the process list with r without losing your current selection.',
         ],
     },
 };
