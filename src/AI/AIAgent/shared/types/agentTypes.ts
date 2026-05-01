@@ -107,11 +107,38 @@ export interface AgentSessionOptions {
     mcpServers: Record<string, MCPServerConfig>;
     additionalMcpServers?: Record<string, MCPServerConfig>;
     excludedTools?: string[];
+    /**
+     * In-process tools registered alongside MCP tools. Useful for sub-agent
+     * dispatch tools (e.g. `investigate`) where the handler must run in the
+     * same Node process as the orchestrator session. They flow through the
+     * normal pre/post-tool hooks just like MCP tools.
+     */
+    localTools?: LocalTool[];
     systemMessage?: { mode?: 'append' | 'replace'; content: string };
     contextWindow?: number;
     onPreToolUse: (input: AgentPreToolUseHookInput) => Promise<AgentPreToolUseHookOutput>;
     onPostToolUse: (input: AgentPostToolUseHookInput) => Promise<AgentPostToolUseHookOutput | void>;
     onUserInputRequest?: (request: AgentUserInputRequest) => Promise<AgentUserInputResponse>;
+    /**
+     * When true, this session is being used by a sub-agent (executor /
+     * investigator) rather than the user-facing orchestrator. Provider
+     * wrappers can use this to skip orchestrator-only knobs (e.g. skill
+     * directories, turn-completion reminders, large context-management
+     * thresholds).
+     */
+    isSubAgent?: boolean;
+}
+
+export interface LocalTool {
+    /** Tool name as exposed to the model. Must not collide with any MCP tool name. */
+    name: string;
+    description: string;
+    /** JSON Schema describing the tool's arguments (OpenAI function `parameters`). */
+    parameters: Record<string, unknown>;
+    /** Optional pseudo-server label used for telemetry / UI grouping. */
+    serverLabel?: string;
+    /** Handler invoked with the (possibly preToolUse-modified) arguments. Must return a string for the LLM. */
+    handler: (args: Record<string, unknown>) => Promise<string>;
 }
 
 // ─── Conversation-level types ────────────────────────────────────────────────
@@ -121,6 +148,8 @@ export interface AgentConversationOptions {
     model: string;
     additionalMcpServers?: Record<string, MCPServerConfig>;
     contextWindow?: number;
+    executor?: import('@/AI/AIAgent/shared/subAgents/types').ExecutorRuntime;
+    investigator?: import('@/AI/AIAgent/shared/subAgents/types').InvestigatorRuntime;
 }
 
 export interface AgentUserInputResponse {
@@ -140,6 +169,12 @@ export interface AgentConversationState {
     isStreaming: boolean;
     approvalMode: 'strict' | 'yolo';
     allowedToolFamilies: Set<string>;
+    /**
+     * The currently-running sub-agent session (investigator/executor), if any.
+     * Tracked so that the user's `stop_stream` action can also abort sub-agents,
+     * not just the orchestrator session.
+     */
+    activeSubAgentSession?: AgentSession | undefined;
 }
 
 export interface ToolApprovalResult {
@@ -152,6 +187,14 @@ export interface ToolApprovalResult {
 export interface AgentPreToolUseHookInput {
     toolName: string;
     toolArgs: unknown;
+    /**
+     * Optional label identifying which agent issued this tool call. When set,
+     * the approval modal and chat output prefix the entry with `[<agentLabel>]`
+     * so users can tell orchestrator vs sub-agent (e.g. INVESTIGATOR) tool calls
+     * apart. Bulk-approve memory is keyed on tool name only, so allowances are
+     * shared across agents.
+     */
+    agentLabel?: string;
 }
 
 export interface ToolWritePreview {
@@ -176,6 +219,8 @@ export interface AgentPreToolUseHookOutput {
 export interface AgentPostToolUseHookInput {
     toolName: string;
     toolResult: { textResultForLlm: string;[key: string]: unknown };
+    /** See AgentPreToolUseHookInput.agentLabel. */
+    agentLabel?: string;
 }
 
 export interface AgentPostToolUseHookOutput {

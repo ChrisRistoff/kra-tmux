@@ -8,6 +8,8 @@
  * and BYOK (out-of-process MCP) share the same code.
  */
 
+import 'module-alias/register';
+
 import { JsonRpcToolError, runStdioMcpServer } from '../../mcp/stdioServer';
 import {
     runWebFetch,

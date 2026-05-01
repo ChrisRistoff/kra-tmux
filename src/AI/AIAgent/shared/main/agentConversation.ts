@@ -10,7 +10,9 @@ import type {
     AgentPreToolUseHookOutput,
     AgentPostToolUseHookInput,
     AgentPostToolUseHookOutput,
+    LocalTool,
 } from '@/AI/AIAgent/shared/types/agentTypes';
+import { createInvestigateTool } from '@/AI/AIAgent/shared/subAgents/investigateTool';
 
 import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { runStartupIndexingFlow } from '@/AI/AIAgent/shared/main/agentIndexingFlow';
@@ -61,66 +63,91 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         ...mcpServers,
         ...(options.additionalMcpServers ?? {}),
     };
+    const orchestratorOnPreToolUse = async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
+        if (!stateRef.current) {
+            return {
+                permissionDecision: 'deny',
+                permissionDecisionReason: 'Agent UI is not ready yet.',
+            };
+        }
+
+        try {
+            return await handlePreToolUse(stateRef.current, input);
+        } catch (error) {
+            await updateAgentUi(stateRef.current.nvim, 'show_error', [
+                `Pre-tool approval failed: ${input.toolName}`,
+                getErrorMessage(error),
+            ]);
+
+            return {
+                permissionDecision: 'deny',
+                permissionDecisionReason: `Pre-tool approval failed: ${getErrorMessage(error)}`,
+            };
+        }
+    };
+
+    const orchestratorOnPostToolUse = async (input: AgentPostToolUseHookInput): Promise<AgentPostToolUseHookOutput> => {
+        const isBashLike = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
+            (fragment) => input.toolName.toLowerCase().includes(fragment)
+        );
+
+        if (isBashLike && stateRef.current?.pendingBashSnapshot) {
+            const snapshot = stateRef.current.pendingBashSnapshot;
+
+            delete (stateRef.current as Partial<AgentConversationState>).pendingBashSnapshot;
+            await stateRef.current.history.bashSnapshotAfter(snapshot).catch(() => { /* non-fatal */ });
+        }
+
+        const HEAD_CHARS = isBashLike ? 2000 : 4000;
+        const TAIL_CHARS = isBashLike ? 6000 : 4000;
+        const text = input.toolResult.textResultForLlm;
+        if (text.length <= HEAD_CHARS + TAIL_CHARS) return {};
+        const omitted = text.length - HEAD_CHARS - TAIL_CHARS;
+
+        return {
+            modifiedResult: {
+                ...input.toolResult,
+                textResultForLlm: [
+                    text.slice(0, HEAD_CHARS),
+                    `\n…[${omitted} chars omitted]…\n`,
+                    text.slice(text.length - TAIL_CHARS),
+                ].join(''),
+            },
+        };
+    };
+
+    const orchestratorLocalTools: LocalTool[] = [];
+
+    if (options.investigator) {
+        orchestratorLocalTools.push(createInvestigateTool({
+            runtime: options.investigator,
+            mcpServers: mergedMcpServers,
+            workingDirectory: cwd,
+            chatBridge: {
+                getParentState: () => {
+                    if (!stateRef.current) {
+                        throw new Error('Investigator invoked before orchestrator state was ready');
+                    }
+
+                    return stateRef.current;
+                },
+                agentLabel: 'INVESTIGATOR',
+                headerEmoji: '🔍',
+                parentOnPreToolUse: orchestratorOnPreToolUse,
+                parentOnPostToolUse: orchestratorOnPostToolUse,
+            },
+        }));
+    }
+
     const session = await options.client.createSession({
         model: options.model,
         workingDirectory: cwd,
         mcpServers: mergedMcpServers,
         excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch'],
+        ...(orchestratorLocalTools.length > 0 ? { localTools: orchestratorLocalTools } : {}),
         ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
-        onPreToolUse: async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
-            if (!stateRef.current) {
-                return {
-                    permissionDecision: 'deny',
-                    permissionDecisionReason: 'Agent UI is not ready yet.',
-                };
-            }
-
-            try {
-                return await handlePreToolUse(stateRef.current, input);
-            } catch (error) {
-                await updateAgentUi(stateRef.current.nvim, 'show_error', [
-                    `Pre-tool approval failed: ${input.toolName}`,
-                    getErrorMessage(error),
-                ]);
-
-                return {
-                    permissionDecision: 'deny',
-                    permissionDecisionReason: `Pre-tool approval failed: ${getErrorMessage(error)}`,
-                };
-            }
-        },
-        onPostToolUse: async (input: AgentPostToolUseHookInput): Promise<AgentPostToolUseHookOutput> => {
-            // Bash/shell output: errors and summaries land at the tail, so bias
-            // toward keeping more of the end.  All other tools use a 50/50 split.
-            const isBashLike = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
-                (fragment) => input.toolName.toLowerCase().includes(fragment)
-            );
-
-            // Run bash post-snapshot if pre-snapshot was taken.
-            if (isBashLike && stateRef.current?.pendingBashSnapshot) {
-                const snapshot = stateRef.current.pendingBashSnapshot;
-
-                delete (stateRef.current as Partial<AgentConversationState>).pendingBashSnapshot;
-                await stateRef.current.history.bashSnapshotAfter(snapshot).catch(() => { /* non-fatal */ });
-            }
-
-            const HEAD_CHARS = isBashLike ? 2000 : 4000;
-            const TAIL_CHARS = isBashLike ? 6000 : 4000;
-            const text = input.toolResult.textResultForLlm;
-            if (text.length <= HEAD_CHARS + TAIL_CHARS) return {};
-            const omitted = text.length - HEAD_CHARS - TAIL_CHARS;
-
-            return {
-                modifiedResult: {
-                    ...input.toolResult,
-                    textResultForLlm: [
-                        text.slice(0, HEAD_CHARS),
-                        `\n…[${omitted} chars omitted]…\n`,
-                        text.slice(text.length - TAIL_CHARS),
-                    ].join(''),
-                },
-            };
-        },
+        onPreToolUse: orchestratorOnPreToolUse,
+        onPostToolUse: orchestratorOnPostToolUse,
 
         onUserInputRequest: async (request) => handleAgentUserInput(
             nvimClient,

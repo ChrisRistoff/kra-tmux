@@ -53,18 +53,23 @@ export class CopilotClientWrapper implements AgentClient {
     }
 
     public async createSession(options: AgentSessionOptions): Promise<AgentSession> {
+        const isSubAgent = options.isSubAgent === true;
         const skillsDir = path.join(__dirname, '..', '..', '..', '..', 'skills');
+
+        const onPermissionRequest = () => ({ kind: 'approved' as const });
+
         const sdkSession = await this.inner.createSession({
             clientName: 'copilot-cli',
             model: options.model,
             ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
             workingDirectory: options.workingDirectory,
             streaming: true,
-            enableConfigDiscovery: true,
-            skillDirectories: [skillsDir],
+            enableConfigDiscovery: !isSubAgent,
+            ...(isSubAgent ? {} : { skillDirectories: [skillsDir] }),
             mcpServers: options.mcpServers,
             ...(options.excludedTools ? { excludedTools: options.excludedTools } : {}),
-            onPermissionRequest: () => ({ kind: 'approved' }),
+            ...(options.localTools && options.localTools.length > 0 ? { tools: options.localTools } : {}),
+            onPermissionRequest,
             infiniteSessions: {
                 enabled: true,
                 backgroundCompactionThreshold: 0.70,
@@ -73,8 +78,10 @@ export class CopilotClientWrapper implements AgentClient {
             hooks: {
                 onPreToolUse: options.onPreToolUse,
                 onPostToolUse: options.onPostToolUse,
-                onUserPromptSubmitted: async () => ({
-                    additionalContext: TURN_REMINDER,
+                ...(isSubAgent ? {} : {
+                    onUserPromptSubmitted: async () => ({
+                        additionalContext: TURN_REMINDER,
+                    }),
                 }),
             },
             ...(options.onUserInputRequest ? { onUserInputRequest: options.onUserInputRequest } : {}),

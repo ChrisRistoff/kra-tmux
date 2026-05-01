@@ -19,6 +19,16 @@ import * as fs from 'fs/promises';
 export const USER_DRAFT_HEADER = '## 👤 USER PROMPT (draft)';
 export const USER_HEADER_PREFIX = '## 👤 USER PROMPT · ';
 export const ASSISTANT_HEADER_PREFIX = '## 🤖 ASSISTANT · ';
+export const SUB_AGENT_HEADER_PREFIX = '## ';
+
+export function formatSubAgentHeader(
+    emoji: string,
+    label: string,
+    model: string,
+    timestamp: string = new Date().toISOString()
+): string {
+    return `\n\n---\n## ${emoji} ${label.toUpperCase()} · ${model} · ${timestamp}\n\n`;
+}
 
 export function formatUserDraftHeader(): string {
     return `\n\n---\n${USER_DRAFT_HEADER}\n\n`;

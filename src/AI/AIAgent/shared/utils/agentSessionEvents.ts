@@ -15,7 +15,7 @@ import {
 } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import * as bash from '@/utils/bashHelper';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
-import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
+import type { AgentConversationState, AgentSession } from '@/AI/AIAgent/shared/types/agentTypes';
 import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';
 
 function quote(value: string): string {
@@ -181,8 +181,26 @@ export async function rejectCurrentProposal(state: AgentConversationState): Prom
     await state.nvim.command('echohl WarningMsg | echo "Rejected current proposal changes" | echohl None');
 }
 
-export async function setupSessionEventHandlers(state: AgentConversationState): Promise<void> {
+export interface SessionEventHandlerOptions {
+    /**
+     * Optional label identifying which agent owns this session. When set,
+     * chat writes and the nvim modal entries are tagged with `[<agentLabel>]`,
+     * and the idle handler skips the "ready for next prompt" routine (the
+     * sub-agent's caller writes its own footer and returns control to the
+     * orchestrator).
+     */
+    agentLabel?: string;
+}
+
+export async function setupSessionEventHandlers(
+    state: AgentConversationState,
+    session: AgentSession = state.session,
+    opts: SessionEventHandlerOptions = {}
+): Promise<void> {
     const FLUSH_INTERVAL_MS = 50;
+    const agentLabel = opts.agentLabel;
+    const labelTag = agentLabel ? `[${agentLabel}] ` : '';
+    const isSubAgent = agentLabel !== undefined;
 
     let pendingBuffer = '';
     let activeToolCount = 0;
@@ -193,8 +211,6 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     const toolLabels = new Map<string, string>();
     const toolStartLabels = new Map<string, string>();
 
-    // Serialised write chain — all disk writes queue here so order is guaranteed
-    // and concurrent writes cannot corrupt the file.
     let writeChain = Promise.resolve();
 
     const enqueue = (fn: () => Promise<void>): void => {
@@ -204,7 +220,6 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     const nvimRefresh = async (): Promise<void> =>
         refreshAgentLayout(state.nvim).catch(() => { /* neovim busy — skip */ });
 
-    // Write text to the chat file and refresh neovim (through the queue).
     const write = (content: string, refresh = true): void => {
         enqueue(async () => {
             await appendToChat(state.chatFile, content);
@@ -214,7 +229,8 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         });
     };
 
-    // Drain the pending AI text buffer (called before each tool and at idle).
+    let needsBlockquotePrefix = true;
+
     const flushBuffer = (): void => {
         if (!pendingBuffer) {
             return;
@@ -222,7 +238,19 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
 
         const text = pendingBuffer;
         pendingBuffer = '';
-        write(text);
+        if (isSubAgent) {
+            // Sub-agent output renders as a markdown blockquote so it stays
+            // visually grouped under the sub-agent header. Each line in the
+            // chat file needs `> `, but the prefix must only be written at
+            // the start of a new line — not on every streaming chunk — or
+            // chunks that arrive mid-line produce `text>  more text` artifacts.
+            const indented = text.replace(/\n/g, '\n> ');
+            const prefix = needsBlockquotePrefix ? '> ' : '';
+            write(`${prefix}${indented}`);
+            needsBlockquotePrefix = text.endsWith('\n');
+        } else {
+            write(text);
+        }
     };
 
     // Flush AI text every FLUSH_INTERVAL_MS so streaming is visible.
@@ -257,23 +285,20 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     // REASONING & CONTENT STREAMING
     // ============================================================================
 
-    state.session.on('assistant.reasoning_delta', (event) => {
+    session.on('assistant.reasoning_delta', (event) => {
         const isFirst = !reasoningStarted;
         reasoningStarted = true;
         enqueue(async () => {
-            // Replace newlines so continuation lines stay inside the blockquote.
-            // Only the very first delta gets the opening '> 💭 ' prefix.
             const content = event.data.deltaContent.replace(/\n/g, '\n> ');
-            const prefix = isFirst ? '> 💭 ' : '';
+            const prefix = isFirst ? `> 💭 ${labelTag}` : '';
             await appendToChat(state.chatFile, `${prefix}${content}`);
             await nvimRefresh();
         });
     });
 
 
-    state.session.on('assistant.message_delta', (event) => {
+    session.on('assistant.message_delta', (event) => {
         if (reasoningStarted) {
-            // Reasoning just ended — close the blockquote with a blank line
             enqueue(async () => {
                 await appendToChat(state.chatFile, '\n\n');
                 await nvimRefresh();
@@ -284,7 +309,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         pendingBuffer += event.data.deltaContent;
         scheduleFlush();
 
-        if (activeToolCount === 0 && !assistantStatusVisible) {
+        if (!isSubAgent && activeToolCount === 0 && !assistantStatusVisible) {
             assistantStatusVisible = true;
             void updateAgentUi(state.nvim, 'start_turn', [state.model]);
         }
@@ -294,19 +319,19 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     // TOOL EXECUTION HANDLERS
     // ============================================================================
 
-    state.session.on('tool.execution_start', (event) => {
+    session.on('tool.execution_start', (event) => {
         activeToolCount += 1;
-        const toolName = formatToolDisplayName(
+        const rawName = formatToolDisplayName(
             event.data.toolName,
             event.data.mcpServerName,
             event.data.mcpToolName
         );
+        const toolName = `${labelTag}${rawName}`;
         currentToolLabel = toolName;
         assistantStatusVisible = false;
         toolLabels.set(event.data.toolCallId, toolName);
         toolStartLabels.set(event.data.toolCallId, summarizeToolCall(toolName, event.data.arguments));
 
-        // Flush any buffered AI text before the first tool of this group.
         if (firstToolThisTurn) {
             firstToolThisTurn = false;
             flushBuffer();
@@ -317,19 +342,19 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         void updateAgentUi(state.nvim, 'start_tool', [toolName, details, argsJson]);
     });
 
-    state.session.on('tool.execution_progress', (event) => {
+    session.on('tool.execution_progress', (event) => {
         currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Running tool\n\n${formatToolProgress(event.data.progressMessage)}`;
         void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details]);
     });
 
-    state.session.on('tool.execution_partial_result', (event) => {
+    session.on('tool.execution_partial_result', (event) => {
         currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Streaming tool output\n\n${formatToolProgress(event.data.partialOutput)}`;
         void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details]);
     });
 
-    state.session.on('tool.execution_complete', (event) => {
+    session.on('tool.execution_complete', (event) => {
         activeToolCount = Math.max(0, activeToolCount - 1);
         const toolName = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const toolSummary = toolStartLabels.get(event.data.toolCallId) ?? toolName;
@@ -338,7 +363,6 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         currentToolLabel = toolName;
         assistantStatusVisible = activeToolCount === 0;
 
-        // After all tools finish, re-enable timer so next AI text is flushed.
         if (activeToolCount === 0) {
             firstToolThisTurn = true;
             reasoningStarted = false;
@@ -357,11 +381,6 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
             fullResult,
         ]);
 
-        // Notify the diff module so any pending diff entry queued by an approved
-        // (possibly user-edited) write tool is either committed to the diff
-        // history (success) or discarded (failure / intercepted deny). Tools
-        // that never opened a diff editor have no pending entry, so this is a
-        // no-op for them.
         state.nvim
             .executeLua(
                 `require('kra_agent.diff').finalize_pending_diff(...)`,
@@ -374,16 +393,21 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
     // SESSION STATE
     // ============================================================================
 
-    state.session.on('session.idle', () => {
+    session.on('session.idle', () => {
         void (async () => {
             clearFlushTimer();
             flushBuffer();
 
-            // Wait for all in-flight writes to finish before marking the session ready.
             await writeChain;
 
             activeToolCount = 0;
             assistantStatusVisible = false;
+
+            if (isSubAgent) {
+                // Sub-agent finished its run; orchestrator owns the prompt UI.
+                return;
+            }
+
             state.isStreaming = false;
 
             await appendToChat(state.chatFile, formatUserDraftHeader());
@@ -394,5 +418,7 @@ export async function setupSessionEventHandlers(state: AgentConversationState): 
         })();
     });
 
-    setupQuotaTracking(state);
+    if (!isSubAgent) {
+        setupQuotaTracking(state);
+    }
 }
