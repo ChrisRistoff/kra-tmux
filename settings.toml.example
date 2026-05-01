@@ -23,6 +23,38 @@ gitignoreMemory = true      # documentation-only: whether you keep .kra-memory/ 
 # includeExtensions = [".ts", ".js", ".py", ".go", ".rs", ".md"]
 # excludeGlobs = ["node_modules/**", "dest/**", "coverage/**", ".kra-memory/**"]
 
+# ─── Optional sub-agents (executor + investigator) ────────────────────────────
+# Two opt-in helpers that let a smaller, cheaper model do bulk work while your
+# main orchestrator model focuses on reasoning. Enable either independently.
+#
+# When `enabled = true`, the BYOK start flow asks you to pick a provider +
+# model for that sub-agent (right after the orchestrator picker). Pricing for
+# both shows up alongside the orchestrator in the in-session cost counter.
+#
+# Executor   – consumes a plan from the orchestrator, runs it (reads/edits/runs
+#              tests), returns a structured event log. You can interrupt at any
+#              point with Ctrl-C, or hand off manually with `/exec`.
+# Investigator – exposed to the orchestrator as a single `investigate` tool.
+#              Goes off, gathers relevant evidence from the codebase, returns
+#              a curated synthesis instead of dumping raw file contents.
+[ai.agent.executor]
+enabled = false               # master switch; off by default
+allowInterrupt = true         # Ctrl-C returns control to orchestrator with partial log
+allowReplanEscape = true      # executor may emit needs_replan; orchestrator replans
+includeDiffsInLog = true      # event log carries inline diffs for edits
+# Restrict the toolset the executor is allowed to call (defaults shown):
+# toolWhitelist = ["read_lines", "get_outline", "edit_lines", "create_file",
+#                  "search", "lsp_query", "bash"]
+
+[ai.agent.investigator]
+enabled = false               # master switch; off by default
+maxEvidenceItems = 8          # cap on evidence array returned to orchestrator
+maxExcerptLines = 20          # cap on lines per excerpt
+validateExcerpts = true       # reject hallucinated snippets at the tool layer
+# Restrict the toolset the investigator is allowed to call (defaults shown):
+# toolWhitelist = ["semantic_search", "search", "get_outline", "read_lines",
+#                  "lsp_query", "docs_search", "recall"]
+
 # ─── Documentation indexing (kra ai docs) ───────────────────────────────────────────
 # Crawls the documentation sites listed below with Crawl4AI, embeds each page,
 # and stores chunks in a `doc_chunks` LanceDB table next to `code_chunks`.

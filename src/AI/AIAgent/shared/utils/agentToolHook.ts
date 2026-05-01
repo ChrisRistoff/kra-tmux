@@ -312,7 +312,7 @@ export async function buildToolApprovalDetails(input: AgentPreToolUseHookInput, 
                     : 'Arguments:');
     const writePreview = await buildWritePreview(input.toolArgs, workspacePath);
     const sections = [
-        `Tool: ${input.toolName}`,
+        `Tool: ${input.agentLabel ? `[${input.agentLabel}] ` : ''}${input.toolName}`,
         '',
         summary,
     ];
@@ -419,7 +419,7 @@ export async function promptToolApproval(
             channelId,
             {
                 details: payload.details,
-                title: `Approve tool · ${input.toolName}`,
+                title: `Approve tool · ${input.agentLabel ? `[${input.agentLabel}] ` : ''}${input.toolName}`,
                 toolName: input.toolName,
                 argsJson: payload.argsJson,
                 hasWritePreview: !!payload.writePreview,

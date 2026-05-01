@@ -85,3 +85,61 @@ Provider behavior differences:
 
 - Copilot: supports local + remote MCP servers
 - BYOK: local stdio servers only (`http`/`sse` ignored)
+
+## Sub-agent tools
+
+Opt-in helpers that let a smaller, cheaper model do bulk work while the
+orchestrator focuses on reasoning. Toggle in `settings.toml` (`[ai.agent.executor]`,
+`[ai.agent.investigator]`); when enabled, the start flow prompts for a separate
+provider + model right after the orchestrator picker. Sub-agents work for both
+BYOK and Copilot orchestrators — mix and match freely.
+
+### `investigate` (investigator sub-agent)
+
+Registered on the orchestrator only when `[ai.agent.investigator].enabled = true`.
+Delegates a research question to a smaller model that returns a curated,
+evidence-backed synthesis instead of raw file dumps.
+
+| Field | Purpose |
+|---|---|
+| `query` | The research question. May bundle tightly-related sub-questions sharing the same scope. |
+| `hint` | Anything that would shortcut the investigator's work — known paths, symbol names, prior findings, user context, suspected cause. |
+| `scope` | Optional path glob (e.g. `src/AI/**`). |
+| `kind` | Optional category hint: `find_implementation` / `find_usages` / `find_pattern` / `explain_flow` / `general`. |
+
+Returns:
+
+```json
+{
+  "summary": "…",
+  "evidence": [{ "path": "…", "lines": "12-40", "excerpt": "…", "why_relevant": "…" }],
+  "confidence": "high|medium|low",
+  "suggested_next": "…"
+}
+```
+
+Behavior notes:
+
+- The orchestrator may call `investigate` at any point in a turn — not just at the start.
+- Only one investigation runs at a time; concurrent calls are rejected until the active one finishes.
+- Investigator tool whitelist (default): `semantic_search`, `search`, `get_outline`, `read_lines`, `lsp_query`, `docs_search`, `recall`.
+- When `validateExcerpts = true` (default) every excerpt is checked against the file at the stated line range before being returned to the orchestrator; hallucinated snippets are stripped.
+- `maxEvidenceItems` and `maxExcerptLines` cap the size of the returned envelope to keep the orchestrator's context cheap.
+- Investigator output streams into the same chat file under a sub-agent header (rendered as a markdown blockquote).
+
+When the orchestrator should call it:
+
+- Any open-ended question that needs reading more than ~2 files or tracing a flow across modules.
+- After a partial result reveals more research is needed (call again, pass new findings via `hint`).
+
+When the orchestrator should skip it:
+
+- Trivial lookups where the exact file + line range is already known.
+- Cases where it must edit immediately based on context the user just gave.
+
+### Executor (planned, not yet implemented)
+
+Will consume a structured plan from the orchestrator, run it with a wider
+toolset (reads + edits + bash), and return a typed event log. See
+`settings.toml.example` `[ai.agent.executor]` for the planned configuration
+surface.

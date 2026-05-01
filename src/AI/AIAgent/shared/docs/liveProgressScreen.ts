@@ -209,6 +209,7 @@ export async function showLiveProgress(): Promise<void> {
             header.setContent(' {magenta-fg}{bold}◆ kra-docs{/bold}{/magenta-fg}   {yellow-fg}no active crawl{/yellow-fg}   {gray-fg}q close · s stop{/gray-fg}');
             renderPanels();
             screen.render();
+
             return;
         }
 

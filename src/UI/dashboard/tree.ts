@@ -64,7 +64,7 @@ export function attachTreeExpandCollapseKeys<Row extends ExpandableTreeRow>(opts
     tree.key(['l', 'right'], () => {
         const rows = getRows();
         const row = rows[getSelectedIndex()];
-        if (!row?.expandable || row.isOpen) return;
+        if (!row.expandable || row.isOpen) return;
         expanded.add(row.id);
         rebuild(row.id);
     });

@@ -32,6 +32,7 @@ import {
     type AgentSession,
     type AgentSessionEventMap,
     type AgentSessionOptions,
+    type LocalTool,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
@@ -71,6 +72,7 @@ export class OpenAICompatibleSession implements AgentSession {
     private abortController: AbortController | undefined;
     private compactedThisTurn = false;
     private readonly executableToolBridge = createExecutableToolBridge(() => this.mcp);
+    private localTools: Map<string, LocalTool> = new Map();
 
     public constructor(opts: OpenAICompatibleSessionOptions) {
         this.opts = opts.sessionOptions;
@@ -113,7 +115,27 @@ export class OpenAICompatibleSession implements AgentSession {
             workingDirectory: this.opts.workingDirectory,
         });
 
-        this.openaiTools = this.mcp.openaiTools as ChatCompletionTool[];
+        const mcpOpenaiTools = this.mcp.openaiTools as ChatCompletionTool[];
+        const localOpenaiTools: ChatCompletionTool[] = [];
+
+        for (const localTool of this.opts.localTools ?? []) {
+            if (this.mcp.tools.has(localTool.name)) {
+                throw new Error(
+                    `Local tool '${localTool.name}' collides with an MCP tool of the same name.`
+                );
+            }
+            this.localTools.set(localTool.name, localTool);
+            localOpenaiTools.push({
+                type: 'function',
+                function: {
+                    name: localTool.name,
+                    description: localTool.description,
+                    parameters: localTool.parameters,
+                },
+            });
+        }
+
+        this.openaiTools = [...mcpOpenaiTools, ...localOpenaiTools];
 
         const sysContent = this.buildSystemMessage();
         this.messages.push({ role: 'system', content: sysContent });
@@ -304,7 +326,76 @@ export class OpenAICompatibleSession implements AgentSession {
         return toolCalls;
     }
 
+    private async executeLocalToolCall(call: InternalToolCall, localTool: LocalTool): Promise<void> {
+        const serverLabel = localTool.serverLabel ?? 'kra-local';
+
+        let parsedArgs: unknown;
+
+        try {
+            parsedArgs = call.args ? JSON.parse(call.args) : {};
+        } catch (error) {
+            const msg = `Failed to parse tool arguments: ${(error as Error).message}`;
+            this.emitToolStart(call, serverLabel, localTool.name);
+            this.appendToolResult(call.id, msg);
+            this.emitToolComplete(call, false, msg);
+
+            return;
+        }
+
+        const preHook = await this.opts.onPreToolUse({
+            toolName: localTool.name,
+            toolArgs: parsedArgs,
+        });
+
+        if (preHook.permissionDecision === 'deny') {
+            const reason = preHook.permissionDecisionReason ?? 'Tool call denied by approval hook.';
+            const msg = `Denied: ${reason}`;
+            this.emitToolStart(call, serverLabel, localTool.name);
+            this.appendToolResult(call.id, msg);
+            this.emitToolComplete(call, false, msg);
+
+            return;
+        }
+
+        const finalArgs = preHook.modifiedArgs ?? parsedArgs;
+        this.emitToolStart(call, serverLabel, localTool.name, finalArgs);
+
+        let toolText: string;
+        let isError = false;
+
+        try {
+            toolText = await localTool.handler(finalArgs as Record<string, unknown>);
+
+            if (preHook.additionalContext) {
+                toolText = `${preHook.additionalContext}\n\n${toolText}`;
+            }
+
+            const postHook = await this.opts.onPostToolUse({
+                toolName: localTool.name,
+                toolResult: { textResultForLlm: toolText },
+            });
+
+            if (postHook?.modifiedResult?.textResultForLlm) {
+                toolText = postHook.modifiedResult.textResultForLlm;
+            }
+        } catch (error) {
+            toolText = `Tool execution failed: ${(error as Error).message}`;
+            isError = true;
+        }
+
+        this.appendToolResult(call.id, toolText);
+        this.emitToolComplete(call, !isError, toolText);
+    }
+
     private async executeToolCall(call: InternalToolCall): Promise<void> {
+        const localTool = this.localTools.get(call.name);
+
+        if (localTool) {
+            await this.executeLocalToolCall(call, localTool);
+
+            return;
+        }
+
         const tool = this.mcp?.tools.get(call.name);
 
         if (!tool) {

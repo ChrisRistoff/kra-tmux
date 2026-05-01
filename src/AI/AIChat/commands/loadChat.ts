@@ -32,7 +32,7 @@ export async function loadChat(): Promise<void> {
                 try {
                     const dataPath = path.join(aiHistoryPath, name, `${name}.json`);
                     const data: ChatData = JSON.parse(await fs.readFile(dataPath, 'utf-8'));
-                    const turns = data.chatHistory?.length ?? 0;
+                    const turns = data.chatHistory.length ?? 0;
                     const lines: string[] = [
                         `chat: ${name}`,
                         `provider: ${data.provider ?? '?'}`,

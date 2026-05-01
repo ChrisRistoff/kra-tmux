@@ -37,6 +37,9 @@ export async function dispatchPromptAction(
             await fileContext.handleAddFileContext(state.nvim, state.chatFile, { agentMode: true });
             break;
         case 'stop_stream':
+            if (state.activeSubAgentSession) {
+                await state.activeSubAgentSession.abort();
+            }
             await state.session.abort();
             state.isStreaming = false;
             await updateAgentUi(state.nvim, 'stop_turn', ['Stopped current agent turn']);
