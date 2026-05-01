@@ -108,6 +108,15 @@ export interface AgentSessionOptions {
     additionalMcpServers?: Record<string, MCPServerConfig>;
     excludedTools?: string[];
     /**
+     * If set, restricts the tool inventory advertised to the model to the
+     * given names. Tools are matched by trailing segment delimiter (`-`,
+     * `__`, `.`) so bare names like `read_lines` match namespaced MCP tools
+     * like `kra-file-context__read_lines`. Provider wrappers translate this
+     * into whatever positive- or inverse-exclusion machinery they have.
+     * Sub-agents use this to scope what the small model can even see.
+     */
+    allowedTools?: string[];
+    /**
      * In-process tools registered alongside MCP tools. Useful for sub-agent
      * dispatch tools (e.g. `investigate`) where the handler must run in the
      * same Node process as the orchestrator session. They flow through the

@@ -40,9 +40,11 @@ const DEFAULT_INVESTIGATOR_TOOLS = [
 
 const EXECUTOR_DEFAULTS: ExecutorSettings = {
     enabled: false,
+    useInvestigatorRuntime: true,
     allowInterrupt: true,
     allowReplanEscape: true,
     includeDiffsInLog: true,
+    maxToolCalls: 60,
     toolWhitelist: DEFAULT_EXECUTOR_TOOLS,
 };
 
@@ -56,9 +58,11 @@ const INVESTIGATOR_DEFAULTS: InvestigatorSettings = {
 
 interface RawExecutor {
     enabled?: boolean;
+    useInvestigatorRuntime?: boolean;
     allowInterrupt?: boolean;
     allowReplanEscape?: boolean;
     includeDiffsInLog?: boolean;
+    maxToolCalls?: number;
     toolWhitelist?: string[];
 }
 
@@ -95,11 +99,14 @@ export async function loadSubAgentSettings(): Promise<SubAgentSettings> {
     };
 }
 
-function mergeExecutor(raw: RawExecutor | undefined): ExecutorSettings {
+export function mergeExecutor(raw: RawExecutor | undefined): ExecutorSettings {
     if (!raw || typeof raw !== 'object') return { ...EXECUTOR_DEFAULTS };
 
     return {
         enabled: typeof raw.enabled === 'boolean' ? raw.enabled : EXECUTOR_DEFAULTS.enabled,
+        useInvestigatorRuntime: typeof raw.useInvestigatorRuntime === 'boolean'
+            ? raw.useInvestigatorRuntime
+            : EXECUTOR_DEFAULTS.useInvestigatorRuntime,
         allowInterrupt: typeof raw.allowInterrupt === 'boolean'
             ? raw.allowInterrupt
             : EXECUTOR_DEFAULTS.allowInterrupt,
@@ -109,11 +116,12 @@ function mergeExecutor(raw: RawExecutor | undefined): ExecutorSettings {
         includeDiffsInLog: typeof raw.includeDiffsInLog === 'boolean'
             ? raw.includeDiffsInLog
             : EXECUTOR_DEFAULTS.includeDiffsInLog,
+        maxToolCalls: clampInt(raw.maxToolCalls, 1, 500, EXECUTOR_DEFAULTS.maxToolCalls),
         toolWhitelist: normaliseStringList(raw.toolWhitelist, EXECUTOR_DEFAULTS.toolWhitelist),
     };
 }
 
-function mergeInvestigator(raw: RawInvestigator | undefined): InvestigatorSettings {
+export function mergeInvestigator(raw: RawInvestigator | undefined): InvestigatorSettings {
     if (!raw || typeof raw !== 'object') return { ...INVESTIGATOR_DEFAULTS };
 
     return {

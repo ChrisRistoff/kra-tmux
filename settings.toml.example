@@ -39,9 +39,12 @@ gitignoreMemory = true      # documentation-only: whether you keep .kra-memory/ 
 #              a curated synthesis instead of dumping raw file contents.
 [ai.agent.executor]
 enabled = false               # master switch; off by default
+useInvestigatorRuntime = true # if true (and investigator enabled) reuse its provider+model;
+                              # if false you'll be prompted to pick a separate one on startup
 allowInterrupt = true         # Ctrl-C returns control to orchestrator with partial log
 allowReplanEscape = true      # executor may emit needs_replan; orchestrator replans
 includeDiffsInLog = true      # event log carries inline diffs for edits
+maxToolCalls = 60             # hard cap on tool calls before the executor is forced to submit
 # Restrict the toolset the executor is allowed to call (defaults shown):
 # toolWhitelist = ["read_lines", "get_outline", "edit_lines", "create_file",
 #                  "search", "lsp_query", "bash"]

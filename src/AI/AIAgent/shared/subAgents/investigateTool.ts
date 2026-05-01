@@ -32,14 +32,14 @@ export interface CreateInvestigateToolOptions {
     chatBridge?: SubAgentChatBridge;
 }
 
-interface EvidenceItem {
+export interface EvidenceItem {
     path: string;
     lines: string;
     excerpt: string;
     why_relevant: string;
 }
 
-interface InvestigationResult {
+export interface InvestigationResult {
     summary: string;
     evidence: EvidenceItem[];
     confidence: 'high' | 'medium' | 'low';
@@ -186,9 +186,6 @@ function buildInvestigatorSystemPrompt(settings: InvestigatorRuntime['settings']
         '  - Every excerpt MUST be copied verbatim from the file at the stated line range.',
         '  - Set `confidence` honestly. If you could not find what was asked, say so.',
         '  - Prefer fewer, high-signal excerpts over many shallow ones.',
-        '',
-        `Allowed tools: ${settings.toolWhitelist.join(', ')}, submit_result.`,
-        'Any other tool call will be denied.',
     ].join('\n');
 }
 
@@ -258,7 +255,7 @@ function buildResultSchema(maxEvidenceItems: number): Record<string, unknown> {
     };
 }
 
-function coerceResult(raw: Record<string, unknown>): InvestigationResult {
+export function coerceResult(raw: Record<string, unknown>): InvestigationResult {
     const summary = typeof raw['summary'] === 'string' ? raw['summary'] : '';
     const confidence =
         raw['confidence'] === 'high' || raw['confidence'] === 'medium' || raw['confidence'] === 'low'
@@ -317,7 +314,7 @@ function normaliseForCompare(s: string): string {
     return s.replace(/\s+/g, ' ').trim();
 }
 
-async function validateEvidence(
+export async function validateEvidence(
     evidence: EvidenceItem[],
     workingDirectory: string
 ): Promise<EvidenceItem[]> {
