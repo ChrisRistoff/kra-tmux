@@ -102,6 +102,10 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
     };
 
     let captured: Record<string, unknown> | undefined;
+    let resolveSubmitted: (() => void) | undefined;
+    const submitted = new Promise<void>((resolve) => {
+        resolveSubmitted = resolve;
+    });
 
     const submitTool: LocalTool = {
         name: 'submit_result',
@@ -112,47 +116,16 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         serverLabel: 'kra-subagent',
         handler: async (args) => {
             captured = args;
+            resolveSubmitted?.();
 
             return 'Result accepted. End your turn now without calling any more tools.';
         },
     };
 
-    const whitelist = new Set([...opts.toolWhitelist, 'submit_result']);
     const bridge = opts.chatBridge;
 
-    const matchesWhitelist = (toolName: string): boolean => {
-        if (whitelist.has(toolName)) {
-            return true;
-        }
-
-        // Different providers prefix MCP tools differently:
-        //   BYOK   → bare `originalName` (e.g. `read_lines`)
-        //   Copilot → `<server>__<tool>` or `<server>-<tool>` (e.g. `kra-memory-search`)
-        // Match if any whitelist entry appears as a trailing segment delimited
-        // by `__`, `-` or `.`. We deliberately do NOT split on `_` because
-        // many tool names (read_lines, lsp_query, …) contain underscores.
-        for (const allowed of whitelist) {
-            const re = new RegExp(`(^|[\\-.]|__)${allowed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
-
-            if (re.test(toolName)) {
-                return true;
-            }
-        }
-
-        return false;
-    };
-
     const onPreToolUse = async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
-        if (!matchesWhitelist(input.toolName)) {
-            return {
-                permissionDecision: 'deny',
-                permissionDecisionReason:
-                    `Tool '${input.toolName}' is not in this sub-agent's whitelist. ` +
-                    `Allowed tools: ${[...whitelist].join(', ')}.`,
-            };
-        }
-
-        // submit_result is synthetic — don't bother the user for approval.
+        // submit_result is a synthetic local tool — always allow it.
         if (input.toolName === 'submit_result') {
             return { permissionDecision: 'allow' };
         }
@@ -184,6 +157,10 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         return;
     };
 
+    // The provider wrappers honour `allowedTools` by filtering the MCP/built-in
+    // tool inventory advertised to the model BEFORE the turn starts. We still
+    // pass the static `excludedTools` list so the SDK's own built-in editors
+    // (which we replace with our MCP-served versions) never appear.
     const session: AgentSession = await opts.runtime.client.createSession({
         model: opts.runtime.model,
         workingDirectory: opts.workingDirectory,
@@ -196,6 +173,7 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
             'grep', 'glob', 'create', 'apply_patch',
             'bash', 'shell', 'run_in_terminal', 'execute',
         ],
+        allowedTools: [...opts.toolWhitelist, 'submit_result'],
         onPreToolUse,
         onPostToolUse,
     });
@@ -238,12 +216,17 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         // via the `session.idle` event. We wait for idle in both cases so the
         // sub-agent reliably finishes (and submit_result fires) before we
         // disconnect.
+        // We ALSO race against `submitted` (resolved synchronously by the
+        // submit_result handler): some models keep emitting text or denied
+        // tool calls after submitting, which delays or never fires `idle`.
+        // Once we have a captured result there is nothing useful left for the
+        // model to do, so we hand control back to the orchestrator immediately.
         const idle = new Promise<void>((resolve) => {
             session.on('session.idle', () => resolve());
         });
 
         await session.send({ prompt: opts.taskPrompt });
-        await idle;
+        await Promise.race([idle, submitted]);
     } finally {
         if (bridge && parentState) {
             await appendToChat(

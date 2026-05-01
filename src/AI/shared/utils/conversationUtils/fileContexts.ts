@@ -142,6 +142,42 @@ export async function getFileContextsForPrompt(): Promise<string> {
 }
 
 /**
+ * Generate a metadata-only `<tagged_files>` block describing the loaded file
+ * contexts (path + line count for full files, path + line range for partial
+ * selections). The model is expected to read the actual contents on demand
+ * via its file-reading tools. Mirrors the format the Copilot Agent SDK
+ * surfaces for attachments.
+**/
+export async function getFileContextsTaggedBlock(): Promise<string> {
+    if (fileContexts.length === 0) return '';
+
+    const lines: string[] = [];
+
+    for (const context of fileContexts) {
+        if (context.isPartial) {
+            const start = context.startLine;
+            const end = context.endLine;
+            const range = typeof start === 'number' && typeof end === 'number'
+                ? (start === end ? `line ${start}` : `lines ${start}-${end}`)
+                : 'partial selection';
+            lines.push(`* ${context.filePath} (${range})`);
+            continue;
+        }
+
+        try {
+            const content = await fs.readFile(context.filePath, 'utf-8');
+            const count = content.length === 0 ? 0 : content.split('\n').length;
+            lines.push(`* ${context.filePath} (${count} lines)`);
+        } catch (error) {
+            console.error(`Error loading context for ${context.filePath}:`, error);
+            lines.push(`* ${context.filePath}`);
+        }
+    }
+
+    return `<tagged_files>\n${lines.join('\n')}\n</tagged_files>`;
+}
+
+/**
  * Display current file contexts in command line
 **/
 export async function showFileContexts(nvim: NeovimClient): Promise<void> {

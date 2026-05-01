@@ -4,8 +4,11 @@
  * Picker order (matches what the user sees on the screen):
  *   1. Orchestrator provider → (BYOK only) model provider → model
  *      → (Copilot only) reasoning effort
- *   2. For each enabled sub-agent (executor, investigator) the same flow
- *      runs again so each can independently pick BYOK or Copilot.
+ *   2. Investigator (if enabled) → same picker.
+ *   3. Executor (if enabled) → same picker, UNLESS
+ *      `[ai.agent.executor].useInvestigatorRuntime = true` (and the investigator
+ *      is enabled), in which case the executor reuses the investigator's
+ *      resolved client + model and the picker is skipped.
  *
  * Provider-specific concerns are kept tight:
  *   - BYOK orchestrators get the kra-bash + kra-web MCP servers attached.
@@ -46,17 +49,6 @@ export async function startAgentChat(): Promise<void> {
         orchestrator = await pickAgentRuntime('orchestrator');
         allClients.push(orchestrator.client);
 
-        if (subAgentSettings.executor.enabled) {
-            const picked = await pickAgentRuntime('executor');
-            allClients.push(picked.client);
-            executor = {
-                client: picked.client,
-                model: picked.model,
-                ...(picked.contextWindow !== undefined ? { contextWindow: picked.contextWindow } : {}),
-                settings: subAgentSettings.executor,
-            };
-        }
-
         if (subAgentSettings.investigator.enabled) {
             const picked = await pickAgentRuntime('investigator');
             allClients.push(picked.client);
@@ -66,6 +58,29 @@ export async function startAgentChat(): Promise<void> {
                 ...(picked.contextWindow !== undefined ? { contextWindow: picked.contextWindow } : {}),
                 settings: subAgentSettings.investigator,
             };
+        }
+
+        if (subAgentSettings.executor.enabled) {
+            // If `useInvestigatorRuntime` is on AND we have an investigator,
+            // skip the picker and reuse the investigator's resolved client +
+            // model so the user only goes through the picker once.
+            if (subAgentSettings.executor.useInvestigatorRuntime && investigator) {
+                executor = {
+                    client: investigator.client,
+                    model: investigator.model,
+                    ...(investigator.contextWindow !== undefined ? { contextWindow: investigator.contextWindow } : {}),
+                    settings: subAgentSettings.executor,
+                };
+            } else {
+                const picked = await pickAgentRuntime('executor');
+                allClients.push(picked.client);
+                executor = {
+                    client: picked.client,
+                    model: picked.model,
+                    ...(picked.contextWindow !== undefined ? { contextWindow: picked.contextWindow } : {}),
+                    settings: subAgentSettings.executor,
+                };
+            }
         }
 
         await conversation.converseAgent({

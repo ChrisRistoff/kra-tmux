@@ -38,6 +38,7 @@ import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
 import { createExecutableToolBridge, disconnectPool } from '@/AI/AIAgent/mcp/executableToolBridge';
 import { compactMessages, estimateTokens, isContextLengthError } from '@/AI/AIAgent/providers/byok/byokCompactor';
+import { getFileContextsTaggedBlock } from '@/AI/shared/conversation';
 
 const DEFAULT_SYSTEM_PROMPT = [
     'You are an autonomous coding agent operating inside a proposal workspace.',
@@ -112,6 +113,7 @@ export class OpenAICompatibleSession implements AgentSession {
         this.mcp = await buildMcpClientPool({
             servers: mergedServers,
             ...(this.opts.excludedTools ? { excludedTools: this.opts.excludedTools } : {}),
+            ...(this.opts.allowedTools ? { allowedTools: this.opts.allowedTools } : {}),
             workingDirectory: this.opts.workingDirectory,
         });
 
@@ -193,9 +195,14 @@ export class OpenAICompatibleSession implements AgentSession {
         this.compactedThisTurn = false;
         this.abortController = new AbortController();
 
+        const taggedFiles = await getFileContextsTaggedBlock();
+        const userContent = taggedFiles
+            ? `${options.prompt}\n\n${taggedFiles}\n\n${TURN_REMINDER}`
+            : `${options.prompt}\n\n${TURN_REMINDER}`;
+
         this.messages.push({
             role: 'user',
-            content: `${options.prompt}\n\n${TURN_REMINDER}`,
+            content: userContent,
         });
 
         try {

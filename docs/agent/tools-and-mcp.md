@@ -137,9 +137,53 @@ When the orchestrator should skip it:
 - Trivial lookups where the exact file + line range is already known.
 - Cases where it must edit immediately based on context the user just gave.
 
-### Executor (planned, not yet implemented)
+### `execute` (executor sub-agent)
 
-Will consume a structured plan from the orchestrator, run it with a wider
-toolset (reads + edits + bash), and return a typed event log. See
-`settings.toml.example` `[ai.agent.executor]` for the planned configuration
-surface.
+Registered on the orchestrator only when `[ai.agent.executor].enabled = true`.
+Delegates a concrete, multi-step body of work to a smaller model that runs the
+plan end-to-end and returns a curated event log + summary; the raw tool traffic
+(file reads, search results, intermediate edits) never enters the orchestrator's
+context.
+
+| Field | Purpose |
+|---|---|
+| `plan` | Step-by-step plan to execute. Be explicit about what to change and where. |
+| `context` | Optional background the executor should treat as authoritative — prior findings, paths, user constraints. Generous context here saves tool calls on the executor side. |
+| `successCriteria` | Optional checklist the executor uses to decide between `completed` and `partial`. |
+
+Returns a structured envelope with `status` (`completed` / `partial` /
+`blocked` / `needs_replan`), a 2–6 sentence `summary`, a typed `events[]` array
+(with optional `path` and inline `diff` per event), and `blockers[]` /
+`replanReason` when relevant.
+
+Behavior notes:
+
+- Runtime sharing: when `useInvestigatorRuntime = true` (default) and the
+  investigator is also enabled, the executor reuses the investigator's
+  resolved provider + model. Set it to `false` to be prompted for a separate
+  executor model on startup.
+- Only one execution runs at a time; concurrent calls are rejected.
+- `Ctrl-C` (`stop_stream`) aborts the executor and returns control to the
+  orchestrator. The orchestrator sees the partial event log captured so far.
+- Executor tool whitelist (default): `read_lines`, `get_outline`, `edit_lines`,
+  `create_file`, `search`, `lsp_query`, `bash`. `confirm_task_complete` and
+  other end-of-turn tools are forbidden — the orchestrator owns the turn.
+- Hard cap of `maxToolCalls` (default 60) tool calls before the executor is
+  expected to submit — prevents runaway loops on bad plans.
+- Executor output streams into the same chat file under a sub-agent header
+  (⚙️ `[EXECUTOR]`).
+- As soon as the executor calls `submit_result`, control returns to the
+  orchestrator immediately — it does not wait for the model to wind down its
+  trailing acknowledgement.
+
+When the orchestrator should call it:
+
+- Multi-step refactors, feature implementations, or any task whose bulk is
+  mechanical reads + edits rather than reasoning.
+- After `investigate` has produced enough findings to write a concrete plan.
+
+When the orchestrator should skip it:
+
+- One-line trivial edits.
+- Tasks that need orchestrator-grade reasoning at every step.
+

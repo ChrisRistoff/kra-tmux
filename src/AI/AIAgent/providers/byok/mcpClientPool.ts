@@ -16,6 +16,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
+import { matchesSubAgentWhitelist } from '@/AI/AIAgent/shared/subAgents/whitelist';
 
 export interface RegisteredTool {
     server: string;
@@ -38,6 +39,14 @@ export interface McpClientPool {
 interface BuildPoolOptions {
     servers: Record<string, MCPServerConfig>;
     excludedTools?: string[];
+    /**
+     * Positive filter applied AFTER `excludedTools`. When set, only tools
+     * whose namespaced name (`<server>__<tool>`) matches an entry — using
+     * the same trailing-segment matcher as the sub-agent whitelist — are
+     * registered. Used by sub-agent sessions to keep the model's tool
+     * inventory tightly scoped.
+     */
+    allowedTools?: string[];
     workingDirectory: string;
 }
 
@@ -52,6 +61,7 @@ export async function buildMcpClientPool(options: BuildPoolOptions): Promise<Mcp
     const tools = new Map<string, RegisteredTool>();
     const clients: Client[] = [];
     const excluded = new Set(options.excludedTools ?? []);
+    const allowedSet = options.allowedTools ? new Set(options.allowedTools) : null;
 
     for (const [serverName, config] of Object.entries(options.servers)) {
         if (config.type !== 'local' && config.type !== 'stdio') {
@@ -100,6 +110,10 @@ export async function buildMcpClientPool(options: BuildPoolOptions): Promise<Mcp
             }
 
             const namespaced = namespacedToolName(serverName, tool.name);
+
+            if (allowedSet && !matchesSubAgentWhitelist(namespaced, allowedSet)) {
+                continue;
+            }
 
             tools.set(namespaced, {
                 server: serverName,

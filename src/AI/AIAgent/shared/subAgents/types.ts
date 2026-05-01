@@ -14,9 +14,18 @@ import type { AgentClient } from '@/AI/AIAgent/shared/types/agentTypes';
 
 export interface ExecutorSettings {
     enabled: boolean;
+    /**
+     * If true AND the investigator is also enabled, the executor reuses the
+     * investigator's resolved runtime (client + model) instead of prompting the
+     * user to pick a separate provider/model on startup. Saves a picker step
+     * when the user wants both sub-agents to run on the same cheap model.
+     */
+    useInvestigatorRuntime: boolean;
     allowInterrupt: boolean;
     allowReplanEscape: boolean;
     includeDiffsInLog: boolean;
+    /** Hard cap on tool calls before the executor is forced to submit. */
+    maxToolCalls: number;
     toolWhitelist: string[];
 }
 

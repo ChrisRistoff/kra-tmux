@@ -10,11 +10,50 @@ import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import { createExecutableToolBridge, disconnectPool } from '@/AI/AIAgent/mcp/executableToolBridge';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
+import { matchesSubAgentWhitelist } from '@/AI/AIAgent/shared/subAgents/whitelist';
 
 export interface CopilotClientWrapperOptions {
     githubToken?: string;
     useLoggedInUser?: boolean;
     reasoningEffort?: ReasoningEffort;
+}
+
+async function decideCopilotExcludedTools(
+    options: AgentSessionOptions
+): Promise<string[]> {
+    const baseExcluded = options.excludedTools ?? [];
+
+    if (!options.allowedTools) {
+        return baseExcluded;
+    }
+
+    const allowedSet = new Set(options.allowedTools);
+    const merged = new Set<string>(baseExcluded);
+
+    let probePool: McpClientPool | undefined;
+    try {
+        probePool = await buildMcpClientPool({
+            servers: options.mcpServers,
+            workingDirectory: options.workingDirectory,
+        });
+
+        for (const tool of probePool.tools.values()) {
+            if (matchesSubAgentWhitelist(tool.namespacedName, allowedSet)) {
+                continue;
+            }
+            // Copilot's excludedTools accepts the bare MCP tool name.
+            merged.add(tool.originalName);
+        }
+    } catch {
+        // If we can't enumerate, fall back to the caller-supplied excludes
+        // only — the runtime denylist (if any) will still gate execution.
+    } finally {
+        if (probePool) {
+            await probePool.disconnect();
+        }
+    }
+
+    return Array.from(merged);
 }
 
 export class CopilotClientWrapper implements AgentClient {
@@ -56,7 +95,14 @@ export class CopilotClientWrapper implements AgentClient {
         const isSubAgent = options.isSubAgent === true;
         const skillsDir = path.join(__dirname, '..', '..', '..', '..', 'skills');
 
-        const onPermissionRequest = () => ({ kind: 'approved' as const });
+        const onPermissionRequest = (): { kind: 'approved' } => ({ kind: 'approved' as const });
+
+        // When the caller asked for a positive tool inventory filter, translate
+        // it into Copilot's `excludedTools` knob. Copilot accepts bare MCP tool
+        // names there, so we enumerate the configured MCP servers, drop the
+        // ones our whitelist matches, and merge the rest with whatever
+        // `excludedTools` the caller already supplied.
+        const mergedExcluded = await decideCopilotExcludedTools(options);
 
         const sdkSession = await this.inner.createSession({
             clientName: 'copilot-cli',
@@ -67,7 +113,7 @@ export class CopilotClientWrapper implements AgentClient {
             enableConfigDiscovery: !isSubAgent,
             ...(isSubAgent ? {} : { skillDirectories: [skillsDir] }),
             mcpServers: options.mcpServers,
-            ...(options.excludedTools ? { excludedTools: options.excludedTools } : {}),
+            ...(mergedExcluded.length > 0 ? { excludedTools: mergedExcluded } : {}),
             ...(options.localTools && options.localTools.length > 0 ? { tools: options.localTools } : {}),
             onPermissionRequest,
             infiniteSessions: {

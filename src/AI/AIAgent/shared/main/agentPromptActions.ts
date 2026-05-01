@@ -1,11 +1,9 @@
-import * as fs from 'fs/promises';
-import type { AgentConversationState, MessageOptions } from '@/AI/AIAgent/shared/types/agentTypes';
+import type { AgentConversationState } from '@/AI/AIAgent/shared/types/agentTypes';
 import { formatSubmittedAgentPrompt } from '@/AI/AIAgent/shared/utils/agentUi';
 import {
     formatAssistantHeader,
     materializeUserDraft,
 } from '@/AI/shared/utils/conversationUtils/chatHeaders';
-import type { FileContext } from '@/AI/shared/types/aiTypes';
 import {
     clearAgentPrompt,
     focusAgentPrompt,
@@ -30,58 +28,6 @@ export function getErrorMessage(error: unknown): string {
     return 'Unknown error';
 }
 
-
-async function createSelectionAttachment(
-    context: FileContext,
-    displayName: string
-): Promise<{
-    type: 'selection',
-    filePath: string,
-    displayName: string,
-    selection: {
-        start: { line: number, character: number },
-        end: { line: number, character: number },
-    },
-    text: string,
-}> {
-    const content = await fs.readFile(context.filePath, 'utf8');
-    const allLines = content.split('\n');
-    const startLine = context.startLine ?? 1;
-    const endLine = context.endLine ?? startLine;
-    const selectedText = allLines.slice(startLine - 1, endLine).join('\n');
-
-    return {
-        type: 'selection',
-        filePath: context.filePath,
-        displayName,
-        selection: {
-            start: { line: startLine - 1, character: 0 },
-            end: { line: endLine - 1, character: allLines[endLine - 1]?.length ?? 0 },
-        },
-        text: selectedText,
-    };
-}
-
-async function buildAttachments(): Promise<NonNullable<MessageOptions['attachments']>> {
-    const attachments: NonNullable<MessageOptions['attachments']> = [];
-
-    for (const context of fileContext.fileContexts) {
-        const displayName = context.filePath.split('/').pop() ?? context.filePath;
-
-        if (!context.isPartial) {
-            attachments.push({
-                type: 'file',
-                path: context.filePath,
-                displayName,
-            });
-            continue;
-        }
-
-        attachments.push(await createSelectionAttachment(context, displayName));
-    }
-
-    return attachments;
-}
 
 async function handleSubmit(state: AgentConversationState): Promise<void> {
     if (state.isStreaming) {
@@ -110,11 +56,11 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
     await refreshAgentLayout(state.nvim);
     await focusAgentPrompt(state.nvim);
 
-    const attachments = await buildAttachments();
+    const taggedFiles = await fileContext.getFileContextsTaggedBlock();
+    const finalPrompt = taggedFiles ? `${prompt}\n\n${taggedFiles}` : prompt;
 
     await state.session.send({
-        prompt,
-        attachments,
+        prompt: finalPrompt,
         mode: 'immediate',
     });
 }

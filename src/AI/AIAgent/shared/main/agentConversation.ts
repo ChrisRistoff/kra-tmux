@@ -13,6 +13,7 @@ import type {
     LocalTool,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { createInvestigateTool } from '@/AI/AIAgent/shared/subAgents/investigateTool';
+import { createExecuteTool } from '@/AI/AIAgent/shared/subAgents/executeTool';
 
 import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { runStartupIndexingFlow } from '@/AI/AIAgent/shared/main/agentIndexingFlow';
@@ -133,6 +134,27 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
                 },
                 agentLabel: 'INVESTIGATOR',
                 headerEmoji: '🔍',
+                parentOnPreToolUse: orchestratorOnPreToolUse,
+                parentOnPostToolUse: orchestratorOnPostToolUse,
+            },
+        }));
+    }
+
+    if (options.executor) {
+        orchestratorLocalTools.push(createExecuteTool({
+            runtime: options.executor,
+            mcpServers: mergedMcpServers,
+            workingDirectory: cwd,
+            chatBridge: {
+                getParentState: () => {
+                    if (!stateRef.current) {
+                        throw new Error('Executor invoked before orchestrator state was ready');
+                    }
+
+                    return stateRef.current;
+                },
+                agentLabel: 'EXECUTOR',
+                headerEmoji: '⚙️',
                 parentOnPreToolUse: orchestratorOnPreToolUse,
                 parentOnPostToolUse: orchestratorOnPostToolUse,
             },
