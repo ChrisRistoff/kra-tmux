@@ -406,6 +406,7 @@ kra sys
 | **grep-file-remove** 🗑️ | **Smart file deletion** with grep-based search and confirmation prompts.                                     |
 | **grep-dir-remove** 📁  | **Directory cleanup** with intelligent search and recursive removal options.                                        |
 | **scripts** 🧪          | **Custom script execution** system (experimental) - Run user-defined automation scripts.                                |
+| **process-manager** 📊  | **Live ps dashboard** - search, sort by CPU/MEM/PID, view per-process details, send SIGTERM/SIGKILL.                    |
 
 *Note: Script management system is in active development. Currently requires manual script addition.*
 
@@ -426,6 +427,12 @@ kra sys
 <summary>🧪 <strong>kra sys scripts</strong> - Custom automation execution</summary>
 
 ![scripts](docs-assets/sys/sys-scripts.gif)
+</details>
+
+<details>
+<summary>📊 <strong>kra sys process-manager</strong> - Live process dashboard</summary>
+
+Interactive `ps` browser with search, sort modes (CPU / MEM / PID), windowed list rendering, per-process details and signal sending (SIGTERM / SIGKILL).
 </details>
 
 ---

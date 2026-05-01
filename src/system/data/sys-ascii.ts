@@ -21,6 +21,8 @@ export const sysAscii = `
         | grep-dir-remove    | 📁  Search for matching directories and remove selected folders interactively.                                       |
         |--------------------|----------------------------------------------------------------------------------------------------------------------|
         | scripts            | 🧪  Browse repo automation scripts and run the selected script from the shared picker flow.                          |
+        |--------------------|----------------------------------------------------------------------------------------------------------------------|
+        | process-manager    | 📊  Live ps dashboard: search, sort by CPU/MEM/PID, view per-process details, send SIGTERM/SIGKILL.                  |
         +--------------------+----------------------------------------------------------------------------------------------------------------------+
 
         Use: kra sys <command>
