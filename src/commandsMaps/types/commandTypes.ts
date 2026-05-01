@@ -23,7 +23,8 @@ export type GitCommandName =
     | 'view-changed'
     | 'open-pr'
     | 'create-branch'
-    | 'checkout';
+    | 'checkout'
+    | 'reflog';
 export type AiCommandName =
     | 'chat'
     | 'agent'

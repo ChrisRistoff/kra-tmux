@@ -46,14 +46,15 @@ function parseRecord(r: string): Commit {
 }
 
 async function streamCommits(
+    gitArgs: string[],
+    fmt: string,
     onChunk: (added: Commit[], total: number) => void,
 ): Promise<Commit[]> {
-    const fmt = ['%H', '%h', '%an', '%ae', '%ar', '%aI', '%D', '%s', '%b'].join(FIELD_SEP);
     const all: Commit[] = [];
     let buffer = '';
 
     return new Promise((resolve, reject) => {
-        const p = spawn('git', ['log', `--pretty=format:${fmt}${RECORD_SEP}`], {
+        const p = spawn('git', [...gitArgs, `--pretty=format:${fmt}${RECORD_SEP}`], {
             stdio: ['ignore', 'pipe', 'pipe'],
         });
         p.stdout.setEncoding('utf8');
@@ -73,7 +74,7 @@ async function streamCommits(
         p.on('error', reject);
         p.on('close', (code) => {
             if (code !== 0) {
-                reject(new Error(`git log exited with code ${code ?? 'null'}`));
+                reject(new Error(`git ${gitArgs[0] ?? 'log'} exited with code ${code ?? 'null'}`));
 
                 return;
             }
@@ -97,10 +98,10 @@ async function loadStat(hash: string): Promise<string> {
     }
 }
 
-async function loadGraph(limit = 300): Promise<string> {
+async function loadGraph(gitArgs: string[], limit = 300): Promise<string> {
     try {
         const { stdout } = await bash.execCommand(
-            `git log --graph --all --decorate --format='%h\x1f%d\x1f%s\x1f%an\x1f%ar' -n ${limit}`,
+            `git ${gitArgs.join(' ')} --graph --decorate --format='%h\x1f%d\x1f%s\x1f%an\x1f%ar' -n ${limit}`,
         );
 
         return stdout;
@@ -165,8 +166,8 @@ function renderDetails(c: Commit): string {
     return lines.join('\n');
 }
 
-function renderGraph(raw: string, currentShort: string): string {
-    if (!raw.trim()) return '{gray-fg}(empty graph){/gray-fg}';
+function renderGraph(raw: string, currentShort: string): { content: string; matchLine: number } {
+    if (!raw.trim()) return { content: '{gray-fg}(empty graph){/gray-fg}', matchLine: -1 };
     const railSwap = (s: string): string =>
         s
             .replace(/\*/g, '\u0001')
@@ -180,9 +181,10 @@ function renderGraph(raw: string, currentShort: string): string {
             .replace(/●/g, '{magenta-fg}{bold}●{/bold}{/magenta-fg}')
             .replace(/([│╱╲─])/g, '{cyan-fg}$1{/cyan-fg}');
 
-    return raw
+    let matchLine = -1;
+    const rendered = raw
         .split('\n')
-        .map((line) => {
+        .map((line, idx) => {
             const sepIdx = line.indexOf('\x1f');
             if (sepIdx < 0) {
                 return colorRails(railSwap(line));
@@ -208,6 +210,7 @@ function renderGraph(raw: string, currentShort: string): string {
             const content = `${hashOut}${refsOut}${subjOut}${metaOut}`;
 
             if (currentShort && hash === currentShort) {
+                if (matchLine < 0) matchLine = idx;
                 const stripped = `${hash}${refsRaw ? ' ' + refsRaw : ''} ${truncate(subject, 80)}${author ? ' · ' + author + ', ' + age : ''}`;
 
                 return `${railsOut}{yellow-bg}{black-fg}${escape(stripped)}{/black-fg}{/yellow-bg}`;
@@ -216,6 +219,8 @@ function renderGraph(raw: string, currentShort: string): string {
             return `${railsOut}${content}`;
         })
         .join('\n');
+
+    return { content: rendered, matchLine };
 }
 
 
@@ -252,22 +257,36 @@ async function viewCommitFileDiff(
     }
 }
 
-export async function gitLogDashboard(): Promise<void> {
+export interface GitLogDashboardOptions {
+    title?: string;
+    listLabel?: string;
+    logArgs?: string[];
+    graphArgs?: string[];
+    fmtFields?: string[];
+}
+
+const DEFAULT_FMT_FIELDS = ['%H', '%h', '%an', '%ae', '%ar', '%aI', '%D', '%s', '%b'];
+
+export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promise<void> {
+    const logArgs = opts.logArgs ?? ['log'];
+    const graphArgs = opts.graphArgs ?? ['log', '--all'];
+    const fmt = (opts.fmtFields ?? DEFAULT_FMT_FIELDS).join(FIELD_SEP);
+    const listLabel = opts.listLabel ?? 'commits';
     const [branch, topLevel, graphRaw] = await Promise.all([
         bash.execCommand(GIT_COMMANDS.GET_BRANCH).then((r) => r.stdout.trim()),
         bash.execCommand(GIT_COMMANDS.GET_TOP_LEVEL).then((r) => r.stdout.trim()),
-        loadGraph(300),
+        loadGraph(graphArgs, 300),
     ]);
 
     const commits: Commit[] = [];
 
 
-    const screen = createDashboardScreen({ title: `git log · ${branch}` });
+    const screen = createDashboardScreen({ title: opts.title ?? `git log · ${branch}` });
 
     const shell = createDashboardShell({
         screen,
-        listLabel: 'commits',
-        listFocusName: 'commits',
+        listLabel,
+        listFocusName: listLabel,
         listWidth: '40%',
         listItems: [],
         listTags: true,
@@ -348,7 +367,8 @@ export async function gitLogDashboard(): Promise<void> {
                 c.subject.toLowerCase().includes(q)
                 || c.author.toLowerCase().includes(q)
                 || c.hash.toLowerCase().includes(q)
-                || c.shortHash.toLowerCase().includes(q),
+                || c.shortHash.toLowerCase().includes(q)
+                || c.relDate.toLowerCase().includes(q),
             );
         }
         windowEnd = WINDOW_STEP;
@@ -375,9 +395,9 @@ export async function gitLogDashboard(): Promise<void> {
     let currentIdx = -1;
     let statSeq = 0;
     const statCache = new Map<string, string>();
-    const graphCache = new Map<string, string>();
+    const graphCache = new Map<string, { content: string; matchLine: number }>();
 
-    function cachedGraph(short: string): string {
+    function cachedGraph(short: string): { content: string; matchLine: number } {
         const hit = graphCache.get(short);
         if (hit !== undefined) return hit;
         const out = renderGraph(graphRaw, short);
@@ -390,6 +410,19 @@ export async function gitLogDashboard(): Promise<void> {
         return out;
     }
 
+    function centerGraphOn(matchLine: number): void {
+        if (matchLine < 0) {
+            graph.setScroll(0);
+
+            return;
+        }
+        const g = graph as unknown as { _clines?: { ftor?: number[][] }; iheight?: number };
+        const displayRow = g._clines?.ftor?.[matchLine]?.[0] ?? matchLine;
+        const boxHeight = typeof graph.height === 'number' ? graph.height : 0;
+        const visible = Math.max(1, boxHeight - (g.iheight ?? 2));
+        graph.setScroll(Math.max(0, displayRow - Math.floor(visible / 2)));
+    }
+
     async function selectIndex(i: number): Promise<void> {
         if (i < 0 || i >= displayed.length || i === currentIdx) return;
         currentIdx = i;
@@ -397,7 +430,9 @@ export async function gitLogDashboard(): Promise<void> {
         const c = displayed[i];
         details.setContent(renderDetails(c));
         details.setScrollPerc(0);
-        graph.setContent(cachedGraph(c.shortHash));
+        const rendered = cachedGraph(c.shortHash);
+        graph.setContent(rendered.content);
+        centerGraphOn(rendered.matchLine);
 
         const cached = statCache.get(c.hash);
         if (cached !== undefined) {
@@ -592,7 +627,7 @@ export async function gitLogDashboard(): Promise<void> {
         }, 200);
     }
 
-    void streamCommits((added, _total) => {
+    void streamCommits(logArgs, fmt, (added, _total) => {
         for (const c of added) commits.push(c);
         scheduleRefresh();
     }).then(() => {

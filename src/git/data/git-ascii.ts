@@ -41,6 +41,8 @@ export const gitAscii = `
             | create-branch          | 🌿  Pick a base branch, then create the new branch from an interactive flow.    |
             |------------------------|--------------------------------------------------------------------------------|
             | checkout               | ⏳  Switch branches with recent activity and commit context beside the list.    |
+            |------------------------|--------------------------------------------------------------------------------|
+            | reflog                 | 🧭  Browse the reflog in the same multi-pane dashboard as git log.              |
             +------------------------+--------------------------------------------------------------------------------+
 
             Use: kra git <command>

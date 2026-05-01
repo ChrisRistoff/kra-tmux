@@ -122,4 +122,14 @@ export const gitCommands: GitCommands = {
             'Keeps branch switching aligned with the git log dashboard feel.',
         ],
     },
+    'reflog': {
+        run: git.browseReflog,
+        description: 'Browse the git reflog with commit context',
+        details: 'Inspect HEAD movement (checkouts, resets, commits, rebases) so you can recover lost work or understand recent history changes. Each entry shows a stat summary in the side panel.',
+        highlights: [
+            'Lists reflog entries with relative dates.',
+            'Side panel shows the commit stat for the highlighted entry.',
+            'Useful for finding commits orphaned by reset or rebase.',
+        ],
+    },
 };
