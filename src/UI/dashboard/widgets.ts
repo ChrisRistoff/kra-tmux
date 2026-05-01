@@ -196,6 +196,7 @@ export interface DashboardTextPanelOptions {
     keys?: boolean;
     vi?: boolean;
     mouse?: boolean;
+    wrap?: boolean;
 }
 
 export function createDashboardTextPanel(
@@ -218,6 +219,7 @@ export function createDashboardTextPanel(
         keys: opts.keys ?? true,
         vi: opts.vi ?? true,
         mouse: opts.mouse ?? true,
+        wrap: opts.wrap ?? true,
         border: { type: 'line' },
         style: { border: { fg: opts.borderColor ?? 'gray' }, fg: 'white', bg: 'black' },
         content: opts.content ?? '',
