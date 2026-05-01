@@ -59,6 +59,7 @@ export interface DashboardShellPanelOptions {
     bottom?: Dimension;
     borderColor?: string;
     scrollbarColor?: string;
+    wrap?: boolean;
 }
 
 export interface DashboardShellOptions {
@@ -145,6 +146,7 @@ export function createDashboardShell(opts: DashboardShellOptions): DashboardShel
             borderColor: panel.borderColor ?? color.border,
             scrollbarColor: panel.scrollbarColor ?? color.scrollbar,
             tags: panel.tags ?? true,
+            wrap: panel.wrap ?? true,
             content: panel.content ?? '',
         });
     });

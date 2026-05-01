@@ -123,21 +123,21 @@ export async function modalConfirm(
             top: 'center',
             left: 'center',
             width: '60%',
-            height: 9,
+            height: 11,
             border: { type: 'line' },
             tags: true,
             style: { border: { fg: 'red' }, bg: 'black' },
         });
         blessed.box({
             parent: box,
-            top: 1, left: 2, right: 2, height: 2,
+            top: 1, left: 2, right: 2, height: 3,
             tags: true,
             style: { bg: 'black' },
             content: escTag(prompt),
         });
         const yesBtn = blessed.box({
             parent: box,
-            top: 4, left: '20%', width: 12, height: 3,
+            top: 5, left: '25%-7', width: 14, height: 3,
             tags: true,
             border: { type: 'line' },
             content: '{center}{bold}Yes{/bold}{/center}',
@@ -145,7 +145,7 @@ export async function modalConfirm(
         });
         const noBtn = blessed.box({
             parent: box,
-            top: 4, right: '20%', width: 12, height: 3,
+            top: 5, left: '75%-7', width: 14, height: 3,
             tags: true,
             border: { type: 'line' },
             content: '{center}{bold}No{/bold}{/center}',

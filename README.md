@@ -320,7 +320,7 @@ Comprehensive sync with detailed console output showing pruned branches, fetched
 <details>
 <summary>📜 <strong>kra git log</strong> - Enhanced commit navigation</summary>
 
-Rich Git log interface in Neovim with optimized formatting and keyboard navigation shortcuts.
+Rich Git log interface in Neovim with optimized formatting and keyboard navigation shortcuts. Press `c` on the highlighted commit to open the interactive cherry-pick menu (apply / --edit / -x / --no-commit / preview commit / preview files / cancel); on conflicts you drop into an in-place resolver that lists conflicted files with status indicators, opens each file in `nvim -c Gvdiffsplit!`, and offers continue / skip / abort actions. `A` aborts an in-progress cherry-pick from the dashboard, and `B` scopes the view to a specific branch (or back to all).
 
 ![log](docs-assets/git/git-log.gif)
 </details>
@@ -384,7 +384,7 @@ Date-filtered branch selection with automatic stash handling, conflict detection
 <details>
 <summary>🧭 <strong>kra git reflog</strong> - Recover lost work from HEAD movements</summary>
 
-Reuses the multi-pane log dashboard against `git reflog`, so each entry (checkout / reset / rebase / commit) shows its full commit context, stat summary, and changed files in side panels. Useful for finding commits orphaned by a reset, rebase, or accidental branch delete.
+Reuses the multi-pane log dashboard against `git reflog`, so each entry (checkout / reset / rebase / commit) shows its full commit context, stat summary, and changed files in side panels. Useful for finding commits orphaned by a reset, rebase, or accidental branch delete. Inherits the dashboard keymaps, including the interactive cherry-pick menu on `c` (with the in-place conflict resolver), `A` to abort an in-progress cherry-pick, and `B` to scope the reflog to a specific branch.
 </details>
 
 ---

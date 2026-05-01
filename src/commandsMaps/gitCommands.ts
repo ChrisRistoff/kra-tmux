@@ -50,6 +50,8 @@ export const gitCommands: GitCommands = {
             'Optimized for reading recent history and investigating what changed.',
             'Shows meaningful context beside the commit list instead of a flat picker.',
             'Acts as the interaction baseline for the shared dashboard shell.',
+            'Press `c` to open an interactive cherry-pick menu (apply, --edit, -x, --no-commit, preview commit, preview files, cancel) for the highlighted commit; conflicts drop into an in-place resolver with per-file nvim diff editing and continue/skip/abort actions, and `A` aborts an in-progress cherry-pick from the dashboard.',
+            'Press `B` to scope the view to a specific branch (or back to all).',
         ],
     },
     'stash': {
@@ -130,6 +132,8 @@ export const gitCommands: GitCommands = {
             'Lists reflog entries with relative dates.',
             'Side panel shows the commit stat for the highlighted entry.',
             'Useful for finding commits orphaned by reset or rebase.',
+            'Press `c` to open the interactive cherry-pick menu for the highlighted reflog entry (with conflict resolver and continue/skip/abort), and `A` to abort an in-progress cherry-pick.',
+            'Press `B` to scope the reflog to a specific branch.',
         ],
     },
 };
