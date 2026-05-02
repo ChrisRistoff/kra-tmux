@@ -5,31 +5,26 @@
  * timestamp) so the worker can skip pages whose content hasn't changed since
  * the last successful crawl.
  *
- * Lives at `<repo>/.kra-memory/docs-state.json`. Owned exclusively by the
- * coordinator process — workers receive their slice of `knownPages` over
- * stdin and never touch the file directly.
+ * Lives at `~/.kra/.kra-memory/docs/docs-state.json` (global — docs are
+ * shared across repos). Owned exclusively by the coordinator process —
+ * workers receive their slice of `knownPages` over stdin and never touch
  */
 
-import fs from 'fs';
-import path from 'path';
-
-import { memoryDirectoryRoot } from '../memory/db';
+import fs from 'fs/promises';
+import { kraDocsRoot, kraDocsStatePath } from '@/filePaths';
 import type { DocsStateFile, DocsPageState } from './types';
 import { pageStateKey } from './types';
 
 const STATE_VERSION = 1;
 
 export function docsStateFilePath(): string {
-    return path.join(memoryDirectoryRoot(), 'docs-state.json');
+    return kraDocsStatePath;
 }
 
-export function loadDocsState(): DocsStateFile {
+export async function loadDocsState(): Promise<DocsStateFile> {
     const fp = docsStateFilePath();
     try {
-        if (!fs.existsSync(fp)) {
-            return { version: STATE_VERSION, pages: {} };
-        }
-        const raw = fs.readFileSync(fp, 'utf-8');
+        const raw = await fs.readFile(fp, 'utf-8');
         const parsed = JSON.parse(raw) as DocsStateFile;
         if (!parsed || typeof parsed !== 'object' || parsed.version !== STATE_VERSION || !parsed.pages) {
             return { version: STATE_VERSION, pages: {} };
@@ -37,16 +32,19 @@ export function loadDocsState(): DocsStateFile {
 
         return parsed;
     } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+            return { version: STATE_VERSION, pages: {} };
+        }
         console.error('docs-state: failed to load, starting fresh:', err);
 
         return { version: STATE_VERSION, pages: {} };
     }
 }
 
-export function saveDocsState(state: DocsStateFile): void {
+export async function saveDocsState(state: DocsStateFile): Promise<void> {
     try {
-        fs.mkdirSync(memoryDirectoryRoot(), { recursive: true });
-        fs.writeFileSync(docsStateFilePath(), JSON.stringify(state, null, 2));
+        await fs.mkdir(kraDocsRoot, { recursive: true });
+        await fs.writeFile(docsStateFilePath(), JSON.stringify(state, null, 2));
     } catch (err) {
         console.error('docs-state: failed to save:', err);
     }

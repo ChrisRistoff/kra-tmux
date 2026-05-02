@@ -67,7 +67,7 @@ export async function manageDocs(): Promise<void> {
             items.push('List configured sources');
             items.push('Re-index all sources');
 
-            const live = coordinatorAlive() || readSnapshot() !== null;
+            const live = (await coordinatorAlive()) || (await readSnapshot()) !== null;
             items.push(live ? 'Live crawl progress' : 'Live crawl progress (no active crawl)');
             items.push(live ? 'Stop coordinator' : 'Stop coordinator (not running)');
 

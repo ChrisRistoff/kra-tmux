@@ -47,5 +47,18 @@ export const crawl4aiVenvDir = path.join(root, 'crawl4ai-venv');
 export const crawl4aiVenvPython = path.join(crawl4aiVenvDir, 'bin', 'python');
 export const crawl4aiInstalledMarker = path.join(crawl4aiVenvDir, '.installed');
 
+// Centralized kra-memory storage (registry + per-repo lance + global docs).
+export const kraMemoryRoot = path.join(root, '.kra-memory');
+export const kraMemoryRegistryPath = path.join(kraMemoryRoot, 'registry.json');
+export function kraMemoryRepoRoot(repoKey: string): string {
+    return path.join(kraMemoryRoot, 'repos', repoKey);
+}
+
+// Global docs storage shared by all repos (doc_chunks LanceDB table + crawl state).
+export const kraDocsRoot = path.join(kraMemoryRoot, 'docs');
+export const kraDocsLanceRoot = path.join(kraDocsRoot, 'lance');
+export const kraDocsStatePath = path.join(kraDocsRoot, 'docs-state.json');
+export const kraDocsStatusPath = path.join(kraDocsRoot, 'docs-status.json');
+
 // Re-export for backwards compatibility — actual location is packagePaths.ts
 export { loadSessionWorkerPath } from './packagePaths';

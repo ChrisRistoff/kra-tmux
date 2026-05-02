@@ -12,20 +12,18 @@
 //      streaming JSONL to its stdout. The coordinator parses each line as
 //      a `DocsWorkerMessage` and ingests `page-fetched` events.
 //   5. Status snapshot is written to
-//      `<repo>/.kra-memory/docs-status.json` every 2 s for the
-//      `kra ai docs` live progress screen (no IPC reply path needed).
+//      `~/.kra/.kra-memory/docs/docs-status.json` every 2 s for the
 //   6. After the queue drains and stays empty for `idleTimeoutMs`, the
 //      coordinator releases the lock, removes the status file, and exits.
 
 import 'module-alias/register';
 
 import fs from 'fs';
-import path from 'path';
 import readline from 'readline';
 import { spawn } from 'child_process';
 
 import { loadSettings } from '@/utils/common';
-import { crawl4aiInstalledMarker, crawl4aiVenvPython } from '@/filePaths';
+import { crawl4aiInstalledMarker, crawl4aiVenvPython, kraDocsRoot, kraDocsStatusPath } from '@/filePaths';
 import { docsPythonWorkerPath } from '@/packagePaths';
 import { createIPCServer, IPCsockets, type IPCServer } from '../../../../../eventSystem/ipc';
 import {
@@ -43,7 +41,6 @@ import {
     applyPageSkipped,
     dropAliasState,
 } from './state';
-import { memoryDirectoryRoot } from '../memory/db';
 import type {
     DocsClientMessage,
     DocsSourcePhase,
@@ -61,7 +58,7 @@ const STATUS_FLUSH_MS = 2_000;
 
 interface QueueEntry extends DocsSourceRequest {}
 
-const docsState: DocsStateFile = loadDocsState();
+let docsState: DocsStateFile = { version: 1, pages: {} };
 
 const queue: QueueEntry[] = [];
 const enqueuedAliases = new Set<string>();
@@ -78,10 +75,10 @@ const startedAt = Date.now();
 let shuttingDown = false;
 
 function statusFilePath(): string {
-    return path.join(memoryDirectoryRoot(), 'docs-status.json');
+    return kraDocsStatusPath;
 }
 
-function writeStatusFile(): void {
+async function writeStatusFile(): Promise<void> {
     try {
         const snapshot: DocsStatusFile = {
             coordinatorPid: process.pid,
@@ -89,16 +86,16 @@ function writeStatusFile(): void {
             updatedAt: Date.now(),
             sources: Array.from(statuses.values()),
         };
-        fs.mkdirSync(memoryDirectoryRoot(), { recursive: true });
-        fs.writeFileSync(statusFilePath(), JSON.stringify(snapshot, null, 2));
+        await fs.promises.mkdir(kraDocsRoot, { recursive: true });
+        await fs.promises.writeFile(statusFilePath(), JSON.stringify(snapshot, null, 2));
     } catch (err) {
         console.error('docs-coordinator: failed to write status file', err);
     }
 }
 
-function removeStatusFile(): void {
+async function removeStatusFile(): Promise<void> {
     try {
-        if (fs.existsSync(statusFilePath())) fs.unlinkSync(statusFilePath());
+        await fs.promises.unlink(statusFilePath());
     } catch { /* ignore */ }
 }
 
@@ -359,7 +356,7 @@ async function handleWorkerLine(req: DocsSourceRequest, line: string): Promise<v
             status.phase = 'done';
             status.finishedAt = Date.now();
             status.pagesDone = msg.summary.pagesScraped + msg.summary.pagesSkipped;
-            saveDocsState(docsState);
+            await saveDocsState(docsState);
 
             return;
         }
@@ -402,7 +399,7 @@ function shutdown(code: number): void {
     try { server?.close(); } catch { /* ignore */ }
 
     deleteLockFile(LockFiles.DocsWriteInProgress).finally(() => {
-        removeStatusFile();
+        void removeStatusFile();
         process.exit(code);
     });
 }
@@ -418,6 +415,7 @@ async function main(): Promise<void> {
     }
 
     const settings = await loadSettings();
+    docsState = await loadDocsState();
     const docsCfg = settings.ai?.docs;
     maxConcurrent = Math.max(1, docsCfg?.maxConcurrentSources ?? DEFAULT_MAX_CONCURRENT);
     idleTimeoutMs = Math.max(5_000, docsCfg?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS);
@@ -428,9 +426,9 @@ async function main(): Promise<void> {
     }, LOCK_REFRESH_MS);
     lockRefreshTimer.unref();
 
-    statusFlushTimer = setInterval(() => writeStatusFile(), STATUS_FLUSH_MS);
+    statusFlushTimer = setInterval(() => { void writeStatusFile(); }, STATUS_FLUSH_MS);
     statusFlushTimer.unref();
-    writeStatusFile();
+    void writeStatusFile();
 
     server = createIPCServer(IPCsockets.DocsCoordinatorSocket);
     await server.addListener((event) => handleClientMessage(event));
