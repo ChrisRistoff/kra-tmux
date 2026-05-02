@@ -10,6 +10,8 @@ import {
     upsertRegistryEntry,
     type RegistryEntry,
 } from '@/AI/AIAgent/shared/memory/registry';
+import { computeRepoKey } from '@/AI/AIAgent/shared/memory/repoKey';
+import { kraMemoryRepoRoot } from '@/filePaths';
 import {
     listMemories,
     deleteMemory,
@@ -98,14 +100,15 @@ async function loadState(): Promise<DashState> {
     }
     const repoFiles: Record<string, { path: string; chunks: number }[]> = {};
     for (const r of repos) {
-        repoFiles[r.id] = await loadRepoFiles(r.entry.rootPath);
+        repoFiles[r.id] = await loadRepoFiles(r.entry);
     }
 
     return { repos, findings, revisits, repoFiles };
 }
 
-async function loadRepoFiles(repoRoot: string): Promise<{ path: string; chunks: number }[]> {
-    const lanceRoot = path.join(repoRoot, '.kra-memory', 'lance');
+async function loadRepoFiles(entry: { repoKey?: string; rootPath: string; id?: string }): Promise<{ path: string; chunks: number }[]> {
+    const repoKey = entry.repoKey ?? (entry.id ? computeRepoKey(entry.id) : computeRepoKey(entry.rootPath));
+    const lanceRoot = path.join(kraMemoryRepoRoot(repoKey), 'lance');
     try {
         const db = await lancedb.connect(lanceRoot);
         const names = await db.tableNames();
@@ -350,10 +353,9 @@ async function editInVim(
 
     return out;
 }
-
-
-async function dropCodeChunksAt(repoRoot: string): Promise<boolean> {
-    const lanceRoot = path.join(repoRoot, '.kra-memory', 'lance');
+async function dropCodeChunksAt(entry: { repoKey?: string; rootPath: string; id?: string }): Promise<boolean> {
+    const repoKey = entry.repoKey ?? (entry.id ? computeRepoKey(entry.id) : computeRepoKey(entry.rootPath));
+    const lanceRoot = path.join(kraMemoryRepoRoot(repoKey), 'lance');
     try {
         const db = await lancedb.connect(lanceRoot);
         const names = await db.tableNames();
@@ -611,7 +613,7 @@ export async function manageMemoryDashboard(): Promise<void> {
                 const ok = await modalConfirm(screen, 'Drop index',
                     `Drop code_chunks for '${e.alias}' AND remove registry entry? Long-term memories untouched.`);
                 if (ok) {
-                    const dropped = await dropCodeChunksAt(e.rootPath);
+                    const dropped = await dropCodeChunksAt(e);
                     await removeRegistryEntry(id);
                     await reloadAll();
                     flash(dropped ? 'dropped + removed' : 'no chunks; registry cleared');
@@ -800,7 +802,7 @@ export async function manageMemoryDashboard(): Promise<void> {
             const ok = await modalConfirm(screen, 'Drop index',
                 `Drop code_chunks for '${e.alias}' AND remove registry entry?`);
             if (ok) {
-                const dropped = await dropCodeChunksAt(e.rootPath);
+                const dropped = await dropCodeChunksAt(e);
                 await removeRegistryEntry(row.node.id);
                 await reloadAll();
                 flash(dropped ? 'dropped + removed' : 'registry cleared');

@@ -1,12 +1,11 @@
 /**
  * Live progress dashboard for `kra ai docs`.
  *
- * Polls `<repo>/.kra-memory/docs-status.json` every ~500 ms and renders the
+ * Polls `~/.kra/.kra-memory/docs/docs-status.json` every ~500 ms and renders the
  * crawl through the shared dashboard shell so it matches the rest of the UI.
  */
 
 import fs from 'fs';
-import path from 'path';
 import blessed from 'blessed';
 
 import {
@@ -17,26 +16,26 @@ import {
     createDashboardShell,
     escTag,
 } from '@/UI/dashboard';
-import { memoryDirectoryRoot } from '@/AI/AIAgent/shared/memory/db';
+import { kraDocsStatusPath } from '@/filePaths';
 import { createIPCClient, IPCsockets } from '../../../../../eventSystem/ipc';
 import type { DocsStatusFile, DocsSourceStatus } from './types';
 
 export function statusFilePath(): string {
-    return path.join(memoryDirectoryRoot(), 'docs-status.json');
+    return kraDocsStatusPath;
 }
 
-export function readSnapshot(): DocsStatusFile | null {
+export async function readSnapshot(): Promise<DocsStatusFile | null> {
     const file = statusFilePath();
-    if (!fs.existsSync(file)) return null;
     try {
         return JSON.parse(fs.readFileSync(file, 'utf8')) as DocsStatusFile;
-    } catch {
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
         return null;
     }
 }
 
-export function coordinatorAlive(): boolean {
-    const snap = readSnapshot();
+export async function coordinatorAlive(): Promise<boolean> {
+    const snap = await readSnapshot();
     if (!snap) return false;
     try {
         process.kill(snap.coordinatorPid, 0);
@@ -199,8 +198,8 @@ export async function showLiveProgress(): Promise<void> {
         if (eventLines.length === 0) eventsPanel.setContent('{gray-fg}Waiting for crawl events...{/gray-fg}');
     };
 
-    const refresh = (): void => {
-        currentSnapshot = readSnapshot();
+    const refresh = async (): Promise<void> => {
+        currentSnapshot = await readSnapshot();
         if (!currentSnapshot) {
             currentSources = [];
             list.clearItems();
@@ -234,7 +233,7 @@ export async function showLiveProgress(): Promise<void> {
             lastByAlias = indexByAlias(currentSources);
         }
 
-        const alive = coordinatorAlive();
+        const alive = await coordinatorAlive();
         const active = currentSources.filter((source) => source.phase === 'crawling' || source.phase === 'embedding').length;
         header.setContent(
             ` {magenta-fg}{bold}◆ kra-docs{/bold}{/magenta-fg}` +
@@ -276,7 +275,7 @@ export async function showLiveProgress(): Promise<void> {
     });
     attachFocusCycleKeys(screen, ring);
 
-    const tick = setInterval(refresh, 500);
+    const tick = setInterval(() => { void refresh(); }, 500);
     screen.key(['q', 'escape', 'C-c'], () => {
         clearInterval(tick);
         try { screen.destroy(); } catch { /* noop */ }
@@ -293,7 +292,7 @@ export async function showLiveProgress(): Promise<void> {
         }
     });
 
-    refresh();
+    await refresh();
     list.focus();
     screen.render();
     await awaitScreenDestroy(screen);

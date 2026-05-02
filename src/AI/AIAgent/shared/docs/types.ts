@@ -7,7 +7,7 @@
 //     (one `DocsWorkerMessage` per line). Workers are spawned as child
 //     processes by the coordinator, so stdout is read directly.
 //   - Coordinator -> CLI status: read from a periodically-written status
-//     file at `<repo>/.kra-memory/docs-status.json`. No reply channel on
+//     file at `~/.kra/.kra-memory/docs/docs-status.json`. No reply channel on
 //     the IPC socket itself.
 
 export type DocsSourceRequest = {
@@ -89,7 +89,7 @@ export type DocsPageState = {
     chunkCount: number,
 };
 
-// Persisted to <repo>/.kra-memory/docs-state.json.
+// Persisted to ~/.kra/.kra-memory/docs/docs-state.json (global).
 export type DocsStateFile = {
     version: 1,
     pages: Record<string, DocsPageState>,

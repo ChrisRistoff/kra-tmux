@@ -31,7 +31,7 @@ export async function startWatcher(): Promise<WatcherHandle | null> {
         if (rel === '' || rel.startsWith('..')) return false;
 
         // Ignore directories that shouldn't be traversed even partially.
-        if (rel.split(path.sep).some((p) => p === 'node_modules' || p === '.git' || p === '.kra-memory' || p === 'dest' || p === 'dist')) {
+        if (rel.split(path.sep).some((p) => p === 'node_modules' || p === '.git' || p === 'dest' || p === 'dist')) {
             return true;
         }
 

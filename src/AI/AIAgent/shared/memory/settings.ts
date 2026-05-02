@@ -31,7 +31,6 @@ const DEFAULT_EXCLUDE_GLOBS = [
     'build/**',
     'coverage/**',
     '.git/**',
-    '.kra-memory/**',
     '.next/**',
     '.cache/**',
     '**/*.min.js',

@@ -1,27 +1,31 @@
 /**
  * Central registry of code-indexed repositories.
  *
- * Lives at `~/.kra-memory/registry.json`. Each entry is keyed by a stable
+ * Lives at `~/.kra/.kra-memory/registry.json`. Each entry is keyed by a stable
  * repo identity (git origin URL when available, falling back to the absolute
  * top-level path) and records the metadata the agent needs to decide whether
  * to re-index, what to catch up, and how to label the repo in the UI.
  *
- * The actual code-chunks LanceDB still lives at `${repoRoot}/.kra-memory/`
- * and is opened per-cwd by `db.ts` — this registry is pure metadata, not the
- * data store.
+ * The actual code-chunks LanceDB lives at
+ * `~/.kra/.kra-memory/repos/<repoKey>/lance/` and is opened via `db.ts`.
+ * `repoKey` is mirrored on each entry so the dashboard can map id → storage
+ * dir without recomputing.
  */
 
-import os from 'os';
 import path from 'path';
 import * as fs from 'fs/promises';
 import { atomicWriteFile } from '@/AI/AIAgent/shared/utils/fileSafety';
 import { execCommand } from '@/utils/bashHelper';
+import { kraMemoryRegistryPath, kraMemoryRoot } from '@/filePaths';
+import { computeRepoKey } from './repoKey';
 
 export interface RegistryEntry {
     /** Display alias (basename of repo by default; user-editable later). */
     alias: string;
     /** Absolute top-level path of the repo on this machine. */
     rootPath: string;
+    /** Central storage key for the repo (sha256(identity)[:16]). */
+    repoKey: string;
     /** Last commit SHA the index was synced against. Empty for non-git repos. */
     lastIndexedCommit: string;
     /** Epoch-ms of the most recent index/catch-up. */
@@ -38,11 +42,11 @@ export interface Registry {
 const EMPTY_REGISTRY: Registry = { version: 1, repos: {} };
 
 function registryRoot(): string {
-    return path.join(os.homedir(), '.kra-memory');
+    return kraMemoryRoot;
 }
 
 function registryPath(): string {
-    return path.join(registryRoot(), 'registry.json');
+    return kraMemoryRegistryPath;
 }
 
 /**
@@ -112,11 +116,12 @@ export async function upsertRegistryEntry(
     const existing = reg.repos[id];
 
     const next: RegistryEntry = {
-        alias: patch.alias ?? existing.alias ?? id,
-        rootPath: patch.rootPath ?? existing.rootPath ?? '',
-        lastIndexedCommit: patch.lastIndexedCommit ?? existing.lastIndexedCommit ?? '',
-        lastIndexedAt: patch.lastIndexedAt ?? existing.lastIndexedAt ?? 0,
-        chunksCount: patch.chunksCount ?? existing.chunksCount ?? 0,
+        alias: patch.alias ?? existing?.alias ?? id,
+        rootPath: patch.rootPath ?? existing?.rootPath ?? '',
+        repoKey: patch.repoKey ?? existing?.repoKey ?? computeRepoKey(id),
+        lastIndexedCommit: patch.lastIndexedCommit ?? existing?.lastIndexedCommit ?? '',
+        lastIndexedAt: patch.lastIndexedAt ?? existing?.lastIndexedAt ?? 0,
+        chunksCount: patch.chunksCount ?? existing?.chunksCount ?? 0,
     };
 
     reg.repos[id] = next;

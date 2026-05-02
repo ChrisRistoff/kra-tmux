@@ -2,6 +2,22 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+const tmpDocsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kra-docs-state-global-'));
+const tmpDocsStatePath = path.join(tmpDocsRoot, 'docs-state.json');
+const tmpDocsStatusPath = path.join(tmpDocsRoot, 'docs-status.json');
+const tmpDocsLanceRoot = path.join(tmpDocsRoot, 'lance');
+
+jest.mock('@/filePaths', () => {
+    const actual = jest.requireActual('@/filePaths');
+    return {
+        ...actual,
+        kraDocsRoot: tmpDocsRoot,
+        kraDocsStatePath: tmpDocsStatePath,
+        kraDocsStatusPath: tmpDocsStatusPath,
+        kraDocsLanceRoot: tmpDocsLanceRoot,
+    };
+});
+
 import {
     docsStateFilePath,
     loadDocsState,
@@ -16,22 +32,13 @@ import {
 } from '@/AI/AIAgent/shared/docs/state';
 import type { DocsStateFile } from '@/AI/AIAgent/shared/docs/types';
 
-let tmpRoot: string;
-let prevWorkingDir: string | undefined;
-
 beforeEach(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kra-docs-state-'));
-    prevWorkingDir = process.env['WORKING_DIR'];
-    process.env['WORKING_DIR'] = tmpRoot;
+    fs.rmSync(tmpDocsRoot, { recursive: true, force: true });
+    fs.mkdirSync(tmpDocsRoot, { recursive: true });
 });
 
-afterEach(() => {
-    if (prevWorkingDir === undefined) {
-        delete process.env['WORKING_DIR'];
-    } else {
-        process.env['WORKING_DIR'] = prevWorkingDir;
-    }
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+afterAll(() => {
+    fs.rmSync(tmpDocsRoot, { recursive: true, force: true });
 });
 
 function freshState(): DocsStateFile {
@@ -39,13 +46,13 @@ function freshState(): DocsStateFile {
 }
 
 describe('docs state I/O', () => {
-    it('loadDocsState returns empty when file is missing', () => {
-        const state = loadDocsState();
+    it('loadDocsState returns empty when file is missing', async () => {
+        const state = await loadDocsState();
         expect(state).toEqual({ version: 1, pages: {} });
         expect(fs.existsSync(docsStateFilePath())).toBe(false);
     });
 
-    it('round-trips through save/load', () => {
+    it('round-trips through save/load', async () => {
         const state = freshState();
         setPageState(state, 'aws', 'https://aws/foo', {
             etag: 'W/"abc"',
@@ -54,10 +61,10 @@ describe('docs state I/O', () => {
             chunkCount: 3,
             lastIndexedAt: 1700000000000,
         });
-        saveDocsState(state);
+        await saveDocsState(state);
 
         expect(fs.existsSync(docsStateFilePath())).toBe(true);
-        const reloaded = loadDocsState();
+        const reloaded = await loadDocsState();
         expect(reloaded.version).toBe(1);
         expect(getPageState(reloaded, 'aws', 'https://aws/foo')).toEqual({
             etag: 'W/"abc"',
@@ -68,21 +75,23 @@ describe('docs state I/O', () => {
         });
     });
 
-    it('loadDocsState resets when version mismatches', () => {
-        fs.mkdirSync(path.dirname(docsStateFilePath()), { recursive: true });
+    it('loadDocsState resets when version mismatches', async () => {
+        const fp = docsStateFilePath();
+        fs.mkdirSync(path.dirname(fp), { recursive: true });
         fs.writeFileSync(
-            docsStateFilePath(),
+            fp,
             JSON.stringify({ version: 99, pages: { 'x|y': { pageHash: 'h', chunkCount: 1, lastIndexedAt: 0 } } }),
         );
-        const state = loadDocsState();
+        const state = await loadDocsState();
         expect(state.pages).toEqual({});
     });
 
-    it('loadDocsState recovers gracefully from corrupt JSON', () => {
-        fs.mkdirSync(path.dirname(docsStateFilePath()), { recursive: true });
-        fs.writeFileSync(docsStateFilePath(), '{not json');
+    it('loadDocsState recovers gracefully from corrupt JSON', async () => {
+        const fp = docsStateFilePath();
+        fs.mkdirSync(path.dirname(fp), { recursive: true });
+        fs.writeFileSync(fp, '{not json');
         const errSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-        const state = loadDocsState();
+        const state = await loadDocsState();
         expect(state).toEqual({ version: 1, pages: {} });
         errSpy.mockRestore();
     });

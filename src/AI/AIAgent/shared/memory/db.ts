@@ -1,27 +1,30 @@
 /**
- * LanceDB connection for the kra-memory layer.
+ * LanceDB connections for the kra-memory layer.
  *
- * Storage layout:
- *   <repo>/.kra-memory/lance/        ← LanceDB datasets (one dir per table)
+ * Storage layout (centralized under ~/.kra/.kra-memory):
+ *   ~/.kra/.kra-memory/repos/<repoKey>/lance/   ← per-repo: code_chunks, memory_findings, memory_revisits
+ *   ~/.kra/.kra-memory/docs/lance/              ← global: doc_chunks (shared by all repos)
  *
- * `<repo>` is resolved from `WORKING_DIR` (set by the spawning provider when
- * the MCP server is launched as a child process) or `process.cwd()` for direct
- * tests.
+ * <repoKey> is sha256(identity)[:16] where identity is the git origin URL
+ * (preferred) or the absolute repo top-level path. Resolved once per
+ * process via `resolveRepoStorage()` from WORKING_DIR/cwd.
  *
- * The `memory` table is created lazily on the first write. We do this rather
- * than declaring an Arrow schema up front so we can rely on LanceDB's
- * row-based schema inference and keep the table-management code small.
+ * Tables are created lazily on first write. We rely on LanceDB's row-based
+ * schema inference rather than declaring an Arrow schema up front.
  */
 
 import path from 'path';
 import { connect, type Connection, type Table } from '@lancedb/lancedb';
 import type { CodeChunkRow, MemoryRow } from './types';
 import type { DocChunkRow } from '../docs/types';
+import { _resetRepoStorageCacheForTest, resolveRepoStorage } from './repoKey';
+import { kraDocsLanceRoot, kraDocsRoot } from '@/filePaths';
 
 const MEMORY_FINDINGS_TABLE = 'memory_findings';
 const MEMORY_REVISITS_TABLE = 'memory_revisits';
 
 let dbCache: Connection | null = null;
+let docsDbCache: Connection | null = null;
 let memoryFindingsTableCache: Table | null = null;
 let memoryRevisitsTableCache: Table | null = null;
 let codeChunksTableCache: Table | null = null;
@@ -32,14 +35,14 @@ const DOC_CHUNKS_TABLE = 'doc_chunks';
 const LEGACY_MEMORY_TABLE = 'memory';
 let legacyDropAttempted = false;
 
-function memoryRoot(): string {
-    const cwd = process.env['WORKING_DIR'] ?? process.cwd();
+async function memoryRoot(): Promise<string> {
+    const info = await resolveRepoStorage();
 
-    return path.join(cwd, '.kra-memory');
+    return info.repoStorageDir;
 }
 
-function lanceRoot(): string {
-    return path.join(memoryRoot(), 'lance');
+async function lanceRoot(): Promise<string> {
+    return path.join(await memoryRoot(), 'lance');
 }
 
 async function getDb(): Promise<Connection> {
@@ -47,8 +50,7 @@ async function getDb(): Promise<Connection> {
         return dbCache;
     }
 
-    dbCache = await connect(lanceRoot());
-
+    dbCache = await connect(await lanceRoot());
     if (!legacyDropAttempted) {
         legacyDropAttempted = true;
         try {
@@ -62,6 +64,16 @@ async function getDb(): Promise<Connection> {
     }
 
     return dbCache;
+}
+
+async function getDocsDb(): Promise<Connection> {
+    if (docsDbCache) {
+        return docsDbCache;
+    }
+
+    docsDbCache = await connect(kraDocsLanceRoot);
+
+    return docsDbCache;
 }
 
 let mutex: Promise<unknown> = Promise.resolve();
@@ -136,19 +148,32 @@ export async function getRevisitsTable(seedRow: MemoryRow | null): Promise<GetMe
  */
 export function _resetCachesForTest(): void {
     dbCache = null;
+    docsDbCache = null;
     memoryFindingsTableCache = null;
     memoryRevisitsTableCache = null;
     codeChunksTableCache = null;
+    docChunksTableCache = null;
     legacyDropAttempted = false;
+    _resetRepoStorageCacheForTest();
 }
 
 /**
- * Returns the LanceDB root directory used by the memory layer.
- * Resolved relative to `WORKING_DIR` (set by the parent process when the MCP
- * server is spawned) or `process.cwd()` for direct calls.
+ * Returns the central per-repo storage root used by the kra-memory layer
+ * (`~/.kra/.kra-memory/repos/<repoKey>/`). The repo identity is resolved
+ * from `WORKING_DIR` (set by the parent process when the MCP server is
+ * spawned) or `process.cwd()` for direct calls.
  */
-export function memoryDirectoryRoot(): string {
+export async function memoryDirectoryRoot(): Promise<string> {
     return memoryRoot();
+}
+
+/**
+ * Returns the global docs storage root (`~/.kra/.kra-memory/docs/`).
+ * doc_chunks LanceDB, docs-state.json and docs-status.json are shared
+ * across all repos because external doc corpora are not repo-specific.
+ */
+export function docsDirectoryRoot(): string {
+    return kraDocsRoot;
 }
 
 export interface GetCodeChunksTableResult {
@@ -235,7 +260,7 @@ export async function getDocChunksTable(seedRow: DocChunkRow | null): Promise<Ge
             return { table: docChunksTableCache, justCreated: false };
         }
 
-        const db = await getDb();
+        const db = await getDocsDb();
         const tableNames = await db.tableNames();
 
         if (tableNames.includes(DOC_CHUNKS_TABLE)) {

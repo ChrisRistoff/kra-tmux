@@ -8,7 +8,7 @@
  *   4. Embed only new/changed chunks (batched, 32 per call)
  *   5. Upsert: delete old IDs for the file, then add new rows
  *
- * Storage lives at `<repo>/.kra-memory/lance/code_chunks.lance/`. Per-file
+ * Storage lives at `~/.kra/.kra-memory/repos/<repoKey>/lance/code_chunks.lance/`. Per-file
  * reindex is fast (30–150 ms typical) so the on-save watcher can call
  * `indexFile` without UI hitches.
  */
@@ -226,7 +226,7 @@ export function workspaceRoot(): string {
     return process.env['WORKING_DIR'] ?? process.cwd();
 }
 
-export function memoryDirectory(): string {
+export async function memoryDirectory(): Promise<string> {
     return memoryDirectoryRoot();
 }
 
@@ -279,7 +279,7 @@ async function walk(root: string, current: string): Promise<string[]> {
         const rel = path.relative(root, abs);
 
         if (entry.isDirectory()) {
-            if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.kra-memory') continue;
+            if (entry.name === '.git' || entry.name === 'node_modules') continue;
             out.push(...await walk(root, abs));
         } else if (entry.isFile()) {
             out.push(rel);
