@@ -1,4 +1,4 @@
-# Lean Crawl4AI dependency set used by `kra ai docs` (Setup menu entry).
+# Lean Crawl4AI dependency set used by `kra memory` (Docs sources setup entry).
 #
 # Installed into an isolated venv at ~/.kra/crawl4ai-venv/ so it never
 # touches the user's global Python. Total disk usage including

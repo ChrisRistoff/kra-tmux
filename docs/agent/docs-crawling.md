@@ -1,4 +1,4 @@
-# Documentation Crawling (`kra ai docs`)
+# Documentation Crawling (`kra memory`)
 
 Crawl public documentation sites, embed the resulting markdown with the same
 BGE-Small encoder used for `code_chunks`, and store the chunks in a new
@@ -9,7 +9,7 @@ LanceDB table (`doc_chunks`) so the agent can retrieve them via the same
 
 | Piece | Path | Purpose |
 |---|---|---|
-| `kra ai docs` | `src/AI/AIAgent/commands/manageDocs.ts` | Single interactive blessed menu: install Crawl4AI, list sources (with per-source actions), crawl all, watch live progress, stop coordinator. |
+| `kra memory` → Docs sources tab | `src/AI/AIAgent/commands/memory/dashboard.ts` + `src/AI/AIAgent/commands/memory/sections/docsSources.ts` | Interactive dashboard section: install Crawl4AI, list sources (with per-source actions), crawl all, watch live progress, stop coordinator. |
 | Setup helper | `src/AI/AIAgent/commands/docsSetup.ts` | `installCrawl4ai({force})` — programmatic installer for the isolated Python venv, called from the Setup menu entry. |
 | Coordinator | `src/AI/AIAgent/shared/docs/coordinator.ts` | Long-lived background process. Single LanceDB writer. Spawned on demand by `IPCClient.ensureServerRunning`. |
 | Worker | `automationScripts/python/kra_docs_worker.py` | Python child process per source. Runs Crawl4AI's deep crawl + content filter. Emits JSONL to stdout. |
@@ -20,7 +20,7 @@ LanceDB table (`doc_chunks`) so the agent can retrieve them via the same
 The Python venv is **not** installed by `npm install`. Run:
 
 ```
-kra ai docs        # interactive menu → "Setup Crawl4AI venv"
+kra memory        # dashboard → Docs sources tab → "Setup Crawl4AI venv"
 ```
 
 From the same menu, picking the entry again on an installed venv prompts to
@@ -88,7 +88,7 @@ the already-running coordinator.
 Single Unix socket at `/tmp/kra-docs.sock` (`IPCsockets.DocsCoordinatorSocket`).
 
 ```
-kra ai docs (Crawl)  ──emit JSON──▶ /tmp/kra-docs.sock ──▶ coordinator
+kra memory (Docs crawl)  ──emit JSON──▶ /tmp/kra-docs.sock ──▶ coordinator
                                                             │
                                                             ├─ spawn ─▶ python worker (alias=A)
                                                             ├─ spawn ─▶ python worker (alias=B)
@@ -145,7 +145,7 @@ semantic match quality on long, deeply-nested pages.
 
 ## Incremental updates
 
-Re-running `kra ai docs` → Crawl is cheap: state is tracked at
+Re-running `kra memory` docs crawls is cheap: state is tracked at
 `<repo>/.kra-memory/docs-state.json` (per-source, per-URL ETag, Last-Modified,
 content hash, lastIndexedAt) and three skip layers fire in order:
 
@@ -166,9 +166,9 @@ gitignored — it is a cache, not a source of truth.
 ### Forcing a full re-crawl
 
 ```
-kra ai docs                                          # interactive menu
-kra ai docs → source → Crawl this source              # incremental, single source
-kra ai docs → source → Crawl this source (--full)    # bypass all 3 skip layers
+kra memory                                            # dashboard
+kra memory → Docs sources → Re-index this source       # incremental, single source
+kra memory → Docs sources → Re-index this source(full) # bypass all 3 skip layers
 The sitemap-first discovery path is used whenever `<base>/sitemap.xml` or
 `/sitemap_index.xml` returns 200; otherwise the worker falls back to
 `BFSDeepCrawlStrategy` and the second/third layers still apply per fetched

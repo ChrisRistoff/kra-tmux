@@ -1,5 +1,5 @@
 /**
- * Vector search over the doc_chunks table populated by `kra ai docs`.
+ * Vector search over the doc_chunks table populated by `kra memory` docs indexing.
  *
  * Mirrors the shape of `semanticSearch` (memory/search.ts) but tuned for
  * documentation: it returns the actual chunk content (capped) rather than

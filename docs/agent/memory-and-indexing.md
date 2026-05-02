@@ -29,7 +29,7 @@ Within agent chat buffer:
 
 Agent memory reads (`recall` / memory-scoped `semantic_search`) are approval-intercepted, and only selected IDs are returned.
 
-CLI alternative for cross-repo memory management: `kra ai memory`.
+CLI alternative for cross-repo memory management: `kra memory`.
 
 ## Exposed MCP tools
 

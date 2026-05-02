@@ -1,7 +1,6 @@
 /**
  * Programmatic installer for the Crawl4AI Python venv used by the docs
- * pipeline. Called from `manageDocs()` (the interactive `kra ai docs` menu).
- * The user-facing disk-usage prompt lives in `manageDocs`; this function
+ * pipeline. Called from the unified `kra memory` dashboard (Docs sources tab).
  * just does the work and returns a structured result.
  *
  * Disk usage: ~507 MB total under `~/.kra/crawl4ai-venv/` (Python deps

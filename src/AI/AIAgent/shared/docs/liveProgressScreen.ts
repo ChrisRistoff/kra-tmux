@@ -1,5 +1,5 @@
 /**
- * Live progress dashboard for `kra ai docs`.
+ * Live progress dashboard for docs crawls started from `kra memory`.
  *
  * Polls `~/.kra/.kra-memory/docs/docs-status.json` every ~500 ms and renders the
  * crawl through the shared dashboard shell so it matches the rest of the UI.
@@ -30,6 +30,7 @@ export async function readSnapshot(): Promise<DocsStatusFile | null> {
         return JSON.parse(fs.readFileSync(file, 'utf8')) as DocsStatusFile;
     } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+
         return null;
     }
 }
@@ -78,7 +79,7 @@ function formatSourceRow(source: DocsSourceStatus): string {
 }
 
 function formatOverview(snap: DocsStatusFile | null): string {
-    if (!snap) return '{gray-fg}No active crawl. Start one from kra ai docs.{/gray-fg}';
+    if (!snap) return '{gray-fg}No active crawl. Start one from kra memory (Docs sources tab).{/gray-fg}';
 
     const queued = snap.sources.filter((source) => source.phase === 'queued').length;
     const crawling = snap.sources.filter((source) => source.phase === 'crawling' || source.phase === 'embedding').length;

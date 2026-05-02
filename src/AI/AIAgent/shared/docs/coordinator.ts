@@ -1,6 +1,6 @@
 // Docs coordinator — long-lived process that owns the LanceDB writer.
 //
-// Spawned on demand by `kra ai docs` via `IPCClient.ensureServerRunning`.
+// Spawned on demand by `kra memory` via `IPCClient.ensureServerRunning`.
 // Lifecycle:
 //   1. Acquire `LockFiles.DocsWriteInProgress`. Refresh every 30 s while
 //      alive so a crashed coordinator's lock goes stale and is reclaimed.
@@ -406,11 +406,11 @@ function shutdown(code: number): void {
 
 async function main(): Promise<void> {
     if (!fs.existsSync(crawl4aiInstalledMarker)) {
-        console.error('docs-coordinator: Crawl4AI venv not installed. Run `kra ai docs setup` first.');
+        console.error('docs-coordinator: Crawl4AI venv not installed. Run `kra memory` (Docs sources → Setup Crawl4AI venv) first.');
         process.exit(2);
     }
     if (!fs.existsSync(crawl4aiVenvPython)) {
-        console.error(`docs-coordinator: missing python at ${crawl4aiVenvPython}. Re-run \`kra ai docs setup\`.`);
+        console.error(`docs-coordinator: missing python at ${crawl4aiVenvPython}. Re-run \`kra memory\` setup for docs sources.`);
         process.exit(2);
     }
 

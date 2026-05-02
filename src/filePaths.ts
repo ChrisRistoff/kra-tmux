@@ -42,7 +42,7 @@ export const modelCatalogDir = path.join(root, 'model-catalog');
 export const fastembedCacheDir = path.join(root, 'cache', 'fastembed');
 export const quotaCachePath = path.join(root, 'quota-cache.json');
 
-// Crawl4AI venv used by the docs pipeline (created via `kra ai docs` → Setup)
+// Crawl4AI venv used by the docs pipeline (created via `kra memory` → Docs sources setup)
 export const crawl4aiVenvDir = path.join(root, 'crawl4ai-venv');
 export const crawl4aiVenvPython = path.join(crawl4aiVenvDir, 'bin', 'python');
 export const crawl4aiInstalledMarker = path.join(crawl4aiVenvDir, '.installed');

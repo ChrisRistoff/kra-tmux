@@ -668,7 +668,7 @@ def emit_progress(alias: str, done: int, total: int, current_url: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Crawl4AI worker for kra ai docs")
+    parser = argparse.ArgumentParser(description="Crawl4AI worker for kra memory docs sources")
     parser.add_argument("--alias", required=True)
     parser.add_argument("--url", required=True)
     parser.add_argument("--max-depth", type=int, default=0)

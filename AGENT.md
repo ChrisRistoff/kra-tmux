@@ -148,6 +148,6 @@ graph TB
 | Turn workflow, keymaps, tool-approval UX, diff review | [`docs/agent/workflow-and-keymaps.md`](docs/agent/workflow-and-keymaps.md) |
 | File-context tools, BYOK bash/web tools, MCP config, sub-agents (`investigate`) | [`docs/agent/tools-and-mcp.md`](docs/agent/tools-and-mcp.md) |
 | Persistent memory, memory tools, indexing behavior | [`docs/agent/memory-and-indexing.md`](docs/agent/memory-and-indexing.md) |
-| Documentation crawling (`kra ai docs`) | [`docs/agent/docs-crawling.md`](docs/agent/docs-crawling.md) |
+| Documentation crawling (`kra memory`) | [`docs/agent/docs-crawling.md`](docs/agent/docs-crawling.md) |
 
 If you want to start coding quickly, open `docs/agent/README.md` first, then jump to the topical doc for the subsystem you are touching.

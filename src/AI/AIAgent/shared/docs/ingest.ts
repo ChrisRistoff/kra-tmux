@@ -142,7 +142,7 @@ export async function removePage(alias: string, url: string): Promise<number> {
 
 /**
  * Remove every chunk for a whole source. Used when a source is dropped from
- * settings or when the user explicitly purges via `kra ai docs ...` (future).
+ * settings or when the user explicitly purges via `kra memory` docs actions (future).
  */
 export async function removeSource(alias: string): Promise<number> {
     const { table } = await getDocChunksTable(null);

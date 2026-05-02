@@ -53,7 +53,7 @@ describe('createExecuteTool single-flight', () => {
     it('rejects a second concurrent execute call', async () => {
         let resolveFirst!: (value: unknown) => void;
         mockRunSubAgentTask.mockImplementationOnce(
-            () => new Promise((resolve) => { resolveFirst = resolve; })
+            async () => new Promise((resolve) => { resolveFirst = resolve; })
         );
 
         const tool = createExecuteTool({
@@ -119,7 +119,7 @@ describe('createInvestigateTool single-flight', () => {
     it('rejects a second concurrent investigate call', async () => {
         let resolveFirst!: (value: unknown) => void;
         mockRunSubAgentTask.mockImplementationOnce(
-            () => new Promise((resolve) => { resolveFirst = resolve; })
+            async () => new Promise((resolve) => { resolveFirst = resolve; })
         );
 
         const tool = createInvestigateTool({
