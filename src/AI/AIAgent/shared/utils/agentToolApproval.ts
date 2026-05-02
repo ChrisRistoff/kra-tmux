@@ -121,7 +121,7 @@ export function getToolFamily(toolName: string): string {
 }
 
 export function shouldAutoApproveTool(toolName: string): boolean {
-    return toolName === 'report_intent';
+    return toolName === 'confirm_task_complete';
 }
 
 export function extractWriteRequest(toolArgs: unknown, workspacePath: string): ToolWriteRequest | undefined {

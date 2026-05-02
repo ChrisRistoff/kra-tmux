@@ -171,7 +171,7 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         excludedTools: [
             'str_replace_editor', 'write_file', 'read_file', 'edit', 'view',
             'grep', 'glob', 'create', 'apply_patch',
-            'bash', 'shell', 'run_in_terminal', 'execute',
+            'bash', 'shell', 'run_in_terminal', 'execute', 'report_intent',
         ],
         allowedTools: [...opts.toolWhitelist, 'submit_result'],
         onPreToolUse,

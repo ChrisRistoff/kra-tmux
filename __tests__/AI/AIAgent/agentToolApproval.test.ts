@@ -10,7 +10,6 @@ import {
 
 describe('agentToolApproval helpers', () => {
     it('auto-approves non-destructive intent reporting', () => {
-        expect(shouldAutoApproveTool('report_intent')).toBe(true);
         expect(shouldAutoApproveTool('bash')).toBe(false);
     });
 

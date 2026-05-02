@@ -47,7 +47,6 @@ Opens searchable history of all tool calls in this session.
 
 Auto-approved tools:
 
-- `report_intent`
 - `confirm_task_complete`
 
 All other tools require approval in strict mode.

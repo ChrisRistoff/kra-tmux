@@ -165,7 +165,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         model: options.model,
         workingDirectory: cwd,
         mcpServers: mergedMcpServers,
-        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch'],
+        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch', 'report_intent'],
         ...(orchestratorLocalTools.length > 0 ? { localTools: orchestratorLocalTools } : {}),
         ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
         onPreToolUse: orchestratorOnPreToolUse,

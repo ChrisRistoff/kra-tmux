@@ -5,7 +5,7 @@
 `kra-file-context` is the line-precise editing surface. Copilot stock editor tools are excluded so edits go through deterministic range operations.
 
 ```txt
-excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob']
+excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'apply_patch', 'report_intent']
 ```
 
 ### Core file-context tools
