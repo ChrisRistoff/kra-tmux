@@ -155,6 +155,7 @@ export interface LocalTool {
 export interface AgentConversationOptions {
     client: AgentClient;
     model: string;
+    provider: string;
     additionalMcpServers?: Record<string, MCPServerConfig>;
     contextWindow?: number;
     executor?: import('@/AI/AIAgent/shared/subAgents/types').ExecutorRuntime;
@@ -184,6 +185,13 @@ export interface AgentConversationState {
      * not just the orchestrator session.
      */
     activeSubAgentSession?: AgentSession | undefined;
+    /**
+     * Chronological log of the orchestrator's user messages, assistant
+     * reasoning, and tool calls. Sliced and handed to the executor sub-agent
+     * so it inherits the orchestrator's prior file reads and findings without
+     * re-fetching them. See `orchestratorTranscript.ts`.
+     */
+    transcript: import('@/AI/AIAgent/shared/main/orchestratorTranscript').OrchestratorTranscript;
 }
 
 export interface ToolApprovalResult {
