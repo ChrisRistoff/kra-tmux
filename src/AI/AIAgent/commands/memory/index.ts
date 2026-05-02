@@ -1,0 +1,1 @@
+export { memoryDashboard } from './dashboard';

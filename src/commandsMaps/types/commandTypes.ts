@@ -31,10 +31,8 @@ export type AiCommandName =
     | 'load'
     | 'delete'
     | 'quota-agent'
-    | 'index'
-    | 'memory'
-    | 'docs';
-export type CommandType = 'sys' | 'tmux' | 'git' | 'ai' | 'settings';
+    | 'index';
+export type CommandType = 'sys' | 'tmux' | 'git' | 'ai' | 'memory' | 'settings';
 
 export type SystemCommands = CommandCatalog<SystemCommandName>;
 export type TmuxCommands = CommandCatalog<TmuxCommandName>;

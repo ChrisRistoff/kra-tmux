@@ -9,6 +9,7 @@ import { workflowAscii } from '@/data/workflow-ascii';
 import { gitAscii } from '@/git/data/git-ascii';
 import { getAsciiHelp, isHelpFlag } from '@/utils/cliHelp';
 import { handleChangeSettings } from '@/manageSettings';
+import { memoryDashboard } from '@/AI';
 import { runInstall, isInstalled } from '@/setup/install';
 import { sysAscii } from '@/system/data/sys-ascii';
 import { systemCommands } from '@/commandsMaps/systemCommands';
@@ -39,12 +40,22 @@ const commandTypeOptions: ReadonlyArray<MenuOption<CommandType>> = [
     },
     {
         name: 'ai',
-        description: 'AI chat, agent, indexing, memory, docs, and quota tools',
-        details: 'Everything around the AI workflows lives here: direct chats, autonomous agent sessions, saved chat management, code indexing, persistent memory, documentation crawling, and quota visibility.',
+        description: 'AI chat, agent, indexing, and quota tools',
+        details: 'Everything around the interactive AI workflows lives here: direct chats, autonomous agent sessions, saved chat management, indexing, and quota visibility.',
         highlights: [
             'Start Neovim chat sessions with streaming, file context, and web tools.',
             'Launch the agent workflow with provider picking, approvals, diff review, and MCP tools.',
-            'Manage repo memory, code indexes, docs crawling, and usage dashboards from shared menus.',
+            'Manage saved chats and usage dashboards from shared menus.',
+        ],
+    },
+    {
+        name: 'memory',
+        description: 'Persistent memory, docs indexing, and semantic search dashboard',
+        details: 'Unified kra-memory dashboard for findings/revisits, indexed repositories, docs sources, and search across code, memory, and docs.',
+        highlights: [
+            'Browse and edit findings and revisits.',
+            'Manage indexed repositories and trigger re-indexing.',
+            'Control docs crawling and run semantic search in one place.',
         ],
     },
     {
@@ -109,6 +120,12 @@ const main = async (): Promise<void> => {
         return;
     }
 
+    if (commandType === 'memory') {
+        await memoryDashboard();
+
+        return;
+    }
+
     const command = await (async (): Promise<Command> => {
         switch (commandType) {
             case 'sys':
@@ -144,8 +161,6 @@ const main = async (): Promise<void> => {
                     commands: aiCommands,
                 })).run;
         }
-
-        throw new Error(`No command selected for ${commandType}`);
     })();
 
     await command(args.slice(2));

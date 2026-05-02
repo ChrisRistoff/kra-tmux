@@ -62,24 +62,4 @@ export const aiCommands: AiCommands = {
             'Works with the persistent memory and semantic-search tooling.',
         ],
     },
-    'memory': {
-        run: ai.manageMemory,
-        description: 'Open the AI memory management dashboard',
-        details: 'Shared dashboard for browsing findings and revisits, inspecting indexed repos, editing memory entries, and triggering repo re-indexing.',
-        highlights: [
-            'Manages both long-term memory entries and repo indexing state.',
-            'Includes the explicit repo re-index action the dashboard is meant to expose.',
-            'Acts as the main home for persistent AI memory maintenance.',
-        ],
-    },
-    'docs': {
-        run: ai.manageDocs,
-        description: 'Open the documentation indexing dashboard',
-        details: 'Manage external documentation crawling with setup, per-source or full re-indexing, live crawl progress, and coordinator controls.',
-        highlights: [
-            'Set up Crawl4AI and manage configured documentation sources.',
-            'Supports incremental crawls, full recrawls, and per-source actions.',
-            'Includes the shared live crawl progress dashboard and stop control.',
-        ],
-    },
 };

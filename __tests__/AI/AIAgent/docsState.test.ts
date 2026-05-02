@@ -9,6 +9,7 @@ const tmpDocsLanceRoot = path.join(tmpDocsRoot, 'lance');
 
 jest.mock('@/filePaths', () => {
     const actual = jest.requireActual('@/filePaths');
+
     return {
         ...actual,
         kraDocsRoot: tmpDocsRoot,

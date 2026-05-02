@@ -4,6 +4,5 @@ export * from '@/AI/AIChat/commands/loadChat';
 export * from '@/AI/AIChat/commands/deleteChat';
 export * from '@/AI/AIAgent/commands/showQuota';
 export * from '@/AI/AIAgent/commands/indexCodebase';
-export * from '@/AI/AIAgent/commands/manageMemory';
-export * from '@/AI/AIAgent/commands/manageDocs';
+export * from '@/AI/AIAgent/commands/memory';
 export * from '@/AI/AIAgent/commands/docsSetup';

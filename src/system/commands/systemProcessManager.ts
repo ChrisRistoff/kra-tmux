@@ -53,6 +53,7 @@ async function fetchProcesses(): Promise<ProcessInfo[]> {
         ps.on('close', (code) => {
             if (code !== 0) {
                 reject(new Error(`ps exited with code ${code}`));
+
                 return;
             }
             for (const line of buf.split('\n')) {
@@ -104,18 +105,21 @@ function formatUptime(seconds: number): string {
     if (d) parts.push(`${d}d`);
     if (h || d) parts.push(`${h}h`);
     parts.push(`${m}m`);
+
     return parts.join(' ');
 }
 
 function formatBytes(bytes: number): string {
     const gb = bytes / (1024 ** 3);
     if (gb >= 1) return `${gb.toFixed(1)} GB`;
+
     return `${(bytes / (1024 ** 2)).toFixed(0)} MB`;
 }
 
 function renderBar(percent: number, width = 30): string {
     const num = Math.min(100, Math.max(0, percent));
     const filled = Math.round((num / 100) * width);
+
     return `[${'█'.repeat(filled)}${'░'.repeat(width - filled)}]`;
 }
 
@@ -202,6 +206,7 @@ export async function openProcessManager(): Promise<void> {
             if (windowEnd >= filtered.length) return false;
             windowEnd = Math.min(filtered.length, windowEnd + WINDOW_STEP);
             rebuildDisplayed();
+
             return true;
         }
 
@@ -248,6 +253,7 @@ export async function openProcessManager(): Promise<void> {
             if (Number.isNaN(n)) return s;
             if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} GB`;
             if (n >= 1024) return `${(n / 1024).toFixed(1)} MB`;
+
             return `${n} KB`;
         }
 
@@ -305,7 +311,7 @@ export async function openProcessManager(): Promise<void> {
         }
 
         function flashHeader(msg: string): void {
-            const originalContent = header.content as string;
+            const originalContent = header.content;
             header.setContent(msg);
             screen.render();
             setTimeout(() => {

@@ -42,7 +42,7 @@ const TOOL_AWARENESS_PREAMBLE = [
 
 const DOCS_SEARCH_PREAMBLE = [
     '',
-    'You also have a `docs_search` tool: vector search over documentation pages indexed locally via `kra ai docs`.',
+    'You also have a `docs_search` tool: vector search over documentation pages indexed locally via `kra memory`.',
     'PREFER `docs_search` over `web_search` / `web_fetch` whenever the user’s question matches one of the configured sources listed in the tool’s description — it is faster, offline, and version-pinned to what is installed.',
 ].join(' ');
 
