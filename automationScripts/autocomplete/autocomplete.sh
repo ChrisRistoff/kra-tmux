@@ -8,7 +8,7 @@ _kra_completions() {
 
     # Top-level commands after "kra"
     if [[ ${COMP_CWORD} -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "git tmux sys settings ai" -- "$cur") )
+        COMPREPLY=( $(compgen -W "git tmux sys settings ai memory" -- "$cur") )
         return 0
     fi
 
@@ -20,7 +20,7 @@ _kra_completions() {
     elif [[ "$prev" == "sys" ]]; then
         COMPREPLY=( $(compgen -W "scripts grep-file-remove grep-dir-remove process-manager" -- "$cur") )
     elif [[ "$prev" == "ai" ]]; then
-        COMPREPLY=( $(compgen -W "chat load delete agent quota-agent index memory docs" -- "$cur") )
+        COMPREPLY=( $(compgen -W "chat load delete agent quota-agent index" -- "$cur") )
     fi
 
     return 0
