@@ -22,6 +22,8 @@ import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import type { LocalTool } from '@/AI/AIAgent/shared/types/agentTypes';
 import type { ExecutorRuntime } from '@/AI/AIAgent/shared/subAgents/types';
 import { runSubAgentTask, type SubAgentChatBridge, type SubAgentEvent } from '@/AI/AIAgent/shared/subAgents/session';
+import { buildExecutorTranscriptBlocks } from '@/AI/AIAgent/shared/subAgents/buildExecutorTranscript';
+import type { TranscriptEntry } from '@/AI/AIAgent/shared/main/orchestratorTranscript';
 
 export interface CreateExecuteToolOptions {
     runtime: ExecutorRuntime;
@@ -32,23 +34,22 @@ export interface CreateExecuteToolOptions {
 
 interface ExecuteArgs {
     plan: string;
-    context?: string;
     successCriteria?: string;
 }
 
 export interface ExecutionEvent {
     kind:
-        | 'step_start'
-        | 'step_done'
-        | 'read'
-        | 'edit'
-        | 'create'
-        | 'search'
-        | 'run'
-        | 'discovery'
-        | 'decision'
-        | 'blocked'
-        | 'note';
+    | 'step_start'
+    | 'step_done'
+    | 'read'
+    | 'edit'
+    | 'create'
+    | 'search'
+    | 'run'
+    | 'discovery'
+    | 'decision'
+    | 'blocked'
+    | 'note';
     detail: string;
     path?: string;
     diff?: string;
@@ -68,19 +69,14 @@ const EXECUTE_PARAMETERS: Record<string, unknown> = {
         plan: {
             type: 'string',
             description: [
-                'The concrete plan for the executor to carry out. Be specific:',
-                'list the steps in order, name the files/symbols to touch, and state',
-                'the intended outcome of each step. The executor only sees what you',
-                'put here plus `context` — it has no access to your conversation.',
-            ].join(' '),
-        },
-        context: {
-            type: 'string',
-            description: [
-                'Optional supporting context: relevant findings from prior',
-                '`investigate` calls, exact line ranges, the user\'s constraints,',
-                'symbol names, or anything else that would shortcut the executor\'s',
-                'work. Be generous — every byte you put here saves a tool call.',
+                'A concise, directive plan for the executor to carry out: numbered',
+                'steps in order, naming the files/symbols to touch and the intended',
+                'outcome of each step. Keep it terse — do NOT restate findings,',
+                'paste file contents, or summarise prior investigations here. The',
+                'executor automatically receives a transcript of your prior',
+                '`investigate` calls, file reads, searches, and reasoning since the',
+                'last execute, so it already has the evidence; just tell it what',
+                'to do.',
             ].join(' '),
         },
         successCriteria: {
@@ -106,23 +102,33 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
         name: 'execute',
         serverLabel: 'kra-subagent',
         description: [
-            'PREFERRED execution tool. Use `execute` to delegate any concrete,',
-            'multi-step body of work — edits across several files, a refactor, a',
-            'new feature implementation — to a smaller, cheaper executor model.',
-            'The executor runs the work end-to-end and returns ONLY a curated event',
-            'log + summary; the raw tool traffic (file reads, search results,',
-            'intermediate edits) never enters your context. That keeps your',
-            'expensive context lean and dramatically cuts the token cost of any',
-            'task whose bulk is mechanical reads + edits rather than reasoning.',
-            'Workflow: think the plan through (optionally call `investigate` first),',
-            'then call `execute` with a step-by-step `plan`. Pass any prior findings,',
-            'paths, or user constraints in `context` — the executor only sees what',
-            'you give it, so be generous; every byte saves a tool call on its side.',
-            'Skip `execute` only for one-line trivial edits or for tasks that',
-            'genuinely need orchestrator-grade reasoning at every step.',
+            'PREFERRED execution tool. Delegate any concrete, multi-step body of work',
+            '— edits across several files, a refactor, a new feature implementation —',
+            'to a smaller, cheaper executor model.',
+            '',
+            'Why use it:',
+            '  - The executor runs the work end-to-end and returns ONLY a curated',
+            '    event log + summary; the raw tool traffic (file reads, search results,',
+            '    intermediate edits) never enters your context. That cuts the token',
+            '    cost of tasks whose bulk is mechanical reads + edits rather than',
+            '    reasoning.',
+            '',
+            'Workflow:',
+            '  - Think the plan through (optionally call `investigate` first).',
+            '  - Call `execute` with a terse, directive `plan` and (optionally)',
+            '    `successCriteria`. The executor will only mark `status: completed`',
+            '    if those criteria are met; otherwise it returns `partial` or',
+            '    `blocked` with a reason.',
+            '  - You do NOT need to copy findings or file contents into the plan —',
+            '    the executor is automatically given a transcript of your prior',
+            '    investigations, file reads, and reasoning since the last execute call.',
+            '',
+            'Skip `execute` only for one-line trivial edits or for tasks that genuinely',
+            'need orchestrator-grade reasoning at every step.',
+            '',
             'Only ONE execution can run at a time. Wait for the in-flight execution',
             'to return before issuing another.',
-        ].join(' '),
+        ].join('\n'),
         parameters: EXECUTE_PARAMETERS,
         handler: async (rawArgs) => {
             if (activeRun) {
@@ -134,9 +140,12 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
             }
 
             const args = rawArgs as unknown as ExecuteArgs;
+            const transcriptSlice: TranscriptEntry[] = opts.chatBridge
+                ? opts.chatBridge.getParentState().transcript.sliceSinceLastExecute()
+                : [];
             const run = (async (): Promise<string> => {
                 const systemPrompt = buildExecutorSystemPrompt(settings);
-                const taskPrompt = buildExecutorTaskPrompt(args);
+                const taskPrompt = buildExecutorTaskPrompt(args, transcriptSlice);
 
                 const { result, events } = await runSubAgentTask({
                     runtime,
@@ -181,18 +190,27 @@ function buildExecutorSystemPrompt(settings: ExecutorRuntime['settings']): strin
         'handed to you by an orchestrator. You are NOT the planner — do not',
         're-scope the work, do not ask for permission, just execute.',
         '',
+        'You are a small, fast model. Bias toward the obvious answer; do not',
+        'over-think. The orchestrator has already done the hard reasoning.',
+        '',
         'Workflow:',
-        '  1. Read the `plan` carefully. If `context` is provided, treat it as',
-        '     authoritative background you should rely on instead of re-discovering.',
-        '  2. For each step, use the smallest tool sequence that gets it done.',
-        '     Prefer get_outline + targeted read_lines over reading whole files.',
-        '  3. When you make an edit, it lands in a proposal workspace — the user',
+        '  1. Read the two evidence blocks FIRST: <orchestrator_investigations>',
+        '     (pre-digested findings from prior investigations) and',
+        '     <orchestrator_chat> (the orchestrator\'s prior file reads, searches,',
+        '     reasoning, and the user messages that led to this call). Treat both',
+        '     as authoritative — do NOT re-read files the orchestrator already read.',
+        '  2. Then read the <plan>. The plan tells you WHAT to do; the evidence',
+        '     blocks tell you what is already known about WHERE.',
+        '  3. For each step, use the smallest tool sequence that gets it done.',
+        '     Prefer narrow, targeted reads over reading whole files.',
+        '  4. When you make an edit, it lands in a proposal workspace — the user',
         '     will review the diff before it touches the real repo, so be precise',
         '     but do not be timid.',
-        '  4. After each meaningful action (edit, create, run), record a short',
-        '     event in your eventual `submit_result` payload. Reads/searches that',
-        '     directly inform an edit can be summarised in one `read` event.',
-        '  5. When all steps are done OR you hit a blocker, call `submit_result`',
+        '  5. Track each meaningful action (edit, create, run) as you go; you will',
+        '     report them all at once as `events[]` in your single `submit_result`',
+        '     call at the end. Reads/searches that directly inform an edit can be',
+        '     summarised in one `read` event.',
+        '  6. When all steps are done OR you hit a blocker, call `submit_result`',
         '     exactly once with the appropriate `status`:',
         '       - `completed`   = every step done, success criteria met',
         '       - `partial`     = some steps done, others skipped (explain why)',
@@ -200,34 +218,49 @@ function buildExecutorSystemPrompt(settings: ExecutorRuntime['settings']): strin
         `       - \`needs_replan\` = the plan itself is wrong${settings.allowReplanEscape
             ? ' (set `replanReason`)'
             : ' — DISABLED in settings, do not use'}`,
-        '  6. Do NOT call any tool after `submit_result`. Output a brief',
-        '     acknowledgement and stop.',
-        '  7. NEVER call `confirm_task_complete` or any other end-of-turn tool.',
-        '     The orchestrator owns the turn.',
+        '     Then output a brief acknowledgement and stop. Do NOT call any tool',
+        '     after `submit_result`, and never call any orchestrator-only',
+        '     end-of-turn tool — the orchestrator owns the turn.',
+        `  7. Hard cap: ${settings.maxToolCalls} tool calls. If you are nearing the cap`,
+        '     without finishing, submit with `status: partial`, list what was done',
+        '     in `events`, and explain the remaining work in `summary`.',
         '',
         'Quality bar:',
         '  - Make MINIMAL, SURGICAL edits. Do not reformat untouched code.',
         '  - Every event\'s `detail` is a single human-readable sentence.',
+        '  - Keep `summary` to 2–6 sentences.',
         '  - If you read a file you do not edit, mention it as a `read` event so',
         '    the orchestrator knows what informed your decisions.',
-        `  - Hard cap: ${settings.maxToolCalls} tool calls. Submit before you hit it.`,
+        '',
+        'Example submit_result shape:',
+        '  {',
+        '    "status": "completed",',
+        '    "summary": "Renamed `foo` to `bar` in 3 files; updated 1 test.",',
+        '    "events": [',
+        '      { "kind": "edit", "detail": "Renamed foo→bar.", "path": "src/x.ts" },',
+        '      { "kind": "edit", "detail": "Updated import.", "path": "src/y.ts" },',
+        '      { "kind": "edit", "detail": "Updated test name.", "path": "__tests__/x.test.ts" }',
+        '    ]',
+        '  }',
     ].join('\n');
 }
 
-function buildExecutorTaskPrompt(args: ExecuteArgs): string {
-    const lines = ['Plan to execute:', '', args.plan];
+function buildExecutorTaskPrompt(args: ExecuteArgs, transcriptSlice: TranscriptEntry[]): string {
+    const sections: string[] = [];
+
+    if (transcriptSlice.length > 0) {
+        sections.push(buildExecutorTranscriptBlocks(transcriptSlice));
+    } else {
+        sections.push('(No prior orchestrator activity in this turn — plan stands alone.)');
+    }
+
+    sections.push(['<plan>', args.plan, '</plan>'].join('\n'));
 
     if (args.successCriteria) {
-        lines.push('', 'Success criteria:', args.successCriteria);
+        sections.push(['<success_criteria>', args.successCriteria, '</success_criteria>'].join('\n'));
     }
 
-    if (args.context) {
-        lines.push('', 'Context from the orchestrator:', args.context);
-    }
-
-    lines.push('', 'Execute the plan, then call submit_result with your typed event log + summary.');
-
-    return lines.join('\n');
+    return sections.join('\n\n');
 }
 
 function buildResultSchema(): Record<string, unknown> {

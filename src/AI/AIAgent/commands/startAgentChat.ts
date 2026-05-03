@@ -84,6 +84,7 @@ export async function startAgentChat(): Promise<void> {
         }
 
         await conversation.converseAgent({
+            provider: orchestrator.kind,
             client: orchestrator.client,
             model: orchestrator.model,
             ...(orchestrator.contextWindow !== undefined ? { contextWindow: orchestrator.contextWindow } : {}),

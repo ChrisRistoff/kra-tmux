@@ -59,6 +59,8 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
     const taggedFiles = await fileContext.getFileContextsTaggedBlock();
     const finalPrompt = taggedFiles ? `${prompt}\n\n${taggedFiles}` : prompt;
 
+    state.transcript.appendUser(prompt);
+
     await state.session.send({
         prompt: finalPrompt,
         mode: 'immediate',

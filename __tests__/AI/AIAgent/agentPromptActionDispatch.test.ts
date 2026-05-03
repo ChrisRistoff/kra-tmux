@@ -49,6 +49,13 @@ function makeState(): AgentConversationState {
         isStreaming: true,
         approvalMode: 'strict',
         allowedToolFamilies: new Set<string>(['bash']),
+        transcript: {
+            appendUser: jest.fn(),
+            appendAssistant: jest.fn(),
+            appendToolCall: jest.fn(),
+            sliceSinceLastExecute: jest.fn(() => []),
+            all: jest.fn(() => []),
+        },
     };
 
     return state;
