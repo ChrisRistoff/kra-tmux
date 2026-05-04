@@ -186,9 +186,11 @@ page.
 ## Querying from the agent
 
 The `kra-memory` MCP server exposes a `docs_search(query, k?, sourceAlias?)` tool
-backed by `src/AI/AIAgent/shared/docs/search.ts`. It vector-searches the
-`doc_chunks` table, dedupes hits per `(sourceAlias, url)` page, and returns up
-to 3 best-scoring sections per page with the markdown content inlined (capped
+backed by `src/AI/AIAgent/shared/docs/search.ts`. It runs hybrid retrieval
+on the `doc_chunks` table (vector + full-text fused via RRF — see
+[Hybrid retrieval](memory-and-indexing.md#hybrid-retrieval-vector--fts)),
+dedupes hits per `(sourceAlias, url)` page, and returns up to 3
+best-scoring sections per page with the markdown content inlined (capped
 at 1200 characters per section, flagged with `truncated: true` when cut).
 Default `k = 8`, hard cap 50.
 

@@ -9,6 +9,7 @@
  */
 import { embedOne } from '../memory/embedder';
 import { getDocChunksTable } from '../memory/db';
+import { hybridSearch } from '../memory/hybridSearch';
 import type { DocChunkRow } from './types';
 
 const MIN_SCORE = 0.5;
@@ -57,13 +58,15 @@ export async function docsSearch(input: DocsSearchInput): Promise<DocsSearchHit[
     const queryVector = await embedOne(input.query);
 
     const fetchK = Math.min(Math.max(k * 8, 40), 400);
-    const rows = (await table.search(queryVector).limit(fetchK).toArray()) as Array<DocChunkRow & { _distance?: number }>;
+    const fused = await hybridSearch(table, input.query, queryVector, {
+        fetchK,
+        minVectorScore: MIN_SCORE,
+    });
 
     const aliasFilter = input.sourceAlias?.trim();
 
-    const raw: RawDocHit[] = rows
-        .map((row) => ({ row, score: distanceToScore(row._distance) }))
-        .filter((hit) => hit.score >= MIN_SCORE)
+    const raw: RawDocHit[] = fused
+        .map((hit) => ({ row: hit.row as unknown as DocChunkRow, score: hit.score }))
         .filter((hit) => !aliasFilter || hit.row.sourceAlias === aliasFilter);
 
     const grouped = groupByPage(raw);
@@ -130,13 +133,6 @@ function buildSection(hit: RawDocHit): DocsSearchSection {
         truncated,
         tokenCount: hit.row.tokenCount,
     };
-}
-
-function distanceToScore(distance: number | undefined): number {
-    if (typeof distance !== 'number' || Number.isNaN(distance)) return 0;
-    if (distance <= 0) return 1;
-
-    return 1 / (1 + distance);
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -15,6 +15,7 @@
 
 import path from 'path';
 import { connect, type Connection, type Table } from '@lancedb/lancedb';
+import { ensureContentFtsIndex } from './hybridSearch';
 import type { CodeChunkRow, MemoryRow } from './types';
 import type { DocChunkRow } from '../docs/types';
 import { _resetRepoStorageCacheForTest, resolveRepoStorage, repoStorageDirForKey } from './repoKey';
@@ -30,6 +31,9 @@ let docsDbCache: Connection | null = null;
 let memoryFindingsTableCache: Table | null = null;
 let memoryRevisitsTableCache: Table | null = null;
 const codeChunksTableCache: Map<string, Table> = new Map();
+const codeFtsEnsuredKeys: Set<string> = new Set();
+const docFtsEnsuredKeys: Set<string> = new Set();
+const DOC_FTS_KEY = 'doc_chunks';
 let docChunksTableCache: Table | null = null;
 const legacyDropAttemptedKeys: Set<string> = new Set();
 
@@ -167,6 +171,8 @@ export function _resetCachesForTest(): void {
     memoryFindingsTableCache = null;
     memoryRevisitsTableCache = null;
     codeChunksTableCache.clear();
+    codeFtsEnsuredKeys.clear();
+    docFtsEnsuredKeys.clear();
     docChunksTableCache = null;
     legacyDropAttemptedKeys.clear();
     _resetRepoStorageCacheForTest();
@@ -190,6 +196,7 @@ export async function memoryDirectoryRoot(repoKey?: string): Promise<string> {
 export function docsDirectoryRoot(): string {
     return kraDocsRoot;
 }
+
 
 export interface GetCodeChunksTableResult {
     table: Table | null;
@@ -220,6 +227,7 @@ export async function getCodeChunksTable(seedRow: CodeChunkRow | null, repoKey?:
         if (tableNames.includes(CODE_CHUNKS_TABLE)) {
             const t = await db.openTable(CODE_CHUNKS_TABLE);
             codeChunksTableCache.set(key, t);
+void ensureContentFtsIndex(t, key, codeFtsEnsuredKeys);
 
             return { table: t, justCreated: false };
         }
@@ -233,6 +241,7 @@ export async function getCodeChunksTable(seedRow: CodeChunkRow | null, repoKey?:
             [seedRow as unknown as Record<string, unknown>],
         );
         codeChunksTableCache.set(key, t);
+void ensureContentFtsIndex(t, key, codeFtsEnsuredKeys);
 
         return { table: t, justCreated: true };
     });
@@ -285,6 +294,7 @@ export async function getDocChunksTable(seedRow: DocChunkRow | null): Promise<Ge
 
         if (tableNames.includes(DOC_CHUNKS_TABLE)) {
             docChunksTableCache = await db.openTable(DOC_CHUNKS_TABLE);
+            void ensureContentFtsIndex(docChunksTableCache, DOC_FTS_KEY, docFtsEnsuredKeys);
 
             return { table: docChunksTableCache, justCreated: false };
         }
@@ -297,6 +307,7 @@ export async function getDocChunksTable(seedRow: DocChunkRow | null): Promise<Ge
             DOC_CHUNKS_TABLE,
             [seedRow as unknown as Record<string, unknown>],
         );
+        void ensureContentFtsIndex(docChunksTableCache, DOC_FTS_KEY, docFtsEnsuredKeys);
 
         return { table: docChunksTableCache, justCreated: true };
     });
@@ -321,3 +332,6 @@ export async function countDocChunks(): Promise<number> {
         return 0;
     }
 }
+
+
+
