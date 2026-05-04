@@ -47,11 +47,14 @@ function row(overrides: Partial<MockRow>): MockRow {
 }
 
 function mockTable(rows: MockRow[]): void {
-    const search = jest.fn().mockReturnValue({
+    // Vector search returns the seeded rows; FTS search (string query) returns
+    // empty so the unit tests exercise the vector-only path and the score
+    // assertions remain meaningful.
+    const search = jest.fn().mockImplementation((query: unknown) => ({
         limit: jest.fn().mockReturnValue({
-            toArray: jest.fn().mockResolvedValue(rows),
+            toArray: jest.fn().mockResolvedValue(typeof query === 'string' ? [] : rows),
         }),
-    });
+    }));
     mockedGetDocChunksTable.mockResolvedValue({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         table: { search } as any,

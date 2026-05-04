@@ -8,6 +8,7 @@
 import path from 'path';
 import { embedOne } from './embedder';
 import { getCodeChunksTable, getFindingsTable, getRevisitsTable } from './db';
+import { hybridSearch, distanceToScore } from './hybridSearch';
 import { matchGlob } from './indexer';
 import { getActiveSearchRepoKeys } from './groups';
 import { loadRegistry, type RegistryEntry } from './registry';
@@ -26,6 +27,7 @@ import {
 } from './types';
 
 interface RawCodeChunkHit {
+    id: string;
     path: string;
     language: string;
     startLine: number;
@@ -48,7 +50,7 @@ export async function semanticSearch(input: SemanticSearchInput): Promise<Semant
     const hits: SemanticSearchHit[] = [];
 
     if (scope === 'code' || scope === 'both') {
-        hits.push(...await searchCode(queryVector, k, input.pathGlob));
+        hits.push(...await searchCode(input.query, queryVector, k, input.pathGlob));
     }
 
     if (scope === 'memory' || scope === 'both') {
@@ -59,13 +61,16 @@ export async function semanticSearch(input: SemanticSearchInput): Promise<Semant
         hits.push(...await searchMemory(queryVector, k, input.memoryKind, input.selectedIds));
     }
 
-    const filtered = hits.filter((h) => h.score >= MIN_SCORE);
+    // Code hits are pre-filtered inside searchCode (vector-only candidates
+    // already had MIN_SCORE applied; FTS-only hits bypass the threshold by
+    // design). Memory hits still use the cosine threshold here.
+    const filtered = hits.filter((h) => h.type === 'code' || h.score >= MIN_SCORE);
     filtered.sort((a, b) => b.score - a.score);
 
     return filtered.slice(0, k);
 }
 
-async function searchCode(vector: number[], k: number, pathGlob?: string): Promise<SemanticSearchHit[]> {
+async function searchCode(query: string, vector: number[], k: number, pathGlob?: string): Promise<SemanticSearchHit[]> {
     const repoKeys = await resolveRepoSearchSet();
     if (repoKeys.length === 0) return [];
 
@@ -86,9 +91,25 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
     const perRepoHits = await Promise.all(repoKeys.map(async (repoKey): Promise<RawCodeChunkHit[]> => {
         const { table } = await getCodeChunksTable(null, repoKey);
         if (!table) return [];
-        const rows = await table.search(vector).limit(fetchK).toArray();
 
-        return rows.map((row) => toRawCodeHit(row, repoKey));
+        const fused = await hybridSearch(table, query, vector, {
+            fetchK,
+            minVectorScore: MIN_SCORE,
+        });
+
+        return fused.map((hit): RawCodeChunkHit => {
+            const row = hit.row as unknown as CodeChunkRow;
+
+            return {
+                id: String((hit.row as { id?: unknown }).id ?? ''),
+                path: row.path,
+                language: row.language,
+                startLine: row.startLine,
+                endLine: row.endLine,
+                score: hit.score,
+                repoKey,
+            };
+        });
     }));
 
     const rawHits: RawCodeChunkHit[] = perRepoHits.flat()
@@ -98,6 +119,12 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
     const topPaths = [...grouped.values()]
         .sort((a, b) => b.score - a.score)
         .slice(0, k);
+
+    // Normalize RRF scores to [0, 1] so they're comparable to the cosine
+    // scores returned by searchMemory when scope='both'. RRF values are tiny
+    // (~0.03 max) and would otherwise always sort below memory hits.
+    const maxScore = topPaths.reduce((m, g) => Math.max(m, g.score), 0);
+    const norm = maxScore > 0 ? 1 / maxScore : 1;
 
     return Promise.all(topPaths.map(async (group) => {
         const merged = mergeRanges(group.ranges);
@@ -114,9 +141,10 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
             ...(multiRepo && meta ? { repo: meta.alias, rootPath: meta.rootPath } : {}),
         };
 
-        return { type: 'code', score: group.score, code } satisfies SemanticSearchHit;
+        return { type: 'code', score: group.score * norm, code } satisfies SemanticSearchHit;
     }));
 }
+
 
 async function resolveRepoSearchSet(): Promise<string[]> {
     const active = await getActiveSearchRepoKeys();
@@ -163,18 +191,6 @@ async function searchMemory(vector: number[], k: number, kind: MemoryLookupKind,
         .slice(0, k);
 }
 
-function toRawCodeHit(raw: Record<string, unknown>, repoKey: string): RawCodeChunkHit {
-    const row = raw as unknown as CodeChunkRow & { _distance?: number };
-
-    return {
-        path: row.path,
-        language: row.language,
-        startLine: row.startLine,
-        endLine: row.endLine,
-        score: distanceToScore(row._distance),
-        repoKey,
-    };
-}
 
 interface PathGroup {
     path: string;
@@ -234,14 +250,6 @@ function toMemoryHit(raw: Record<string, unknown>): SemanticSearchHit {
     };
 }
 
-function distanceToScore(distance: number | undefined): number {
-    if (typeof distance !== 'number' || !Number.isFinite(distance)) return 0;
-
-    // LanceDB returns L2 distance by default for BGE vectors. Convert to a
-    // similarity in [0, 1] by mapping with 1 / (1 + d). It's monotonic so the
-    // sort order is preserved and consumers get a friendlier score.
-    return 1 / (1 + distance);
-}
 
 function clamp(n: number, min: number, max: number): number {
     if (n < min) return min;
