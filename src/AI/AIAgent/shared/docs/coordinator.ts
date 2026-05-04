@@ -87,7 +87,14 @@ async function writeStatusFile(): Promise<void> {
             sources: Array.from(statuses.values()),
         };
         await fs.promises.mkdir(kraDocsRoot, { recursive: true });
-        await fs.promises.writeFile(statusFilePath(), JSON.stringify(snapshot, null, 2));
+        // Atomic write: write to a temp file in the same dir, then rename.
+        // Without this, concurrent readers (dashboard / live progress UI) can
+        // catch the file mid-write and JSON.parse throws — making the UI
+        // briefly think there's no active crawl.
+        const finalPath = statusFilePath();
+        const tmpPath = `${finalPath}.${process.pid}.tmp`;
+        await fs.promises.writeFile(tmpPath, JSON.stringify(snapshot, null, 2));
+        await fs.promises.rename(tmpPath, finalPath);
     } catch (err) {
         console.error('docs-coordinator: failed to write status file', err);
     }

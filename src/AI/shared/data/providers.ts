@@ -13,6 +13,8 @@
 import * as keys from '@/AI/AIChat/data/keys';
 
 export const SUPPORTED_PROVIDERS = [
+    'crof',
+    'oxlo',
     'deep-infra',
     'open-code',
     'deep-seek',
@@ -40,6 +42,10 @@ export function getProviderBaseURL(provider: string): string {
             return 'https://api.openai.com/v1';
         case 'mistral':
             return 'https://api.mistral.ai/v1';
+        case 'oxlo':
+            return 'https://api.oxlo.ai/v1';
+        case 'crof':
+            return 'https://crof.ai/v1/';
         default:
             throw new Error(`Provider '${provider}' has no configured baseURL.`);
     }
@@ -59,6 +65,10 @@ export function getProviderApiKey(provider: string): string {
             return keys.getMistralKey();
         case 'open-code':
             return keys.getOpenCodeKey();
+        case 'oxlo':
+            return keys.getOxloKey();
+        case 'crof':
+            return keys.getCrofKey();
         case 'open-ai': {
             const fromEnv = process.env['OPENAI_API_KEY'];
 

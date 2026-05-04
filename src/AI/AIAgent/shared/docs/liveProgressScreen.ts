@@ -24,12 +24,33 @@ export function statusFilePath(): string {
     return kraDocsStatusPath;
 }
 
+// Last successful read, cached per-process. Used to absorb sporadic read
+// failures (transient parse errors, race with file rotation) so the UI
+// doesn't flap between "active" and "no active crawl" every poll tick.
+let lastGoodSnapshot: { snap: DocsStatusFile; at: number } | null = null;
+const LAST_GOOD_TTL_MS = 5000;
+
 export async function readSnapshot(): Promise<DocsStatusFile | null> {
     const file = statusFilePath();
     try {
-        return JSON.parse(fs.readFileSync(file, 'utf8')) as DocsStatusFile;
+        const snap = JSON.parse(fs.readFileSync(file, 'utf8')) as DocsStatusFile;
+        lastGoodSnapshot = { snap, at: Date.now() };
+
+        return snap;
     } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        const code = (err as NodeJS.ErrnoException).code;
+        // ENOENT means the coordinator has stopped and removed the file —
+        // that's a real "no crawl" signal, don't paper over it.
+        if (code === 'ENOENT') {
+            lastGoodSnapshot = null;
+
+            return null;
+        }
+        // Any other error (transient parse failure, EAGAIN, …) — fall back
+        // to the last good snapshot if it's still fresh, else null.
+        if (lastGoodSnapshot && Date.now() - lastGoodSnapshot.at < LAST_GOOD_TTL_MS) {
+            return lastGoodSnapshot.snap;
+        }
 
         return null;
     }
@@ -275,6 +296,8 @@ export async function showLiveProgress(): Promise<void> {
         },
     });
     attachFocusCycleKeys(screen, ring);
+    ring.focusAt(0);
+    ring.renderFooter();
 
     const tick = setInterval(() => { void refresh(); }, 500);
     screen.key(['q', 'escape', 'C-c'], () => {

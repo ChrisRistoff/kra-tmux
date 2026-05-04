@@ -60,6 +60,7 @@ export const autosaveJsPath = assetPath('dest', 'automationScripts', 'autosave',
 
 // Compiled docs coordinator entry point
 export const docsCoordinatorJsPath = assetPath('dest', 'src', 'AI', 'AIAgent', 'shared', 'docs', 'coordinator.js');
+export const docsLiveProgressJsPath = assetPath('dest', 'src', 'AI', 'AIAgent', 'shared', 'docs', 'liveProgressCli.js');
 
 // Python worker that wraps Crawl4AI (shipped as raw .py)
 export const docsPythonWorkerPath = path.join(automationScriptsDir, 'python', 'kra_docs_worker.py');

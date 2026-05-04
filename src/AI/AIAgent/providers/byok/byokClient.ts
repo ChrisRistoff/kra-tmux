@@ -11,16 +11,20 @@ import { OpenAICompatibleSession } from '@/AI/AIAgent/providers/byok/byokSession
 export interface OpenAICompatibleClientOptions {
     baseURL: string;
     apiKey: string;
+    /** Provider key (e.g. 'openrouter', 'deepseek') used to scope persisted overrides. */
+    provider?: string;
 }
 
 export class OpenAICompatibleClient implements AgentClient {
     private readonly baseURL: string;
     private readonly apiKey: string;
+    private readonly provider: string | undefined;
     private sessions: OpenAICompatibleSession[] = [];
 
     public constructor(options: OpenAICompatibleClientOptions) {
         this.baseURL = options.baseURL;
         this.apiKey = options.apiKey;
+        this.provider = options.provider;
     }
 
     public createSession: AgentClient['createSession'] = async (
@@ -30,6 +34,7 @@ export class OpenAICompatibleClient implements AgentClient {
             sessionOptions: options,
             baseURL: this.baseURL,
             apiKey: this.apiKey,
+            ...(this.provider ? { provider: this.provider } : {}),
         });
 
         await session.init();

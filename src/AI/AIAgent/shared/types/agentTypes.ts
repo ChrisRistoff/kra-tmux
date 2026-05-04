@@ -67,7 +67,40 @@ export type AgentSessionEventMap = {
     'tool.execution_complete': ToolExecutionCompleteEvent;
     'session.idle': void;
     'assistant.usage': AssistantUsageEvent;
+    'session.param_stripped': ParamStrippedEvent;
+    'session.streaming_behavior_detected': StreamingBehaviorDetectedEvent;
 };
+
+export interface ParamStrippedEvent {
+    data: {
+        /** Primary OpenAI API parameter key that was dropped (e.g. 'temperature'). */
+        param: string;
+        /** Companion keys dropped together with `param` (e.g. ['tool_choice'] when stripping 'tools'). */
+        companions: string[];
+        /** Provider error message that triggered the strip. */
+        reason: string;
+    };
+}
+
+export interface StreamingBehaviorDetectedEvent {
+    data: {
+        /**
+         * `'non-streaming'` when the provider silently buffered the entire
+         * upstream response into a single SSE frame. `'streaming'` is reserved
+         * for future re-detection if a provider regains streaming.
+         */
+        mode: 'streaming' | 'non-streaming';
+        /** Milliseconds between request send and the first content/tool chunk. */
+        ttfbMs: number;
+        /** Total number of chunks observed across the response. */
+        chunkCount: number;
+        /**
+         * `true` when the model emitted reasoning inline as `<think>…</think>`
+         * tags inside `delta.content` instead of using a structured field.
+         */
+        inlineReasoningTags: boolean;
+    };
+}
 
 // ─── Provider-neutral session/client interfaces ──────────────────────────────
 
@@ -125,6 +158,33 @@ export interface AgentSessionOptions {
     localTools?: LocalTool[];
     systemMessage?: { mode?: 'append' | 'replace'; content: string };
     contextWindow?: number;
+    /**
+     * Model capabilities fetched from models.dev. The BYOK session uses
+     * this to know which streaming delta fields to watch for reasoning
+     * content, whether to advertise tool calls, etc.
+     */
+    modelCapabilities?: import('@/AI/shared/data/modelCatalog').ModelCapabilities;
+    /**
+     * Reasoning effort level (BYOK only, for models that support it).
+     * Maps to the `reasoning_effort` parameter in OpenAI-compatible APIs.
+     */
+    reasoningEffort?: 'low' | 'medium' | 'high';
+    /**
+     * Temperature override for BYOK sessions. When the model supports it,
+     * this is passed directly to the chat completion API.
+     */
+    temperature?: number;
+    /**
+     * Generic per-(provider, model) optional parameters resolved by the picker
+     * (Phase 2 of the BYOK parameter overhaul). Keyed by the OpenAI Chat
+     * Completions API parameter name (e.g. `top_p`, `frequency_penalty`,
+     * `parallel_tool_calls`). The BYOK session's `OPTIONAL_PARAMS` registry
+     * checks this map first and falls back to the typed `reasoningEffort` /
+     * `temperature` fields above for backward compatibility. Values are
+     * passed through verbatim, so the picker is responsible for producing
+     * API-shaped values.
+     */
+    dynamicParams?: Record<string, unknown>;
     onPreToolUse: (input: AgentPreToolUseHookInput) => Promise<AgentPreToolUseHookOutput>;
     onPostToolUse: (input: AgentPostToolUseHookInput) => Promise<AgentPostToolUseHookOutput | void>;
     onUserInputRequest?: (request: AgentUserInputRequest) => Promise<AgentUserInputResponse>;
@@ -158,6 +218,19 @@ export interface AgentConversationOptions {
     provider: string;
     additionalMcpServers?: Record<string, MCPServerConfig>;
     contextWindow?: number;
+    /** Model capabilities from models.dev. Passed through to the BYOK session. */
+    modelCapabilities?: import('@/AI/shared/data/modelCatalog').ModelCapabilities;
+    /** Reasoning effort for BYOK models. Maps to `reasoning_effort` in the API. */
+    reasoningEffort?: 'low' | 'medium' | 'high';
+    /** Temperature override for BYOK sessions. */
+    /** Temperature override for BYOK sessions. */
+    temperature?: number;
+    /**
+     * Generic optional params resolved by the picker. See the matching field
+     * on `AgentSessionOptions` for the full contract. Threaded straight
+     * through to the session.
+     */
+    dynamicParams?: Record<string, unknown>;
     executor?: import('@/AI/AIAgent/shared/subAgents/types').ExecutorRuntime;
     investigator?: import('@/AI/AIAgent/shared/subAgents/types').InvestigatorRuntime;
 }

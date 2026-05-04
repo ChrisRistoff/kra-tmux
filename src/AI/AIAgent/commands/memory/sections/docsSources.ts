@@ -1,7 +1,7 @@
 import blessed from 'blessed';
 import { loadSettings } from '@/utils/common';
 import { getDocChunksTable } from '@/AI/AIAgent/shared/memory/db';
-import { docsCoordinatorJsPath } from '@/packagePaths';
+import { docsCoordinatorJsPath, docsLiveProgressJsPath } from '@/packagePaths';
 import { crawl4aiVenvDir } from '@/filePaths';
 import { createIPCClient, IPCsockets } from '../../../../../../eventSystem/ipc';
 import {
@@ -12,6 +12,7 @@ import {
     coordinatorAlive,
     readSnapshot,
 } from '@/AI/AIAgent/shared/docs/liveProgressScreen';
+import { runInherit } from '@/UI/dashboard/screen';
 import type { DocsSettings, DocsSource } from '@/types/settingsTypes';
 import type { DocsSourceRequest } from '@/AI/AIAgent/shared/docs/types';
 import {
@@ -404,8 +405,19 @@ export function mountDocsSourcesSection(opts: {
             }
             else if (item.key === 'crawl-all') await crawlAllAction();
             else if (item.key === 'progress') {
-                await updateLivePane();
-                flash('live progress pane refreshed');
+                const liveActive = (await coordinatorAlive()) || (await readSnapshot()) !== null;
+                if (liveActive) {
+                    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+                    try {
+                        await runInherit(process.execPath, [docsLiveProgressJsPath], screen);
+                    } finally {
+                        pollTimer = setInterval(() => { void updateLivePane(); }, 500);
+                    }
+                    await updateLivePane();
+                } else {
+                    await updateLivePane();
+                    flash('no active crawl yet — start one with "Re-index all sources"');
+                }
             }
             else if (item.key === 'stop') await stopCoordinatorAction();
 
