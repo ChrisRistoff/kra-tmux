@@ -5,9 +5,13 @@
  * matching the read_lines tool shape) so the agent knows where to look
  * without us shipping any source code in the response.
  */
+import path from 'path';
 import { embedOne } from './embedder';
 import { getCodeChunksTable, getFindingsTable, getRevisitsTable } from './db';
 import { matchGlob } from './indexer';
+import { getActiveSearchRepoKeys } from './groups';
+import { loadRegistry, type RegistryEntry } from './registry';
+import { resolveRepoStorage } from './repoKey';
 import {
     decodeRow,
     isFindingKind,
@@ -27,6 +31,7 @@ interface RawCodeChunkHit {
     startLine: number;
     endLine: number;
     score: number;
+    repoKey: string;
 }
 
 // Drop low-confidence semantic hits before returning to the caller. Anything
@@ -61,18 +66,32 @@ export async function semanticSearch(input: SemanticSearchInput): Promise<Semant
 }
 
 async function searchCode(vector: number[], k: number, pathGlob?: string): Promise<SemanticSearchHit[]> {
-    const { table } = await getCodeChunksTable(null);
+    const repoKeys = await resolveRepoSearchSet();
+    if (repoKeys.length === 0) return [];
 
-    if (!table) return [];
+    const multiRepo = repoKeys.length > 1;
+    const registry = multiRepo ? await loadRegistry() : null;
+    const repoMeta: Map<string, RegistryEntry | undefined> = new Map();
+    if (registry) {
+        for (const entry of Object.values(registry.repos)) {
+            repoMeta.set(entry.repoKey, entry);
+        }
+    }
 
     // Pull a wide net so deduping by path still leaves us with k distinct files.
     // Files commonly own multiple matching chunks; an unfiltered fetch of `k`
     // would routinely yield <k unique paths after grouping.
     const fetchK = Math.min(Math.max(k * 8, 40), 400);
-    const rows = await table.search(vector).limit(fetchK).toArray();
 
-    const rawHits: RawCodeChunkHit[] = rows
-        .map(toRawCodeHit)
+    const perRepoHits = await Promise.all(repoKeys.map(async (repoKey): Promise<RawCodeChunkHit[]> => {
+        const { table } = await getCodeChunksTable(null, repoKey);
+        if (!table) return [];
+        const rows = await table.search(vector).limit(fetchK).toArray();
+
+        return rows.map((row) => toRawCodeHit(row, repoKey));
+    }));
+
+    const rawHits: RawCodeChunkHit[] = perRepoHits.flat()
         .filter((hit) => !pathGlob || matchGlob(hit.path, pathGlob));
 
     const grouped = groupByPath(rawHits);
@@ -82,16 +101,35 @@ async function searchCode(vector: number[], k: number, pathGlob?: string): Promi
 
     return Promise.all(topPaths.map(async (group) => {
         const merged = mergeRanges(group.ranges);
+        const meta = repoMeta.get(group.repoKey);
+        const absolutePath = multiRepo && meta?.rootPath
+            ? path.isAbsolute(group.path) ? group.path : path.join(meta.rootPath, group.path)
+            : group.path;
         const code: CodeFileHitData = {
-            path: group.path,
+            path: absolutePath,
             language: group.language,
             lineCount: 0,
             startLines: merged.map((r) => r.start),
             endLines: merged.map((r) => r.end),
+            ...(multiRepo && meta ? { repo: meta.alias, rootPath: meta.rootPath } : {}),
         };
 
         return { type: 'code', score: group.score, code } satisfies SemanticSearchHit;
     }));
+}
+
+async function resolveRepoSearchSet(): Promise<string[]> {
+    const active = await getActiveSearchRepoKeys();
+    if (active.length > 0) return active;
+
+    // Default: just the current repo (preserves single-repo behavior).
+    try {
+        const info = await resolveRepoStorage();
+
+        return [info.repoKey];
+    } catch {
+        return [];
+    }
 }
 
 async function searchMemory(vector: number[], k: number, kind: MemoryLookupKind, selectedIds?: string[]): Promise<SemanticSearchHit[]> {
@@ -125,7 +163,7 @@ async function searchMemory(vector: number[], k: number, kind: MemoryLookupKind,
         .slice(0, k);
 }
 
-function toRawCodeHit(raw: Record<string, unknown>): RawCodeChunkHit {
+function toRawCodeHit(raw: Record<string, unknown>, repoKey: string): RawCodeChunkHit {
     const row = raw as unknown as CodeChunkRow & { _distance?: number };
 
     return {
@@ -134,6 +172,7 @@ function toRawCodeHit(raw: Record<string, unknown>): RawCodeChunkHit {
         startLine: row.startLine,
         endLine: row.endLine,
         score: distanceToScore(row._distance),
+        repoKey,
     };
 }
 
@@ -142,21 +181,24 @@ interface PathGroup {
     language: string;
     score: number;
     ranges: { start: number; end: number }[];
+    repoKey: string;
 }
 
 function groupByPath(hits: RawCodeChunkHit[]): Map<string, PathGroup> {
     const groups = new Map<string, PathGroup>();
     for (const hit of hits) {
-        const existing = groups.get(hit.path);
+        const groupKey = `${hit.repoKey}::${hit.path}`;
+        const existing = groups.get(groupKey);
         if (existing) {
             existing.ranges.push({ start: hit.startLine, end: hit.endLine });
             if (hit.score > existing.score) existing.score = hit.score;
         } else {
-            groups.set(hit.path, {
+            groups.set(groupKey, {
                 path: hit.path,
                 language: hit.language,
                 score: hit.score,
                 ranges: [{ start: hit.startLine, end: hit.endLine }],
+                repoKey: hit.repoKey,
             });
         }
     }

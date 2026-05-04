@@ -17,6 +17,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import { matchesSubAgentWhitelist } from '@/AI/AIAgent/shared/subAgents/whitelist';
+import { getActiveSearchRepoKeys } from '@/AI/AIAgent/shared/memory/groups';
 
 export interface RegisteredTool {
     server: string;
@@ -63,6 +64,12 @@ export async function buildMcpClientPool(options: BuildPoolOptions): Promise<Mcp
     const excluded = new Set(options.excludedTools ?? []);
     const allowedSet = options.allowedTools ? new Set(options.allowedTools) : null;
 
+    // Resolve the active multi-repo search group once per pool build so each
+    // spawned MCP server inherits the same set. Empty list ⇒ single-repo mode
+    // (memoryMcpServer falls back to WORKING_DIR's repo on its own).
+    const activeRepoKeys = await getActiveSearchRepoKeys();
+    const searchRepoKeysEnv = activeRepoKeys.length > 0 ? activeRepoKeys.join(',') : '';
+
     for (const [serverName, config] of Object.entries(options.servers)) {
         if (config.type !== 'local' && config.type !== 'stdio') {
             continue;
@@ -74,6 +81,7 @@ export async function buildMcpClientPool(options: BuildPoolOptions): Promise<Mcp
             ),
             ...(config.env ?? {}),
             WORKING_DIR: options.workingDirectory,
+            ...(searchRepoKeysEnv ? { KRA_SEARCH_REPO_KEYS: searchRepoKeysEnv } : {}),
         };
 
         const transport = new StdioClientTransport({

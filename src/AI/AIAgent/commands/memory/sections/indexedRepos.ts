@@ -8,6 +8,7 @@ import {
     type RegistryEntry,
 } from '@/AI/AIAgent/shared/memory/registry';
 import { computeRepoKey } from '@/AI/AIAgent/shared/memory/repoKey';
+import { loadGroups, setActiveGroup } from '@/AI/AIAgent/shared/memory/groups';
 import { kraMemoryRepoRoot } from '@/filePaths';
 import { inspectCurrentCodeIndex, runCurrentCodeIndex } from '@/AI/AIAgent/commands/indexCodebase';
 import {
@@ -79,9 +80,14 @@ export function mountIndexedReposSection(opts: {
     });
 
     let state: RepoState = { repos: [], repoFiles: {} };
+    // Multi-repo search group state. `selected` is the in-UI checkbox set
+    // (repoKeys); `active` is what's persisted in groups.json and used by
+    // new agent sessions for cross-repo semantic search.
+    const selected: Set<string> = new Set();
+    const active: Set<string> = new Set();
 
     function keymapText(): string {
-        return '{cyan-fg}enter{/cyan-fg} actions · {cyan-fg}i{/cyan-fg} re-index · {cyan-fg}d{/cyan-fg} drop · {cyan-fg}R{/cyan-fg} reset baseline · {cyan-fg}r{/cyan-fg} reload';
+        return '{cyan-fg}enter{/cyan-fg} actions · {cyan-fg}space{/cyan-fg} toggle · {cyan-fg}a{/cyan-fg} apply group · {cyan-fg}c{/cyan-fg} clear · {cyan-fg}i{/cyan-fg} re-index · {cyan-fg}d{/cyan-fg} drop · {cyan-fg}r{/cyan-fg} reload';
     }
 
     function flash(text: string, color = 'green'): void {
@@ -125,6 +131,14 @@ export function mountIndexedReposSection(opts: {
         }
 
         state = { repos, repoFiles };
+
+        const groups = await loadGroups();
+        active.clear();
+        for (const k of groups.active) active.add(k);
+        // Seed selection from active so the user sees the current group.
+        if (selected.size === 0) {
+            for (const k of groups.active) selected.add(k);
+        }
     }
 
     function selectedRepo(): RepoRow | undefined {
@@ -134,9 +148,21 @@ export function mountIndexedReposSection(opts: {
     }
 
     function renderList(): void {
-        const items = state.repos.map((r) => ` {cyan-fg}❑{/cyan-fg} {white-fg}${escTag(r.entry.alias)}{/white-fg} {gray-fg}· ${r.entry.chunksCount} chunks{/gray-fg}`);
+        const items = state.repos.map((r) => {
+            const isSelected = selected.has(r.entry.repoKey);
+            const isActive = active.has(r.entry.repoKey);
+            const marker = isActive
+                ? '{green-fg}[✓]{/green-fg}'
+                : isSelected
+                    ? '{yellow-fg}[+]{/yellow-fg}'
+                    : '{gray-fg}[ ]{/gray-fg}';
+
+            return ` ${marker} {cyan-fg}❑{/cyan-fg} {white-fg}${escTag(r.entry.alias)}{/white-fg} {gray-fg}· ${r.entry.chunksCount} chunks{/gray-fg}`;
+        });
+        const prevIdx = (list as unknown as { selected?: number }).selected ?? 0;
         list.setItems(items);
-        list.select(0);
+        const safeIdx = Math.max(0, Math.min(state.repos.length - 1, prevIdx));
+        list.select(safeIdx);
         refreshPanels();
         screen.render();
     }
@@ -151,18 +177,37 @@ export function mountIndexedReposSection(opts: {
     }
 
     function renderDetails(row?: RepoRow): string {
-        if (!row) return '{gray-fg}(no indexed repositories){/gray-fg}';
+        const activeAliases = state.repos
+            .filter((r) => active.has(r.entry.repoKey))
+            .map((r) => r.entry.alias);
+        const activeLine = activeAliases.length > 0
+            ? `{green-fg}active group ({/green-fg}{cyan-fg}${activeAliases.length}{/cyan-fg}{green-fg}){/green-fg} ${escTag(activeAliases.join(', '))}`
+            : '{gray-fg}active group: (none) — single-repo mode{/gray-fg}';
+        const selectedExtras = state.repos
+            .filter((r) => selected.has(r.entry.repoKey) && !active.has(r.entry.repoKey))
+            .map((r) => r.entry.alias);
+        const selectionLine = selectedExtras.length > 0
+            ? `{yellow-fg}pending selection +${selectedExtras.length}{/yellow-fg} ${escTag(selectedExtras.join(', '))}`
+            : '';
+
+        if (!row) {
+            return [activeLine, selectionLine, '', '{gray-fg}(no indexed repositories){/gray-fg}'].filter(Boolean).join('\n');
+        }
 
         return [
+            activeLine,
+            selectionLine,
+            '',
             `{cyan-fg}alias{/cyan-fg}            ${escTag(row.entry.alias)}`,
             `{cyan-fg}id{/cyan-fg}               ${escTag(row.id)}`,
             `{cyan-fg}rootPath{/cyan-fg}         ${escTag(row.entry.rootPath)}`,
+            `{cyan-fg}repoKey{/cyan-fg}          ${escTag(row.entry.repoKey)}`,
             `{cyan-fg}chunks{/cyan-fg}           ${row.entry.chunksCount}`,
             `{cyan-fg}lastIndexed{/cyan-fg}      ${row.entry.lastIndexedAt ? new Date(row.entry.lastIndexedAt).toISOString() : '(never)'}`,
             `{cyan-fg}lastCommit{/cyan-fg}       ${escTag(row.entry.lastIndexedCommit || '(none)')}`,
             '',
-            '{gray-fg}enter actions · i re-index · d drop · R reset baseline{/gray-fg}',
-        ].join('\n');
+            '{gray-fg}space toggle · a apply selection as active group · c clear selection{/gray-fg}',
+        ].filter((line) => line !== '').join('\n');
     }
 
     function renderFiles(row?: RepoRow): string {
@@ -366,6 +411,38 @@ export function mountIndexedReposSection(opts: {
         await reload();
         flash('reloaded');
         list.focus();
+    });
+
+    list.key(['space'], () => {
+        const row = selectedRepo();
+        if (!row) return;
+        const key = row.entry.repoKey;
+        if (selected.has(key)) {
+            selected.delete(key);
+        } else {
+            selected.add(key);
+        }
+        renderList();
+        flash(`${selected.size} selected`, 'yellow');
+    });
+
+    list.key(['a'], async () => {
+        const keys = state.repos
+            .map((r) => r.entry.repoKey)
+            .filter((k) => selected.has(k));
+        await setActiveGroup(keys);
+        active.clear();
+        for (const k of keys) active.add(k);
+        renderList();
+        flash(keys.length === 0
+            ? 'cleared active group (single-repo mode)'
+            : `active group set: ${keys.length} repo${keys.length === 1 ? '' : 's'}`);
+    });
+
+    list.key(['c'], () => {
+        selected.clear();
+        renderList();
+        flash('selection cleared', 'yellow');
     });
 
     void reload().then(() => {

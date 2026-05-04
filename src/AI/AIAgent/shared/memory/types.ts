@@ -173,6 +173,11 @@ export interface CodeFileHitData {
     endLines: number[];
     outline?: SemanticOutlineEntry[];
     outlineAccurate?: boolean;
+    // Set only when fan-out across multiple repos is active. `repo` is the
+    // registry alias and `rootPath` the absolute repo top-level so the
+    // agent can resolve `path` against the right working tree.
+    repo?: string;
+    rootPath?: string;
 }
 
 export interface SemanticSearchInput {
