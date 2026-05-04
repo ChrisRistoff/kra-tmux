@@ -16,7 +16,7 @@ excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view',
 | `get_outline(file_path)` | Structural outline (symbols + line numbers) |
 | `read_lines(...)` | Read exact line ranges (single or array form) |
 | `read_function(file_path, function_name)` | Return full function/class body by name |
-| `edit_lines(...)` | Replace exact ranges (single or array form) |
+| `edit(file_path, edits[])` | Anchor-based edits (replace / insert / delete), each edit's anchor must match the file exactly once. Multiple edits per call. |
 | `create_file(file_path, content)` | Create new file |
 | `lsp_query(...)` | Hover/definition/references/etc via language server |
 
@@ -38,7 +38,7 @@ At least one of `name_pattern` or `content_pattern` is required.
 1. `search`
 2. `get_outline`
 3. `read_lines`
-4. `edit_lines`
+4. `edit`
 
 Prefer array-form reads/edits for multiple disjoint ranges.
 
@@ -165,7 +165,7 @@ Behavior notes:
 - Only one execution runs at a time; concurrent calls are rejected.
 - `Ctrl-C` (`stop_stream`) aborts the executor and returns control to the
   orchestrator. The orchestrator sees the partial event log captured so far.
-- Executor tool whitelist (default): `read_lines`, `get_outline`, `edit_lines`,
+- Executor tool whitelist (default): `read_lines`, `get_outline`, `edit`,
   `create_file`, `search`, `lsp_query`, `bash`. `confirm_task_complete` and
   other end-of-turn tools are forbidden — the orchestrator owns the turn.
 - Hard cap of `maxToolCalls` (default 60) tool calls before the executor is

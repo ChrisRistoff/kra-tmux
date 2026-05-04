@@ -67,7 +67,7 @@ The agent is instructed to always call `confirm_task_complete` before ending a t
 
 ### Agent History (per-session)
 
-Every file mutation the agent performs — through `edit_lines`, `create_file`, or even via `bash` (detected via a before/after `git status` snapshot) — is recorded in an in-memory `AgentHistory`. This drives:
+Every file mutation the agent performs — through `edit`, `create_file`, or even via `bash` (detected via a before/after `git status` snapshot) — is recorded in an in-memory `AgentHistory`. This drives:
 
 - The **session diff history** picker (`<leader>s`) — every write, plus an `ORIG` entry per file
 - **Per-file revert** — the picker lets you restore any single file to its pre-session baseline, even after dozens of edits

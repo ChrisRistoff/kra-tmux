@@ -364,7 +364,7 @@ You are in a detached proposal workspace. Edits land in the real repository only
 </workspace>`;
 
 const CREATING_FILES_BLOCK = `<creating_files>
-Use \`create_file\` for new files only. It refuses if the file already exists. For existing files, use edit_lines.
+Use \`create_file\` for new files only. It refuses if the file already exists. For existing files, use the \`edit\` tool.
 </creating_files>`;
 
 function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
@@ -443,32 +443,64 @@ function buildSurgicalEditsBlock(executeEnabled: boolean): string {
         : '';
 
     return `<surgical_edits>
-${preamble}**Goal: Edit ONLY the lines that must change. Do not rewrite surrounding context.**
+${preamble}**Goal: Edit ONLY the code that must change. Anchor each edit to the surrounding content.**
+
+The \`edit\` tool is anchor-based, not line-based. You pass:
+  - \`file_path\`
+  - \`edits\`: an array of one or more edits, each with:
+    - \`op\`: "replace" | "insert" | "delete"
+    - \`anchor\`: 1+ contiguous lines from the CURRENT file (verbatim, including indentation). Must match exactly once. For ranges, set the anchor to the FIRST line of the region.
+    - \`end_anchor\`: optional, replace/delete only. Last line of the region (verbatim, must match exactly once after the anchor). When omitted on replace/delete, only the single \`anchor\` block is targeted.
+    - \`position\`: "before" | "after" — insert only. Default "after".
+    - \`content\`: required for replace/insert. The replacement / inserted text. Omit or pass empty for delete.
+
+Why this is better than line numbers: the anchor is content-verified at apply time. If the file has shifted since you last looked, or if your anchor is ambiguous, the edit is rejected with a clear error — you can never silently overwrite the wrong region.
 
 Workflow:
-  1. Call get_outline to find what you need
-  2. Call read_lines on the EXACT range containing your change
-  ⚠ You MUST read the target lines before editing — the tool rejects edits without a prior read.
-  3. read_lines prefixes every line like \`  142: code here\` — use those numbers directly as startLine/endLine
-  4. Call edit_lines with startLine and endLine as tight as possible
+  1. Use get_outline / read_lines / search to find the code you want to change.
+  2. Pick the SMALLEST anchor that uniquely identifies the change site — usually 1–3 lines is enough.
+  3. For a replace/delete that spans many lines, set \`anchor\` to the first line and \`end_anchor\` to the last line of the region. Both ends are content-verified; everything between them is replaced.
+  4. For an insert, choose \`position: "before"\` or \`"after"\` relative to the anchor.
 
-**Before calling edit_lines — declare your ranges:**
-Output \`Editing: L14-15, L88-88, L142-145\`. **Every line in each range must change** — if a line is only there to preserve context, remove it from the range entirely (the tool keeps untouched lines automatically). If any range spans a whole function but only 1-2 lines change inside it, split into tight sub-ranges.
+**Anchor rules:**
+  - Anchors must match the file VERBATIM (whitespace and indentation included). If your strict anchor matches zero times but a whitespace-trimmed version matches exactly once, the tool will fall back to the trimmed match and tell you in the response.
+  - Anchor must match EXACTLY ONCE in the file. If a 1-line anchor would be ambiguous (e.g. \`return null;\`, \`}\`, an empty line, a common log call), extend it UPWARD or DOWNWARD with surrounding lines until it's unique. The tool's error tells you how many places matched, so widen and retry.
+  - Blank or whitespace-only anchors are rejected.
+  - For a replace/delete with \`end_anchor\`, the two anchor blocks must NOT overlap and \`end_anchor\` must come after \`anchor\` in the file.
 
+**Examples:**
 
-Critical rule: Every line between startLine and endLine will be REPLACED with your newContent.
-  - If you read lines 100–180 and need to change only lines 142–145, call edit_lines with startLine:142 endLine:145
-  - Do NOT include unchanged lines 100–141 and 146–180 in your newContent
-  - If only line 88 changes, use startLine:88 endLine:88 (single-line range: 88–88)
-  - Do NOT pass the whole 100-line range just because you read it
-  - Do NOT use any other tool except edit_lines to change code in a file
+  Replace a single line — pick a unique 1-liner:
+    { op: "replace", anchor: "const TIMEOUT_MS = 5000;", content: "const TIMEOUT_MS = 30000;" }
 
-For multiple changes in the same file:
-  - Use the multi-edit array form with several tight ranges
-  - Example: lines 12–12, lines 47–49, lines 88–88 all in one call
-  - Do NOT combine them into a single large range
+  Replace a duplicate line by widening the anchor (multiple \`return null;\` in the file):
+    { op: "replace",
+      anchor: "if (!user) {\n    return null;\n}",
+      content: "if (!user) {\n    throw new UnauthorizedError();\n}" }
 
-**Why this matters:** Every line in the range is replaced verbatim. Stale surrounding context silently overwrites newer code you didn't intend to change.
+  Replace a multi-line region with end_anchor:
+    { op: "replace",
+      anchor: "function oldImpl() {",
+      end_anchor: "} // oldImpl",
+      content: "function newImpl() {\n    return doIt();\n}" }
+
+  Insert a new import after the last existing import:
+    { op: "insert",
+      anchor: "import { foo } from './foo';",
+      position: "after",
+      content: "import { bar } from './bar';" }
+
+  Delete a block:
+    { op: "delete", anchor: "// DEPRECATED:\nfunction legacy() {", end_anchor: "} // legacy" }
+
+**Multi-edit (one call, several changes):**
+  - Pass several edits in the \`edits\` array of a single call. All anchors resolve against the ORIGINAL file in parallel; the engine applies them bottom-to-top so earlier edits don't shift later anchors.
+  - Overlapping target regions are rejected — keep each edit's region disjoint from the others.
+  - Order in the array does not matter. Prefer one batched call over multiple sequential ones when changing the same file in several places (one diff, one LSP pass, atomic).
+
+**Critical rule:** the anchor IS the contract. Only the matched region is changed — surrounding code is preserved untouched. Do NOT include unchanged context inside \`content\`; do NOT widen an anchor just to "feel safe" (widen ONLY to disambiguate).
+
+**Why this matters:** the only way to overwrite the wrong code is to feed a wrong anchor. Pick tight, unique anchors and the tool catches your mistakes for you.
 </surgical_edits>`;
 }
 

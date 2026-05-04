@@ -4,15 +4,15 @@ import path from 'path';
 import * as neovim from 'neovim';
 import type { VimValue } from 'neovim/lib/types/VimValue';
 import {
-    buildInsertionOnlyEdit,
     coerceNumber,
     coerceNumberArray,
-    extractEditLinesRequest,
+    extractAnchorEditRequest,
     extractEditRequest,
     extractWriteRequest,
     getToolArgsRecord,
     getToolFamily,
     shouldAutoApproveTool,
+    type AnchorEdit,
 } from '@/AI/AIAgent/shared/utils/agentToolApproval';
 import {
     formatConfirmAnswer,
@@ -37,7 +37,13 @@ import type {
 import { atomicWriteFile } from '@/AI/AIAgent/shared/utils/fileSafety';
 import { refreshAgentLayout } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 
-const EDIT_LINES_HARD_CAP = 100;
+// Matches the kra-file-context 'edit' tool. We require 'edit' to appear as a
+// distinct token (preceded by start-of-string or a separator commonly used in
+// MCP tool names) so we don't accidentally match 'str_replace_editor',
+// 'edit_file', etc.
+function isAnchorEditTool(name: string): boolean {
+    return /(?:^|[_:\-.])edit$/.test(name);
+}
 
 function quoteForShell(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -130,55 +136,117 @@ async function buildWritePreviewForWrite(toolArgs: unknown, workspacePath: strin
     };
 }
 
-// Build preview for the edit_lines MCP tool (single- or multi-edit form).
-async function buildWritePreviewForEditLines(toolArgs: unknown, workspacePath: string): Promise<ToolWritePreview | undefined> {
-    const request = extractEditLinesRequest(toolArgs, workspacePath);
+// Build preview for the kra-file-context anchor-based `edit` tool.
+// Returns undefined if any anchor fails to resolve uniquely — the tool itself
+// will reject the call with a detailed error, so the diff editor stays out of
+// the way.
+interface ResolvedAnchorEdit extends AnchorEdit {
+    affectedStart: number;
+    affectedEnd: number;
+    insertAt?: number;
+}
+
+function findExactAnchor(haystack: string[], needle: string[]): number {
+    const limit = haystack.length - needle.length;
+    let found = -1;
+
+    if (limit < 0) return -1;
+
+    outer:
+    for (let i = 0; i <= limit; i++) {
+        for (let j = 0; j < needle.length; j++) {
+            if (haystack[i + j] !== needle[j]) continue outer;
+        }
+        if (found !== -1) return -1;
+        found = i;
+    }
+
+    return found;
+}
+
+function findTrimmedAnchor(haystack: string[], needle: string[]): number {
+    const trimmedNeedle = needle.map(l => l.trim());
+    const limit = haystack.length - needle.length;
+    let found = -1;
+
+    if (limit < 0) return -1;
+
+    outer:
+    for (let i = 0; i <= limit; i++) {
+        for (let j = 0; j < needle.length; j++) {
+            if (haystack[i + j].trim() !== trimmedNeedle[j]) continue outer;
+        }
+        if (found !== -1) return -1;
+        found = i;
+    }
+
+    return found;
+}
+
+function resolveAnchorIndex(haystack: string[], anchorRaw: string): number {
+    const needle = anchorRaw.replace(/\n+$/, '').split('\n');
+    if (needle.length === 0 || needle.every(l => l.trim() === '')) return -1;
+    const exact = findExactAnchor(haystack, needle);
+    if (exact >= 0) return exact;
+
+    return findTrimmedAnchor(haystack, needle);
+}
+
+async function buildWritePreviewForAnchorEdit(toolName: string, toolArgs: unknown, workspacePath: string): Promise<ToolWritePreview | undefined> {
+    if (!isAnchorEditTool(toolName)) return undefined;
+
+    const request = extractAnchorEditRequest(toolArgs, workspacePath);
     if (!request) return undefined;
 
     const currentContent = await readFileOrEmpty(request.targetPath);
-    let proposedContent: string;
-    let note: string;
+    const lines = currentContent.split('\n');
 
-    if (request.startLines && request.endLines && request.newContents) {
-        // Multi-edit (array) form — apply edits bottom-to-top, same as the MCP server.
-        const { startLines, endLines, newContents } = request;
-        let lines = currentContent.split('\n');
-        const indices = Array.from({ length: startLines.length }, (_, i) => i)
-            .sort((a, b) => startLines[b] - startLines[a]);
+    const resolved: ResolvedAnchorEdit[] = [];
 
-        for (const i of indices) {
-            const start = startLines[i];
-            const clampedEnd = Math.min(endLines[i], lines.length);
-            const insertLines = newContents[i] === '' ? [] : newContents[i].split('\n');
-            lines = [...lines.slice(0, start - 1), ...insertLines, ...lines.slice(clampedEnd)];
+    for (const e of request.edits) {
+        const start = resolveAnchorIndex(lines, e.anchor);
+        if (start < 0) return undefined;
+        const anchorLineCount = e.anchor.replace(/\n+$/, '').split('\n').length;
+        const anchorEnd = start + anchorLineCount - 1;
+
+        let endAnchorEnd = anchorEnd;
+        if (e.endAnchor) {
+            const endStart = resolveAnchorIndex(lines, e.endAnchor);
+            if (endStart < 0 || endStart < start) return undefined;
+            const endLineCount = e.endAnchor.replace(/\n+$/, '').split('\n').length;
+            endAnchorEnd = endStart + endLineCount - 1;
         }
 
-        proposedContent = lines.join('\n');
-        note = `Applies ${startLines.length} edit${startLines.length === 1 ? '' : 's'} across the file. Approved edits are applied as a full-file replacement.`;
-    } else if (
-        typeof request.startLine === 'number'
-        && typeof request.endLine === 'number'
-        && typeof request.newContent === 'string'
-    ) {
-        const { startLine, endLine, newContent } = request;
-        const lines = currentContent.split('\n');
-        const clampedEnd = Math.min(endLine, lines.length);
-        const insertLines = newContent === '' ? [] : newContent.split('\n');
-        const resultLines = [
-            ...lines.slice(0, startLine - 1),
-            ...insertLines,
-            ...lines.slice(clampedEnd),
-        ];
-        proposedContent = resultLines.join('\n');
-        note = newContent === ''
-            ? `Deletes lines ${startLine}–${clampedEnd}. Edit the middle pane before approving.`
-            : `Replaces lines ${startLine}–${clampedEnd} with ${insertLines.length} line${insertLines.length === 1 ? '' : 's'}. Approved edits are applied as a full-file replacement.`;
-    } else {
-        return undefined;
+        if (e.op === 'insert') {
+            const insertAt = e.position === 'before' ? start : anchorEnd + 1;
+            resolved.push({ ...e, affectedStart: insertAt, affectedEnd: insertAt - 1, insertAt });
+        } else {
+            resolved.push({ ...e, affectedStart: start, affectedEnd: endAnchorEnd });
+        }
     }
 
+    // Apply bottom-to-top.
+    let working = lines;
+    const order = [...resolved].sort((a, b) => b.affectedStart - a.affectedStart);
+    for (const e of order) {
+        const insertLines = e.op === 'delete' || e.content === '' || e.content === undefined
+            ? []
+            : e.content.split('\n');
+        if (e.op === 'insert') {
+            const at = e.insertAt as number;
+            working = [...working.slice(0, at), ...insertLines, ...working.slice(at)];
+        } else {
+            working = [
+                ...working.slice(0, e.affectedStart),
+                ...insertLines,
+                ...working.slice(e.affectedEnd + 1),
+            ];
+        }
+    }
 
+    const proposedContent = working.join('\n');
     const diff = await computeDiff(currentContent, proposedContent);
+    const note = `Applies ${request.edits.length} anchor-based edit${request.edits.length === 1 ? '' : 's'}. Approved edits are applied as a full-file replacement.`;
 
     return {
         applyStrategy: 'edit-tool',
@@ -246,17 +314,17 @@ async function buildWritePreviewForEdit(toolArgs: unknown, workspacePath: string
     };
 }
 
-export async function buildWritePreview(toolArgs: unknown, workspacePath: string): Promise<ToolWritePreview | undefined> {
+export async function buildWritePreview(toolName: string, toolArgs: unknown, workspacePath: string): Promise<ToolWritePreview | undefined> {
     return (
         await buildWritePreviewForWrite(toolArgs, workspacePath)
-        ?? await buildWritePreviewForEditLines(toolArgs, workspacePath)
+        ?? await buildWritePreviewForAnchorEdit(toolName, toolArgs, workspacePath)
         ?? await buildWritePreviewForEdit(toolArgs, workspacePath)
     );
 }
 
 
 // Builds a compact "File: ... / Line ranges: ..." summary for the file-context
-// `read_lines` and `edit_lines` tool calls so the permission popup shows the
+// `read_lines` tool calls so the permission popup shows the
 // targeted ranges at a glance instead of an opaque "Arguments:" placeholder.
 function summarizeLineRanges(args: Record<string, unknown> | undefined): string | undefined {
     if (!args) return undefined;
@@ -301,7 +369,7 @@ export async function buildToolApprovalDetails(input: AgentPreToolUseHookInput, 
         ? input.toolArgs
         : JSON.stringify(input.toolArgs ?? {}, null, 2);
     const argsRecord = getToolArgsRecord(input.toolArgs);
-    const isLineRangeTool = input.toolName.includes('read_lines') || input.toolName.includes('edit_lines');
+    const isLineRangeTool = input.toolName.includes('read_lines');
     const lineRangeSummary = isLineRangeTool ? summarizeLineRanges(argsRecord) : undefined;
     const summary = lineRangeSummary
         ?? (typeof argsRecord?.command === 'string'
@@ -311,7 +379,7 @@ export async function buildToolApprovalDetails(input: AgentPreToolUseHookInput, 
                 : typeof argsRecord?.path === 'string'
                     ? `Path:\n${argsRecord.path}`
                     : 'Arguments:');
-    const writePreview = await buildWritePreview(input.toolArgs, workspacePath);
+    const writePreview = await buildWritePreview(input.toolName, input.toolArgs, workspacePath);
     const sections = [
         `Tool: ${input.agentLabel ? `[${input.agentLabel}] ` : ''}${input.toolName}`,
         '',
@@ -757,38 +825,9 @@ export async function handlePreToolUse(
         }
     }
 
-    // Upfront cap check for edit_lines: reject ranges >100 lines BEFORE building
-    // the diff or asking for approval. Saves the round-trip and gives the agent
-    // an actionable error in one turn (with concrete split suggestions).
-    if (input.toolName.includes('edit_lines')) {
-        const editReq = extractEditLinesRequest(input.toolArgs, workspacePath);
-        if (editReq) {
-            const starts = editReq.startLines ?? (editReq.startLine !== undefined ? [editReq.startLine] : []);
-            const ends = editReq.endLines ?? (editReq.endLine !== undefined ? [editReq.endLine] : []);
-            const violations: string[] = [];
-            for (let i = 0; i < starts.length; i++) {
-                const span = ends[i] - starts[i] + 1;
-                if (span > EDIT_LINES_HARD_CAP) {
-                    const where = starts.length > 1 ? ` (range ${i})` : '';
-                    const splitCount = Math.ceil(span / EDIT_LINES_HARD_CAP);
-                    violations.push(`${starts[i]}–${ends[i]} = ${span} lines${where}; split into ${splitCount} ranges of <=${EDIT_LINES_HARD_CAP} lines each`);
-                }
-            }
-            if (violations.length > 0) {
-                return {
-                    permissionDecision: 'deny',
-                    permissionDecisionReason: [
-                        `edit_lines hard cap is ${EDIT_LINES_HARD_CAP} lines per range. The following range(s) exceed it:`,
-                        ...violations.map(v => `  - ${v}`),
-                        '',
-                        'Use the multi-edit form (startLines/endLines/newContents arrays) so non-overlapping regions go in a single call.',
-                        'For a near-total file rewrite, split into multiple non-overlapping ranges that each cover <=100 lines of the original file.',
-                        'Do NOT attempt to bypass this cap.',
-                    ].join('\n'),
-                };
-            }
-        }
-    }
+    // The anchor-based `edit` tool needs no upfront cap check — the replaced
+    // region is bounded by content the agent named explicitly, so there is no
+    // trust-based length to police here.
     // Snapshot git state before any bash-family tool runs for mutation tracking.
     const isBashLikeTool = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
         (fragment) => input.toolName.toLowerCase().includes(fragment)
@@ -799,16 +838,17 @@ export async function handlePreToolUse(
         } catch { /* non-fatal */ }
     }
 
-    // Pre-read file content for edit_lines / create_file so we have an accurate
+    // Pre-read file content for edit / create_file so we have an accurate
     // "before" snapshot in history regardless of approval mode.
     let preReadTargetPath: string | undefined;
     let preReadBeforeContent: string | undefined;
-    if (input.toolName.includes('edit_lines')) {
-        const req = extractEditLinesRequest(input.toolArgs, workspacePath);
+    if (isAnchorEditTool(input.toolName)) {
+        const req = extractAnchorEditRequest(input.toolArgs, workspacePath);
         if (req?.targetPath) {
             preReadTargetPath = req.targetPath;
             preReadBeforeContent = await readFileOrEmpty(req.targetPath);
         }
+    } else if (input.toolName.includes('create_file')) {
     } else if (input.toolName.includes('create_file')) {
         const cfArgs = getToolArgsRecord(input.toolArgs);
         const rawCfPath = typeof cfArgs?.file_path === 'string' ? cfArgs.file_path : undefined;
@@ -825,7 +865,7 @@ export async function handlePreToolUse(
                 path: preReadTargetPath,
                 beforeContent: preReadBeforeContent || null,
                 afterContent: cfArgs && typeof cfArgs.content === 'string' ? cfArgs.content : null,
-                source: input.toolName.includes('edit_lines') ? 'edit_lines' : 'create_file',
+                source: isAnchorEditTool(input.toolName) ? 'edit' : 'create_file',
             });
         }
 
@@ -875,143 +915,53 @@ export async function handlePreToolUse(
         });
     }
 
-    // For edit_lines: honour user edits from the diff editor, or record the
+    // For the anchor-based `edit` tool: honour user edits from the diff editor
+    // by writing the user's final content directly, then short-circuit MCP with
+    // a no-op edit (anchor = entire file == content). Otherwise just record the
     // before/after mutation and let the MCP server apply the agent's args.
-    if (input.toolName.includes('edit_lines') && preview?.applyStrategy === 'edit-tool') {
+    if (isAnchorEditTool(input.toolName) && preview?.applyStrategy === 'edit-tool') {
         if (preReadTargetPath !== undefined && preReadBeforeContent !== undefined) {
             const userFinalContent = typeof modifiedArgs?.__userFinalContent === 'string'
                 ? modifiedArgs.__userFinalContent : undefined;
+
             if (userFinalContent !== undefined) {
+                const notifyAgent = modifiedArgs?.__userEditNotify === true;
+
+                await atomicWriteFile(preReadTargetPath, userFinalContent);
                 state.history.recordMutation({
                     path: preReadTargetPath,
                     beforeContent: preReadBeforeContent || null,
                     afterContent: userFinalContent,
-                    source: 'edit_lines:user',
+                    source: 'edit:user',
                 });
 
-                // Transform the agent's edit_lines call into one that takes
-                // the file from preReadBeforeContent to userFinalContent. We
-                // strip the common prefix/suffix to find the changed region,
-                // then encode it as one (or more, if >100 lines) edit_lines
-                // ranges. MCP applies the edit, runs LSP diagnostics, and
-                // reports the actual line changes back to the agent. Whether
-                // the agent sees the new content or a brief notice depends on
-                // the user's choice in the diff editor (__userEditNotify).
-                const notifyAgent = modifiedArgs?.__userEditNotify === true;
-                const beforeLines = preReadBeforeContent.split('\n');
-                const afterLines = userFinalContent.split('\n');
-                let cp = 0;
-                const maxCommon = Math.min(beforeLines.length, afterLines.length);
-                while (cp < maxCommon && beforeLines[cp] === afterLines[cp]) cp++;
-                let cs = 0;
-                while (
-                    cs < maxCommon - cp
-                    && beforeLines[beforeLines.length - 1 - cs] === afterLines[afterLines.length - 1 - cs]
-                ) cs++;
-
-                const editStart = cp + 1;
-                const editEnd = Math.max(beforeLines.length - cs, cp);
-                const newSliceStart = cp;
-                const newSliceEnd = afterLines.length - cs;
-                const newAfterStart = cp + 1;
-                const newAfterEnd = afterLines.length - cs;
-
-                const newStarts: number[] = [];
-                const newEnds: number[] = [];
-                const newContents: string[] = [];
-
-                if (editEnd < editStart) {
-                    const { safeLine, newContent } = buildInsertionOnlyEdit(
-                        beforeLines,
-                        afterLines,
-                        cp,
-                        newSliceStart,
-                        newSliceEnd
-                    );
-                    newStarts.push(safeLine);
-                    newEnds.push(safeLine);
-                    newContents.push(newContent);
-                } else {
-                    const beforeSpan = editEnd - editStart + 1;
-                    if (beforeSpan <= EDIT_LINES_HARD_CAP) {
-                        newStarts.push(editStart);
-                        newEnds.push(editEnd);
-                        newContents.push(afterLines.slice(newSliceStart, newSliceEnd).join('\n'));
-                    } else {
-                        // Split into ≤100-line ranges in the BEFORE file. MCP
-                        // applies bottom-to-top, so each range's start/end
-                        // refer to original line numbers. Distribute the
-                        // after-side lines proportionally; the last chunk
-                        // soaks up any leftover lines.
-                        const chunkCount = Math.ceil(beforeSpan / EDIT_LINES_HARD_CAP);
-                        const newRegionLines = afterLines.slice(newSliceStart, newSliceEnd);
-                        const newPerChunk = Math.floor(newRegionLines.length / chunkCount);
-                        let consumedBefore = 0;
-                        let consumedAfter = 0;
-                        for (let c = 0; c < chunkCount; c++) {
-                            const isLast = c === chunkCount - 1;
-                            const chunkBefore = isLast
-                                ? beforeSpan - consumedBefore
-                                : Math.min(EDIT_LINES_HARD_CAP, beforeSpan - consumedBefore);
-                            const chunkAfter = isLast
-                                ? newRegionLines.length - consumedAfter
-                                : newPerChunk;
-                            const s = editStart + consumedBefore;
-                            const e = s + chunkBefore - 1;
-                            const slice = newRegionLines.slice(consumedAfter, consumedAfter + chunkAfter).join('\n');
-                            newStarts.push(s);
-                            newEnds.push(e);
-                            newContents.push(slice);
-                            consumedBefore += chunkBefore;
-                            consumedAfter += chunkAfter;
-                        }
-                    }
-                }
-
+                // Send a no-op edit to MCP so it still runs LSP diagnostics on
+                // the saved file and reports them back to the agent. The whole
+                // file is trivially a unique anchor, and replacing it with
+                // itself is a safe no-op since we already wrote the desired
+                // final content above.
                 const args = getToolArgsRecord(input.toolArgs) ?? {};
-                const useMulti = Array.isArray(args.startLines) || newStarts.length > 1;
                 const newArgs: Record<string, unknown> = { ...args };
                 delete newArgs.__userFinalContent;
                 delete newArgs.__userEditNotify;
-                if (useMulti) {
-                    newArgs.startLines = newStarts;
-                    newArgs.endLines = newEnds;
-                    newArgs.newContents = newContents;
-                    delete newArgs.start_line;
-                    delete newArgs.end_line;
-                    delete newArgs.new_content;
-                } else {
-                    newArgs.start_line = newStarts[0];
-                    newArgs.end_line = newEnds[0];
-                    newArgs.new_content = newContents[0];
-                    delete newArgs.startLines;
-                    delete newArgs.endLines;
-                    delete newArgs.newContents;
-                }
+                newArgs.edits = [{ op: 'replace', anchor: userFinalContent, content: userFinalContent }];
 
                 let context: string;
                 if (notifyAgent) {
-                    const affectedAfterLines = afterLines.slice(newSliceStart, newSliceEnd);
-                    let previewText: string;
-                    let rangeLabel: string;
-                    if (affectedAfterLines.length === 0) {
-                        previewText = '(the affected region is now empty)';
-                        rangeLabel = `near line ${newAfterStart}`;
-                    } else {
-                        previewText = affectedAfterLines
-                            .map((l, i) => `${newAfterStart + i}: ${l}`)
-                            .join('\n');
-                        rangeLabel = `lines ${newAfterStart}\u2013${newAfterEnd}`;
-                    }
+                    const previewLines = userFinalContent.split('\n');
+                    const head = previewLines.slice(0, 80)
+                        .map((l, i) => `${i + 1}: ${l}`)
+                        .join('\n');
+                    const tail = previewLines.length > 80 ? `\n... (${previewLines.length - 80} more lines)` : '';
+
                     context =
                         `The user reviewed your proposed edit in the diff editor and adjusted it before applying. ` +
-                        `${preReadTargetPath} now contains the user's final version. The post-edit content of the ` +
-                        `affected region (${rangeLabel}) is:\n${previewText}`;
+                        `${preReadTargetPath} now contains the user's final version. First lines:\n${head}${tail}`;
                 } else {
                     context =
                         `The user reviewed your proposed edit in the diff editor and adjusted it before applying. ` +
                         `${preReadTargetPath} now contains the user's final version. They chose not to surface ` +
-                        `the exact post-edit lines \u2014 assume the change is fine if no LSP diagnostics were ` +
+                        `the exact post-edit lines — assume the change is fine if no LSP diagnostics were ` +
                         `reported by the tool result. Only call read_lines if you specifically need to inspect ` +
                         `the new content.`;
                 }
@@ -1027,12 +977,13 @@ export async function handlePreToolUse(
                 path: preReadTargetPath,
                 beforeContent: preReadBeforeContent || null,
                 afterContent: preview.proposedContent,
-                source: 'edit_lines',
+                source: 'edit',
             });
         }
 
         return { permissionDecision: 'allow' };
     }
+
 
     if (decision.modifiedArgs) {
         return { permissionDecision: 'allow', modifiedArgs: decision.modifiedArgs };

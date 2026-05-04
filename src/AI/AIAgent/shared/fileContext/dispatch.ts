@@ -1,6 +1,6 @@
 import { errorContent, ToolResult } from './toolResult';
 import { handleCreateFile } from './handlers/createFile';
-import { handleEditLines } from './handlers/editLines';
+import { handleEdit } from './handlers/edit';
 import { handleGetOutline } from './handlers/getOutline';
 import { handleLspQuery } from './handlers/lspQuery';
 import { handleReadFunction } from './handlers/readFunction';
@@ -37,8 +37,8 @@ export async function dispatchFileContextTool(
         case 'read_function':
             return handleReadFunction(filePath, args);
 
-        case 'edit_lines':
-            return handleEditLines(filePath, args);
+        case 'edit':
+            return handleEdit(filePath, args);
 
         case 'create_file':
             return handleCreateFile(filePath, args);

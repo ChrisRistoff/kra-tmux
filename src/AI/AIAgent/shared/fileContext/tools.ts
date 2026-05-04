@@ -19,7 +19,7 @@ export const TOOLS = [
         name: 'read_lines',
         description: [
             'Returns specific lines from a file (1-indexed, inclusive).',
-            'Each returned line is prefixed with its line number (e.g. `  267: ...`) so you can pinpoint the exact lines you need for a follow-up `edit_lines` call.',
+            'Each returned line is prefixed with its line number (e.g. `  267: ...`) so you can copy a verbatim slice as the `anchor` for a follow-up `edit` call.',
             'You can request any range up to 150 lines directly without calling get_outline first — only larger reads on files with a meaningful outline are bounced back. Truly unstructured files (txt, csv, log, plain markdown without headings, …) are never gated.',
             'Hard cap is 500 lines per call (summed across ranges).',
             'Supports multiple ranges in one call: pass startLines and endLines as parallel arrays (startLines[i] pairs with endLines[i]).',
@@ -64,43 +64,57 @@ export const TOOLS = [
     },
 
     {
-        name: 'edit_lines',
+        name: 'edit',
         description: [
-            'Replaces one or more line ranges in a file with new content (1-indexed, inclusive).',
-            'ALWAYS uses the array form. Even a single edit is expressed as a 1-element call: startLines: [142], endLines: [145], newContents: ["..."]. There is no single-edit shortcut — start_line/end_line/new_content do not exist.',
-            'For multiple non-adjacent changes in the same file, batch them into ONE call as parallel arrays (e.g. startLines: [12, 47, 88]). Do NOT make separate edit_lines calls for each change, and do NOT widen one range to span them.',
-            'Pass an empty string in newContents[i] to delete that range without replacement. Returns a short summary of what was replaced; the agent already has the old content from its most recent read, so the tool does not echo it back.',
-            'All line numbers refer to the ORIGINAL file — the tool sorts ranges internally (largest first) so order does not matter, and ranges must not overlap.',
-            'No single range may cover more than 100 lines (hard cap, no override of any kind). Split larger changes into multiple ranges in the same call.',
-            'Read-before-edit: every targeted line must have been returned by read_lines or read_function within the current session, otherwise the call is rejected. The cache is reset for a file after each successful edit.',
-            'Make MINIMAL, SURGICAL edits: target the SMALLEST possible line range that contains your change. Use the line numbers prefixed in the `read_lines` output to pinpoint the exact lines. If only lines 142–145 need to change inside a 200-line read, your range is [142, 145] — not [100, 200].',
-            'Do NOT include unchanged surrounding lines in newContents "for context". Do NOT add or remove unrelated blank lines, do NOT reformat unrelated code, do NOT touch lines outside the scope of your task. Every line inside [startLines[i], endLines[i]] WILL be replaced verbatim by newContents[i] — unchanged lines in that range are pure waste and a frequent source of accidental edits.',
-            'For near-total file rewrites: split the file into multiple non-overlapping ranges of <=100 lines each and pass them all in one call. Do not attempt to bypass the cap.',
+            'Anchor-based file editor. Edits are described by content, never by line numbers.',
+            'Each entry in `edits` has an `op` ("replace" | "insert" | "delete") and an `anchor` — one or more contiguous lines copied verbatim from the file that uniquely identify the location. The anchor itself is never altered unless the op is replace/delete and it falls inside the affected range.',
+            'replace: removes the anchor block (or the range from `anchor` through `end_anchor` if provided) and writes `content` in its place. Pass content:"" to delete the matched range.',
+            'insert: adds `content` adjacent to the anchor. Use position:"after" (default) or position:"before". The anchor is preserved; nothing is overwritten.',
+            'delete: removes the anchor block (or the range from `anchor` through `end_anchor` if provided). No `content` field.',
+            'Anchors must match EXACTLY ONCE in the file. If your anchor matches zero or multiple lines the call is rejected with hints — extend the anchor with one more adjacent line until it is unique. A blank or whitespace-only anchor is always rejected.',
+            'Anchors may span multiple lines (1–5 is typical). For ranges, both `anchor` and `end_anchor` must independently match exactly once and `end_anchor` must be at or after `anchor`. Whitespace is significant; if a strict match fails the tool will retry with whitespace trimmed and accept it iff that produces exactly one match (it will tell you in the response).',
+            'Multi-edit: pass several entries in `edits`. All anchors are resolved against the ORIGINAL file in parallel, overlapping or identical regions are rejected, and the edits are applied bottom-to-top so positions stay valid.',
+            'The replaced region is always bounded by content you named explicitly, so you cannot accidentally clobber surrounding lines.',
         ].join(' '),
         inputSchema: {
             type: 'object',
             properties: {
                 file_path: { type: 'string', description: 'Absolute or workspace-relative path to the file.' },
-                startLines: {
+                edits: {
                     type: 'array',
-                    items: { type: 'number' },
                     minItems: 1,
-                    description: 'First line of each range to replace (1-indexed). For a single edit, pass a 1-element array, e.g. [142]. Must be the same length as endLines and newContents.',
-                },
-                endLines: {
-                    type: 'array',
-                    items: { type: 'number' },
-                    minItems: 1,
-                    description: 'Last line of each range to replace (1-indexed, inclusive). For a single edit, pass a 1-element array, e.g. [145]. Must be the same length as startLines and newContents.',
-                },
-                newContents: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    minItems: 1,
-                    description: 'Replacement content for each range. Pass empty string to delete a range. Must be the same length as startLines and endLines.',
+                    description: 'One or more edits to apply atomically. Resolved against the original file in parallel; rejected as a group if any anchor is missing/ambiguous or any two edits overlap.',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            op: {
+                                type: 'string',
+                                enum: ['replace', 'insert', 'delete'],
+                                description: '"replace" swaps the anchored region for `content`; "insert" adds `content` next to the anchor without removing it; "delete" removes the anchored region.',
+                            },
+                            anchor: {
+                                type: 'string',
+                                description: 'One or more contiguous lines copied verbatim from the file that uniquely identify the edit location. Multiple lines are joined with \\n. Must match exactly once.',
+                            },
+                            end_anchor: {
+                                type: 'string',
+                                description: 'Optional. replace/delete only. Upgrades the edit to a range whose end is also content-verified. Must match exactly once and appear at or after `anchor`.',
+                            },
+                            position: {
+                                type: 'string',
+                                enum: ['before', 'after'],
+                                description: 'Insert only. Whether `content` goes immediately before or after the anchor block. Default "after".',
+                            },
+                            content: {
+                                type: 'string',
+                                description: 'Required for replace/insert. The text to write in (replace) or to add (insert). May span multiple lines; do NOT include surrounding context lines that are not actually changing.',
+                            },
+                        },
+                        required: ['op', 'anchor'],
+                    },
                 },
             },
-            required: ['file_path', 'startLines', 'endLines', 'newContents'],
+            required: ['file_path', 'edits'],
         },
     },
 
@@ -108,7 +122,7 @@ export const TOOLS = [
         name: 'create_file',
         description: [
             'Creates a NEW file with the given content. Refuses if the target path already exists.',
-            'To MODIFY an existing file, use edit_lines (use the multi-edit array form for changes spanning multiple regions).',
+            'To MODIFY an existing file, use the `edit` tool (anchor-based; pass several entries in `edits` for multiple changes in one call).',
             'Parent directories are created automatically.',
             'Use this instead of str_replace_editor or write_file for new-file creation.',
             'Writes are atomic (temp file + rename) so a crash mid-write cannot corrupt the destination.',
