@@ -297,7 +297,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         // Enable fold markers for the tool-call log blocks (uses default {{{/}}} markers).
         // foldlevel=99 keeps all folds open by default; user can fold with zc/za.
         await nvimClient.command('setlocal foldmethod=marker foldlevel=99');
-        await setupAgentSplitLayout(nvimClient, channelId);
+        await setupAgentSplitLayout(nvimClient, channelId, chatFile);
         await refreshAgentLayout(nvimClient);
         await focusAgentPrompt(nvimClient);
         await setupSessionEventHandlers(state);

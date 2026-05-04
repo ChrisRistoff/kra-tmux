@@ -208,10 +208,22 @@ function M.create(config)
             end,
         })
     end
+    -- Tail-windowing: keep only the last `tail_bytes` of the chat file in the
+    -- transcript buffer. The rest stays on disk and is loaded on-demand when the
+    -- user scrolls up. This bounds treesitter / render-markdown / Neovim redraw
+    -- cost regardless of total chat size.
+    local chat_file_path = nil
+    local byte_start_in_file = 0
+    local byte_end_in_file = 0
+    local TAIL_BYTES_DEFAULT = 200000
+    local tail_bytes = TAIL_BYTES_DEFAULT
+    local head_loaded = true
+    local has_history_sentinel = false
+    local load_initial_tail, load_more_history, attach_history_loader, smart_refresh, trim_buffer_to_tail
 
     local layout = {}
 
-    function layout.setup(channel_id)
+    function layout.setup(channel_id, chat_file_path_arg, opts)
         local transcript_win = vim.api.nvim_get_current_win()
         local transcript_buf = vim.api.nvim_get_current_buf()
         local prompt_buf = vim.api.nvim_create_buf(false, true)
@@ -233,6 +245,24 @@ function M.create(config)
         set_state('prompt_cursor', nil)
 
         create_prompt_window()
+
+        if type(chat_file_path_arg) == 'string' and chat_file_path_arg ~= '' then
+            chat_file_path = chat_file_path_arg
+            if type(opts) == 'table' and type(opts.tail_bytes) == 'number' then
+                tail_bytes = opts.tail_bytes
+            end
+            -- Detach the transcript buffer from its file: no :edit! reload, no :w
+            -- writes back to disk. TS owns all writes via fs.appendFile; this buffer
+            -- is only ever a view into a (possibly truncated) tail of that file.
+            pcall(function()
+                vim.bo[transcript_buf].buftype = 'nofile'
+                vim.bo[transcript_buf].swapfile = false
+            end)
+            load_initial_tail()
+            attach_history_loader(transcript_buf)
+            pcall(vim.keymap.set, 'n', 'gh', function() load_more_history() end,
+                { buffer = transcript_buf, silent = true, desc = 'Load more chat history' })
+        end
     end
 
     function layout.get_prompt_text()
@@ -270,10 +300,293 @@ function M.create(config)
         end
 
         vim.api.nvim_set_current_win(prompt_win)
-        restore_prompt_cursor(prompt_win, prompt_buf)
+    end
+
+    -- Render-markdown is left enabled during streaming so formatting appears
+    -- as the agent types. Tail-windowing keeps the transcript bounded so the
+    -- per-change extmark recompute stays cheap.
+
+    -- Incremental append: write text to the END of the transcript buffer without
+    -- reloading from disk. Coalesces a burst of streaming chunks via a short timer
+    -- so we do at most ~1 buffer mutation per debounce window.
+    local pending_append = ''
+    local append_timer = nil
+    local APPEND_DEBOUNCE_MS = 10
+
+    local function flush_append()
+        local transcript_buf = get_state('transcript_buf')
+        if not is_valid_buf(transcript_buf) then
+            pending_append = ''
+            return
+        end
+
+        local text = pending_append
+        pending_append = ''
+        if text == '' then return end
+
+
+        local last_line = vim.api.nvim_buf_line_count(transcript_buf)
+        local last_line_content = vim.api.nvim_buf_get_lines(
+            transcript_buf, last_line - 1, last_line, false
+        )[1] or ''
+        local last_col = #last_line_content
+        local lines = vim.split(text, '\n', { plain = true })
+
+        local was_modifiable = vim.bo[transcript_buf].modifiable
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = true end
+        pcall(vim.api.nvim_buf_set_text,
+            transcript_buf, last_line - 1, last_col, last_line - 1, last_col, lines)
+        byte_end_in_file = byte_end_in_file + #text
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = false end
+
+        -- Buffer + disk are kept in sync by the TS side (it appends the same
+        -- text to the file). Clear the modified flag so :edit! at boundaries
+        -- is a no-op reload and no "buffer modified" warnings appear.
+        pcall(function() vim.bo[transcript_buf].modified = false end)
+
+        -- Auto-scroll the transcript window only if the user isn't currently
+        -- focused on it (don't fight a user reading / scrolling history).
+        local transcript_win = get_state('transcript_win')
+        if is_valid_win(transcript_win)
+            and vim.api.nvim_get_current_win() ~= transcript_win then
+            local new_count = vim.api.nvim_buf_line_count(transcript_buf)
+            local last = vim.api.nvim_buf_get_lines(
+                transcript_buf, new_count - 1, new_count, false
+            )[1] or ''
+            pcall(vim.api.nvim_win_set_cursor, transcript_win, { new_count, #last })
+        end
+
+        if chat_file_path then trim_buffer_to_tail(transcript_buf) end
+    end
+    -- ---- Tail-windowing helpers (defined after flush_append so they can
+    -- close over pending_append / flush_append).
+
+    local function fs_size(path)
+        local stat = vim.loop.fs_stat(path)
+        return stat and stat.size or 0
+    end
+
+    local function fs_read_range(path, offset, length)
+        if length <= 0 then return '' end
+        local fd = vim.loop.fs_open(path, 'r', 438)
+        if not fd then return '' end
+        local data = vim.loop.fs_read(fd, length, offset)
+        vim.loop.fs_close(fd)
+        return data or ''
+    end
+
+    local function format_history_sentinel(bytes_above)
+        local label
+        if bytes_above < 1024 then
+            label = bytes_above .. ' B'
+        elseif bytes_above < 1024 * 1024 then
+            label = string.format('%.1f KB', bytes_above / 1024)
+        else
+            label = string.format('%.2f MB', bytes_above / (1024 * 1024))
+        end
+        return '<!-- \xe2\x94\x80\xe2\x94\x80 ' .. label
+            .. ' earlier \xe2\x80\x94 scroll up or press gh to load more \xe2\x94\x80\xe2\x94\x80 -->'
+    end
+
+    local function update_history_sentinel(transcript_buf)
+        if not is_valid_buf(transcript_buf) then return end
+        local was_modifiable = vim.bo[transcript_buf].modifiable
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = true end
+        if byte_start_in_file > 0 then
+            local sentinel = format_history_sentinel(byte_start_in_file)
+            if has_history_sentinel then
+                vim.api.nvim_buf_set_lines(transcript_buf, 0, 1, false, { sentinel })
+            else
+                vim.api.nvim_buf_set_lines(transcript_buf, 0, 0, false, { sentinel })
+                has_history_sentinel = true
+            end
+        elseif has_history_sentinel then
+            vim.api.nvim_buf_set_lines(transcript_buf, 0, 1, false, {})
+            has_history_sentinel = false
+        end
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = false end
+        pcall(function() vim.bo[transcript_buf].modified = false end)
+    end
+
+    load_initial_tail = function()
+        if not chat_file_path then return end
+        local transcript_buf = get_state('transcript_buf')
+        if not is_valid_buf(transcript_buf) then return end
+        local size = fs_size(chat_file_path)
+        byte_end_in_file = size
+        if size <= tail_bytes then
+            byte_start_in_file = 0
+            head_loaded = true
+        else
+            local raw = fs_read_range(chat_file_path, size - tail_bytes, tail_bytes)
+            local nl = raw:find('\n')
+            byte_start_in_file = nl and (size - tail_bytes + nl) or (size - tail_bytes)
+            head_loaded = false
+        end
+        local content = fs_read_range(chat_file_path, byte_start_in_file,
+            byte_end_in_file - byte_start_in_file)
+        local lines = vim.split(content, '\n', { plain = true })
+        if #lines == 0 then lines = { '' } end
+        local was_modifiable = vim.bo[transcript_buf].modifiable
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = true end
+        vim.api.nvim_buf_set_lines(transcript_buf, 0, -1, false, lines)
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = false end
+        pcall(function() vim.bo[transcript_buf].modified = false end)
+        has_history_sentinel = false
+        update_history_sentinel(transcript_buf)
+        update_history_sentinel(transcript_buf)
+    end
+
+    trim_buffer_to_tail = function(transcript_buf)
+        if not chat_file_path then return end
+        if (byte_end_in_file - byte_start_in_file) <= 2 * tail_bytes then return end
+
+        local transcript_win = get_state('transcript_win')
+        if is_valid_win(transcript_win)
+            and vim.api.nvim_get_current_win() == transcript_win then
+            return
+        end
+
+        local new_target_start = byte_end_in_file - tail_bytes
+        local read_len = byte_end_in_file - new_target_start
+        local raw = fs_read_range(chat_file_path, new_target_start, read_len)
+        if not raw then return end
+
+        local actual_start = new_target_start
+        if new_target_start > 0 then
+            local nl = raw:find('\n', 1, true)
+            if nl then
+                raw = raw:sub(nl + 1)
+                actual_start = new_target_start + nl
+            end
+        end
+
+        local lines = vim.split(raw, '\n', { plain = true })
+        local was_modifiable = vim.bo[transcript_buf].modifiable
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = true end
+        pcall(vim.api.nvim_buf_set_lines, transcript_buf, 0, -1, false, lines)
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = false end
+        pcall(function() vim.bo[transcript_buf].modified = false end)
+
+        byte_start_in_file = actual_start
+        head_loaded = (actual_start == 0)
+        has_history_sentinel = false
+        update_history_sentinel(transcript_buf)
+
+        if is_valid_win(transcript_win) then
+            local n = vim.api.nvim_buf_line_count(transcript_buf)
+            local last = vim.api.nvim_buf_get_lines(transcript_buf, n - 1, n, false)[1] or ''
+            pcall(vim.api.nvim_win_set_cursor, transcript_win, { n, #last })
+        end
+    end
+
+    load_more_history = function()
+        if head_loaded or not chat_file_path then return end
+        local transcript_buf = get_state('transcript_buf')
+        if not is_valid_buf(transcript_buf) then return end
+        local new_start = math.max(0, byte_start_in_file - tail_bytes)
+        local read_len = byte_start_in_file - new_start
+        local raw = fs_read_range(chat_file_path, new_start, read_len)
+        local actual_start = new_start
+        if new_start > 0 then
+            local nl = raw:find('\n')
+            if nl then
+                raw = raw:sub(nl + 1)
+                actual_start = new_start + nl
+            end
+        end
+        local lines = vim.split(raw, '\n', { plain = true })
+        if #lines > 0 and lines[#lines] == '' then table.remove(lines) end
+        if #lines == 0 then return end
+        local transcript_win = get_state('transcript_win')
+        local view = nil
+        if is_valid_win(transcript_win) then
+            view = vim.api.nvim_win_call(transcript_win, function() return vim.fn.winsaveview() end)
+        end
+        local before_count = vim.api.nvim_buf_line_count(transcript_buf)
+        local was_modifiable = vim.bo[transcript_buf].modifiable
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = true end
+        local replace_to = has_history_sentinel and 1 or 0
+        vim.api.nvim_buf_set_lines(transcript_buf, 0, replace_to, false, lines)
+        has_history_sentinel = false
+        byte_start_in_file = actual_start
+        head_loaded = (actual_start == 0)
+        if not was_modifiable then vim.bo[transcript_buf].modifiable = false end
+        pcall(function() vim.bo[transcript_buf].modified = false end)
+        update_history_sentinel(transcript_buf)
+        if view and is_valid_win(transcript_win) then
+            local after_count = vim.api.nvim_buf_line_count(transcript_buf)
+            local shift = after_count - before_count
+            view.topline = view.topline + shift
+            view.lnum = view.lnum + shift
+            pcall(vim.api.nvim_win_call, transcript_win, function() vim.fn.winrestview(view) end)
+        end
+    end
+
+    attach_history_loader = function(transcript_buf)
+        local hist_key = state_key('history_loader_attached')
+        if vim.b[transcript_buf][hist_key] then return end
+        vim.b[transcript_buf][hist_key] = true
+        vim.api.nvim_create_autocmd('WinScrolled', {
+            buffer = transcript_buf,
+            callback = function()
+                if head_loaded then return end
+                local transcript_win = get_state('transcript_win')
+                if not is_valid_win(transcript_win) then return end
+                local topline = vim.api.nvim_win_call(transcript_win, function()
+                    return vim.fn.line('w0')
+                end)
+                if topline <= 2 then load_more_history() end
+            end,
+        })
+    end
+
+    smart_refresh = function()
+        if not chat_file_path then return false end
+        local transcript_buf = get_state('transcript_buf')
+        if not is_valid_buf(transcript_buf) then return true end
+        -- Always reload the visible tail from disk. Pure-append diffing was unsafe
+        -- because TS code paths mutate the chat file in-place (e.g.
+        -- materializeUserDraft rewriting `(draft)` -> `· timestamp`), and a
+        -- diff-append would slice into the middle of a rewritten line.
+        -- load_initial_tail is bounded (reads at most tail_bytes), so this is
+        -- still cheap relative to a full :edit! reload of an unbounded file.
+        -- Drop any in-flight pending bytes; we're about to replace the buffer
+        -- entirely from disk, so the in-memory tail is now stale.
+        pending_append = ''
+        load_initial_tail()
+        return true
+    end
+
+    function layout.append_text(text)
+        if type(text) ~= 'string' or text == '' then return end
+        pending_append = pending_append .. text
+        if append_timer then return end
+        append_timer = vim.defer_fn(function()
+            append_timer = nil
+            flush_append()
+        end, APPEND_DEBOUNCE_MS)
     end
 
     function layout.refresh()
+        -- Flush any pending streaming text into the buffer first.
+        if append_timer then
+            pcall(function() append_timer:stop(); append_timer:close() end)
+            append_timer = nil
+        end
+        flush_append()
+
+        -- Tail-windowing path: cheap on-disk diff sync, no full reload.
+        if smart_refresh() then
+            local transcript_win = get_state('transcript_win')
+            if is_valid_win(transcript_win) then
+                pcall(vim.api.nvim_win_call, transcript_win, function() vim.cmd('normal! G') end)
+            end
+            pcall(vim.cmd, 'redraw')
+            return
+        end
+
+        -- Legacy fallback for callers that didn't set chat_file_path.
         local transcript_win = get_state('transcript_win')
         local prompt_win = get_state('prompt_win')
         local prompt_buf = get_state('prompt_buf')
@@ -304,7 +617,6 @@ function M.create(config)
 
         pcall(vim.cmd, 'redraw!')
     end
-
     return layout
 end
 

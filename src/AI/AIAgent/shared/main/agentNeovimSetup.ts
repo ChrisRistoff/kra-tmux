@@ -69,9 +69,10 @@ export async function addAgentFunctions(nvimClient: neovim.NeovimClient, channel
 
 export async function setupAgentSplitLayout(
     nvimClient: neovim.NeovimClient,
-    channelId: number
+    channelId: number,
+    chatFile: string
 ): Promise<void> {
-    await nvimClient.executeLua(`require('kra_agent_layout').setup(...)`, [channelId]);
+    await nvimClient.executeLua(`require('kra_agent_layout').setup(...)`, [channelId, chatFile]);
 }
 
 
@@ -92,6 +93,30 @@ export async function focusAgentPrompt(nvimClient: neovim.NeovimClient): Promise
 
 export async function refreshAgentLayout(nvimClient: neovim.NeovimClient): Promise<void> {
     await nvimClient.executeLua(`require('kra_agent_layout').refresh()`, []);
+}
+
+/**
+ * Fire-and-forget incremental append into the agent transcript buffer.
+ *
+ * Uses msgpack notify (NOT request) so Neovim's event loop is not blocked
+ * waiting for a reply — that's what previously caused user keystrokes in the
+ * prompt buffer to freeze while the model streamed tokens. The Lua side
+ * coalesces rapid bursts via a debounce timer and pauses render-markdown for
+ * a short window so we don't pay full extmark/treesitter recompute per chunk.
+ *
+ * Caller must still write the same `text` to the chat file on disk so the
+ * buffer and disk stay in sync (the Lua side resets &modified to false).
+ */
+export function appendToAgentChatLayout(nvimClient: neovim.NeovimClient, text: string): void {
+    if (!text) return;
+    try {
+        nvimClient.notify('nvim_exec_lua', [
+            `require('kra_agent_layout').append_text(...)`,
+            [text],
+        ]);
+    } catch {
+        // Ignore — UI updates are best-effort.
+    }
 }
 
 export async function openAgentNeovim(chatFile: string): Promise<neovim.NeovimClient> {

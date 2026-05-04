@@ -154,8 +154,8 @@ describe('nvim-utils', () => {
                     .mockResolvedValueOnce(undefined)
                     .mockResolvedValueOnce(undefined);
 
-                await setupChatSplitLayout(mockNvim, 123);
-                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(1, `require('kra_chat_layout').setup(...)`, [123]);
+                await setupChatSplitLayout(mockNvim, 123, '/tmp/test-chat.md');
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(1, `require('kra_chat_layout').setup(...)`, [123, '/tmp/test-chat.md']);
 
                 const prompt = await getChatPromptText(mockNvim);
                 expect(prompt).toBe('Prompt text');

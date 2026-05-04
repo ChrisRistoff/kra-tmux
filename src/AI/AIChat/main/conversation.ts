@@ -67,7 +67,7 @@ export async function converse(
 
         // open the file in Neovim
         await nvim.command(`edit ${chatFile}`);
-        await aiNeovimHelper.setupChatSplitLayout(nvim, channelId);
+        await aiNeovimHelper.setupChatSplitLayout(nvim, channelId, chatFile);
         await aiNeovimHelper.refreshChatLayout(nvim);
         await aiNeovimHelper.focusChatPrompt(nvim);
         await setupEventHandlers(nvim, chatFile, provider, model, temperature, role);
@@ -205,7 +205,7 @@ async function handleStreamingResponse(
 ): Promise<void> {
     let pendingBuffer = '';
     let lastUpdate = Date.now();
-    const updateInterval = 100;
+    const updateInterval = 16;
     let trailingNewlines = 0;
 
     const normalize = (chunk: string): string => {
@@ -236,7 +236,7 @@ async function handleStreamingResponse(
             if (Date.now() - lastUpdate >= updateInterval) {
                 if (pendingBuffer) {
                     await appendToChat(chatFile, pendingBuffer);
-                    await aiNeovimHelper.refreshChatLayout(nvim);
+                    aiNeovimHelper.appendToChatLayout(nvim, pendingBuffer);
                     pendingBuffer = '';
                 }
                 lastUpdate = Date.now();
@@ -245,7 +245,7 @@ async function handleStreamingResponse(
 
         if (pendingBuffer && !controller.isAborted) {
             await appendToChat(chatFile, pendingBuffer);
-            await aiNeovimHelper.refreshChatLayout(nvim);
+            aiNeovimHelper.appendToChatLayout(nvim, pendingBuffer);
         }
 
         await aiNeovimHelper.refreshChatLayout(nvim);
