@@ -75,7 +75,7 @@ From approval popup on write tools, `e` opens a three-pane diff view: current / 
 | `<leader>j` | Edit tool args JSON |
 | `q` | Close and deny |
 
-When user edits proposed content before approval, Kra rebuilds the tool mutation as concrete `edit_lines` arguments and optionally notifies the model with post-edit context.
+When user edits proposed content before approval, Kra rebuilds the tool mutation as concrete `edit` arguments and optionally notifies the model with post-edit context.
 
 ## Session diff history (`<leader>s`)
 

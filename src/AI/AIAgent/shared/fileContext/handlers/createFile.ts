@@ -10,8 +10,7 @@ export async function handleCreateFile(filePath: string, args: Record<string, un
     if (content === undefined) return errorContent('content argument is required.');
 
     // create_file is for NEW files only. Modifications to existing files must
-    // go through edit_lines (multi-range form for changes spanning multiple
-    // regions). This prevents bypassing the edit_lines cap by overwriting.
+    // go through the anchor-based `edit` tool.
     let exists = false;
 
     try {
@@ -21,8 +20,8 @@ export async function handleCreateFile(filePath: string, args: Record<string, un
 
     if (exists) {
         return errorContent(
-            `Refusing to create_file: ${filePath} already exists. Use edit_lines to modify existing files ` +
-            '(use the multi-range form \u2014 startLines/endLines/newContents arrays \u2014 for changes spanning multiple regions).'
+            `Refusing to create_file: ${filePath} already exists. Use the \`edit\` tool to modify existing files ` +
+            '(pass several entries in `edits` for changes spanning multiple regions).'
         );
     }
 

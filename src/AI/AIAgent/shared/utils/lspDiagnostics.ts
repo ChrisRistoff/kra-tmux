@@ -10,7 +10,7 @@
  * string of errors+warnings for that single file, or undefined if there are
  * none, the file is not a TS/JS source, or the project couldn't be loaded.
  *
- * The MCP server appends the result to edit_lines / create_file responses so
+ * The MCP server appends the result to edit / create_file responses so
  * the agent sees type errors in the same turn it made the change.
  */
 

@@ -1,18 +1,17 @@
 import * as path from 'path';
 
 /**
- * Per-session read-before-edit tracker.
- *
- * edit_lines refuses to touch lines the agent has not read via read_lines /
- * read_function / create_file in the same session. The cache is cleared per
- * file after each successful edit_lines or create_file, since prior line
- * numbers may shift.
+ * Per-file read tracker. Currently used by read_lines / read_function /
+ * create_file to remember which lines the agent has already seen, and cleared
+ * by `edit` and create_file after a successful write. The new anchor-based
+ * `edit` tool no longer requires read-before-edit (the anchor itself proves
+ * the agent has seen the surrounding code), so this is now informational
+ * rather than a gate.
  */
 
-// Hard cap on a single edit_lines range. There is intentionally NO override
-// flag of any kind \u2014 neither agents nor MCP clients can bypass this. Larger
-// changes must be split into multiple ranges (multi-edit array form counts
-// each range separately).
+// Retained for back-compat with utilities that historically gated edits by
+// The new anchor-based `edit` tool has no per-range cap (the replaced region
+// is bounded by content the agent named explicitly).
 export const LARGE_RANGE_THRESHOLD = 100;
 
 // Soft gate: if a single read_lines call requests more than this many lines
@@ -38,8 +37,7 @@ export function markRead(filePath: string, start: number, end: number): void {
     for (let i = start; i <= end; i++) s.add(i);
 }
 
-// Note currently in use, left here to potentially force errors on edit_lines calls
-// that would mutate large ranges without first reading them.
+// Not currently in use. Left here for tools that may want to flag edits to
 export function findUnreadGap(filePath: string, start: number, end: number): [number, number] | undefined {
     const s = seenLines.get(canonicalPath(filePath));
 

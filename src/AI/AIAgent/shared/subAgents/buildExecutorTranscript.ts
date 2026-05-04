@@ -25,7 +25,7 @@ const FILE_CONTEXT_TOOLS = new Set([
     'get_outline',
     'read_function',
     'search',
-    'edit_lines',
+    'edit',
     'create_file',
     'lsp_query',
 ]);

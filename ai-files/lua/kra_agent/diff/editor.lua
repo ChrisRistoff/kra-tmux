@@ -503,7 +503,7 @@ function M.open_write_diff_editor(channel_id, payload, send_fn)
         if
             preview.applyStrategy == "edit-tool"
             and type(payload.toolName) == "string"
-            and payload.toolName:find("edit_lines")
+            and (payload.toolName:match("[_:%-%.]edit$") or payload.toolName == "edit")
         then
             -- Detect whether the user actually edited the proposed buffer.
             -- We compare against the ORIGINAL AI-proposed text (proposed_lines is
@@ -517,8 +517,8 @@ function M.open_write_diff_editor(channel_id, payload, send_fn)
                 -- User edited the diff: ask whether to notify the AI of the
                 -- exact post-edit lines, or just tell it the change went
                 -- through and to trust LSP. Send the buffer content under
-                -- __userFinalContent so the TS side knows to transform the
-                -- edit_lines call accordingly.
+                -- __userFinalContent so the TS side knows to swap in the
+                -- user's text instead of the AI's proposal.
                 decoded.__userFinalContent = approved_text
                 -- vim.ui.select is overridden by various UI plugins
                 -- (dressing.nvim, fzf-lua, telescope-ui-select, ...) and

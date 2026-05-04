@@ -46,7 +46,7 @@ allowReplanEscape = true      # executor may emit needs_replan; orchestrator rep
 includeDiffsInLog = true      # event log carries inline diffs for edits
 maxToolCalls = 60             # hard cap on tool calls before the executor is forced to submit
 # Restrict the toolset the executor is allowed to call (defaults shown):
-# toolWhitelist = ["read_lines", "get_outline", "edit_lines", "create_file",
+# toolWhitelist = ["read_lines", "get_outline", "edit", "create_file",
 #                  "search", "lsp_query", "bash"]
 
 [ai.agent.investigator]

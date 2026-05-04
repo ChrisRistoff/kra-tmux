@@ -7,7 +7,7 @@
  *   get_outline(file_path)               — list functions/classes + line numbers
  *   read_lines(file_path, start, end)    — return a specific line range (1-indexed)
  *   read_function(file_path, name)       — return the body of a named symbol
- *   edit_lines(file_path, ...)           — replace one or more line ranges
+ *   edit(file_path, edits[])             — anchor-based edit (replace/insert/delete)
  *   create_file(file_path, content)      — create a NEW file (refuses if exists)
  *
  * The agent is directed to use these tools instead of the built-in

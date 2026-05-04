@@ -14,17 +14,18 @@ export interface EditToolRequest {
     targetPath: string;
 }
 
-export interface EditLinesRequest {
+export interface AnchorEdit {
+    op: 'replace' | 'insert' | 'delete';
+    anchor: string;
+    endAnchor: string | undefined;
+    position: 'before' | 'after' | undefined;
+    content: string | undefined;
+}
+
+export interface AnchorEditRequest {
     displayPath: string;
     targetPath: string;
-    // Single-edit form
-    startLine?: number;
-    endLine?: number;
-    newContent?: string;
-    // Multi-edit (array) form
-    startLines?: number[];
-    endLines?: number[];
-    newContents?: string[];
+    edits: AnchorEdit[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,24 +63,6 @@ export function coerceNumberArray(value: unknown): number[] | undefined {
             out.push(v);
         } else if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) {
             out.push(Number(v));
-        } else {
-            return undefined;
-        }
-    }
-
-    return out;
-}
-
-function coerceStringArray(value: unknown): string[] | undefined {
-    const arr = coerceArray(value);
-
-    if (!arr) return undefined;
-
-    const out: string[] = [];
-
-    for (const v of arr) {
-        if (typeof v === 'string') {
-            out.push(v);
         } else {
             return undefined;
         }
@@ -183,7 +166,7 @@ export function extractEditRequest(toolArgs: unknown, workspacePath: string): Ed
         };
 }
 
-export function extractEditLinesRequest(toolArgs: unknown, workspacePath: string): EditLinesRequest | undefined {
+export function extractAnchorEditRequest(toolArgs: unknown, workspacePath: string): AnchorEditRequest | undefined {
     const args = getToolArgsRecord(toolArgs);
     if (!args) return undefined;
 
@@ -192,44 +175,26 @@ export function extractEditLinesRequest(toolArgs: unknown, workspacePath: string
 
     const targetPath = path.isAbsolute(rawPath) ? rawPath : path.join(workspacePath, rawPath);
 
-    // Multi-edit (array) form — accept real arrays OR JSON-encoded strings.
-    const startLines = coerceNumberArray(args.startLines);
-    const endLines = coerceNumberArray(args.endLines);
-    const newContents = coerceStringArray(args.newContents);
+    const editsRaw = coerceArray(args.edits);
+    if (!editsRaw || editsRaw.length === 0) return undefined;
 
-    if (startLines && endLines && newContents) {
-        return { displayPath: rawPath, targetPath, startLines, endLines, newContents };
+    const edits: AnchorEdit[] = [];
+
+    for (const raw of editsRaw) {
+        if (!isRecord(raw)) return undefined;
+
+        const op = raw.op;
+        if (op !== 'replace' && op !== 'insert' && op !== 'delete') return undefined;
+
+        const anchor = typeof raw.anchor === 'string' ? raw.anchor : undefined;
+        if (!anchor) return undefined;
+
+        const endAnchor = typeof raw.end_anchor === 'string' ? raw.end_anchor : undefined;
+        const position = raw.position === 'before' || raw.position === 'after' ? raw.position : undefined;
+        const content = typeof raw.content === 'string' ? raw.content : undefined;
+
+        edits.push({ op, anchor, endAnchor, position, content });
     }
 
-    // Single-edit form
-    const startLine = coerceNumber(args.start_line);
-    const endLine = coerceNumber(args.end_line);
-    const newContent = typeof args.new_content === 'string' ? args.new_content : undefined;
-
-    if (startLine === undefined || endLine === undefined || newContent === undefined) {
-        return undefined;
-    }
-
-    return { displayPath: rawPath, endLine, newContent, startLine, targetPath };
-}
-
-export function buildInsertionOnlyEdit(
-    beforeLines: string[],
-    afterLines: string[],
-    commonPrefixLines: number,
-    newSliceStart: number,
-    newSliceEnd: number
-): { safeLine: number, newContent: string } {
-    const safeLine = Math.min(Math.max(commonPrefixLines + 1, 1), Math.max(beforeLines.length, 1));
-    const original = beforeLines[safeLine - 1] ?? '';
-    const insertedLines = afterLines.slice(newSliceStart, newSliceEnd);
-
-    // Insertions inside the BEFORE file belong before the anchor line; true EOF
-    // appends without a trailing newline must keep the last real line first.
-    const insertBeforeAnchor = commonPrefixLines < beforeLines.length;
-    const replacementLines = insertBeforeAnchor
-        ? [...insertedLines, original]
-        : [original, ...insertedLines];
-
-    return { safeLine, newContent: replacementLines.join('\n') };
+    return { displayPath: rawPath, targetPath, edits };
 }
