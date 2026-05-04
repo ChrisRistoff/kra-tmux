@@ -35,6 +35,7 @@ import type {
     ToolWritePreview,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { atomicWriteFile } from '@/AI/AIAgent/shared/utils/fileSafety';
+import { refreshAgentLayout } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 
 const EDIT_LINES_HARD_CAP = 100;
 
@@ -538,7 +539,7 @@ export async function handleConfirmTaskComplete(
 
     // Write the AI's question + choices into the chat file before showing the popup.
     await appendToChat(state.chatFile, formatConfirmQuestion(summary, choices));
-    try { await state.nvim.command('edit!'); } catch { /* nvim busy */ }
+    try { await refreshAgentLayout(state.nvim); } catch { /* nvim busy */ }
     try { await state.nvim.command('redraw!'); } catch { /* nvim busy */ }
 
     const { answer } = await handleAgentUserInput(state.nvim, summary, choices, true);
@@ -557,7 +558,7 @@ export async function handleConfirmTaskComplete(
     await appendToChat(state.chatFile, formatConfirmAnswer(answer));
     // Write a new ASSISTANT header so the AI's continuation is visually separated.
     await appendToChat(state.chatFile, formatAssistantHeader(state.model));
-    try { await state.nvim.command('edit!'); } catch { /* nvim busy */ }
+    try { await refreshAgentLayout(state.nvim); } catch { /* nvim busy */ }
     try { await state.nvim.command('redraw!'); } catch { /* nvim busy */ }
 
     if (answer === 'End session') {

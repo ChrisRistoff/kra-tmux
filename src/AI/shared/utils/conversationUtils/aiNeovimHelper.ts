@@ -114,8 +114,8 @@ export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
     await nvim.command(`nnoremap <leader>h :AgentToolHistory<CR>`);
 }
 
-export async function setupChatSplitLayout(nvim: NeovimClient, channelId: number): Promise<void> {
-    await nvim.executeLua(`require('kra_chat_layout').setup(...)`, [channelId]);
+export async function setupChatSplitLayout(nvim: NeovimClient, channelId: number, chatFile: string): Promise<void> {
+    await nvim.executeLua(`require('kra_chat_layout').setup(...)`, [channelId, chatFile]);
 }
 
 export async function getChatPromptText(nvim: NeovimClient): Promise<string> {
@@ -134,6 +134,23 @@ export async function focusChatPrompt(nvim: NeovimClient): Promise<void> {
 
 export async function refreshChatLayout(nvim: NeovimClient): Promise<void> {
     await nvim.executeLua(`require('kra_chat_layout').refresh()`, []);
+}
+
+/**
+ * Fire-and-forget incremental append into the AI-chat transcript buffer.
+ * See appendToAgentChatLayout in agentNeovimSetup.ts for rationale — same
+ * pattern, different layout namespace.
+ */
+export function appendToChatLayout(nvim: NeovimClient, text: string): void {
+    if (!text) return;
+    try {
+        nvim.notify('nvim_exec_lua', [
+            `require('kra_chat_layout').append_text(...)`,
+            [text],
+        ]);
+    } catch {
+        // Best-effort UI update.
+    }
 }
 
 export async function updateNvimAndGoToLastLine(nvim: NeovimClient): Promise<void> {

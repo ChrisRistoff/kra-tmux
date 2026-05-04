@@ -10,6 +10,7 @@ import {
 } from '@/AI/AIAgent/shared/utils/agentUi';
 import { formatUserDraftHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
 import {
+    appendToAgentChatLayout,
     focusAgentPrompt,
     refreshAgentLayout,
 } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
@@ -197,7 +198,7 @@ export async function setupSessionEventHandlers(
     session: AgentSession = state.session,
     opts: SessionEventHandlerOptions = {}
 ): Promise<void> {
-    const FLUSH_INTERVAL_MS = 50;
+    const FLUSH_INTERVAL_MS = 10;
     const agentLabel = opts.agentLabel;
     const labelTag = agentLabel ? `[${agentLabel}] ` : '';
     const isSubAgent = agentLabel !== undefined;
@@ -217,14 +218,19 @@ export async function setupSessionEventHandlers(
         writeChain = writeChain.then(fn).catch(() => { /* swallow */ });
     };
 
-    const nvimRefresh = async (): Promise<void> =>
-        refreshAgentLayout(state.nvim).catch(() => { /* neovim busy — skip */ });
+    // Hot-path streaming append: write the same `content` to the chat file on
+    // disk AND push it directly into the transcript buffer via fire-and-forget
+    // rpcnotify. Avoids the synchronous `:edit!` reload that previously blocked
+    // Neovim's UI thread on every chunk.
+    const nvimAppend = (content: string): void => {
+        appendToAgentChatLayout(state.nvim, content);
+    };
 
     const write = (content: string, refresh = true): void => {
         enqueue(async () => {
             await appendToChat(state.chatFile, content);
             if (refresh) {
-                await nvimRefresh();
+                nvimAppend(content);
             }
         });
     };
@@ -292,7 +298,7 @@ export async function setupSessionEventHandlers(
             const content = event.data.deltaContent.replace(/\n/g, '\n> ');
             const prefix = isFirst ? `> 💭 ${labelTag}` : '';
             await appendToChat(state.chatFile, `${prefix}${content}`);
-            await nvimRefresh();
+            nvimAppend(`${prefix}${content}`);
         });
     });
 
@@ -301,7 +307,7 @@ export async function setupSessionEventHandlers(
         if (reasoningStarted) {
             enqueue(async () => {
                 await appendToChat(state.chatFile, '\n\n');
-                await nvimRefresh();
+                nvimAppend('\n\n');
             });
             reasoningStarted = false;
         }
