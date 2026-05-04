@@ -70,24 +70,24 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
 export async function setupEventHandlers(state: AgentConversationState): Promise<void> {
     state.nvim.on('notification', (method: string, args: unknown[]) => {
         void (async (): Promise<void> => {
-        if (method !== 'prompt_action') {
-            return;
-        }
-
-        const action = typeof args[0] === 'string' ? args[0] : '';
-
-        try {
-            if (action === 'submit_pressed') {
-                await handleSubmit(state);
-            } else {
-                await dispatchPromptAction(state, action, args);
+            if (method !== 'prompt_action') {
+                return;
             }
-        } catch (error) {
-            await updateAgentUi(state.nvim, 'show_error', [
-                `Action failed: ${action}`,
-                getErrorMessage(error),
-            ]);
-        }
+
+            const action = typeof args[0] === 'string' ? args[0] : '';
+
+            try {
+                if (action === 'submit_pressed') {
+                    await handleSubmit(state);
+                } else {
+                    await dispatchPromptAction(state, action, args);
+                }
+            } catch (error) {
+                await updateAgentUi(state.nvim, 'show_error', [
+                    `Action failed: ${action}`,
+                    getErrorMessage(error),
+                ]);
+            }
         })();
     });
 }

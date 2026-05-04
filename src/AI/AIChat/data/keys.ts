@@ -71,3 +71,23 @@ export function getOpenCodeKey(): string {
 
     return apiKey;
 }
+
+export function getOxloKey(): string {
+    const apiKey = process.env.OXLO_API;
+
+    if (!apiKey) {
+        throw new Error('OXLO_API environment variable is not set');
+    }
+
+    return apiKey;
+}
+
+export function getCrofKey(): string {
+    const apiKey = process.env.COPF_API;
+
+    if (!apiKey) {
+        throw new Error('COPF_API_KEY environment variable is not set');
+    }
+
+    return apiKey;
+}

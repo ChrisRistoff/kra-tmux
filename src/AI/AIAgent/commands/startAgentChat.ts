@@ -88,6 +88,10 @@ export async function startAgentChat(): Promise<void> {
             client: orchestrator.client,
             model: orchestrator.model,
             ...(orchestrator.contextWindow !== undefined ? { contextWindow: orchestrator.contextWindow } : {}),
+            ...(orchestrator.capabilities ? { modelCapabilities: orchestrator.capabilities } : {}),
+            ...(orchestrator.reasoningEffort ? { reasoningEffort: orchestrator.reasoningEffort } : {}),
+            ...(orchestrator.temperature != null ? { temperature: orchestrator.temperature } : {}),
+            ...(orchestrator.dynamicParams ? { dynamicParams: orchestrator.dynamicParams } : {}),
             ...(orchestrator.kind === 'byok'
                 ? { additionalMcpServers: buildByokExtraMcpServers() }
                 : {}),

@@ -176,8 +176,8 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         allowedTools: [...opts.toolWhitelist, 'submit_result'],
         onPreToolUse,
         onPostToolUse,
+        isSubAgent: true,
     });
-
     // Always capture into the local event log for the caller's audit trail.
     session.on('assistant.message_delta', (e) => {
         emit({ kind: 'message', text: e.data.deltaContent });

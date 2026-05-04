@@ -166,12 +166,15 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         model: options.model,
         workingDirectory: cwd,
         mcpServers: mergedMcpServers,
-        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch', 'report_intent'],
+        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch', 'report_intent', ...(options.provider === 'byok' ? ['confirm_task_complete'] : [])],
         ...(orchestratorLocalTools.length > 0 ? { localTools: orchestratorLocalTools } : {}),
         ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
+        ...(options.modelCapabilities ? { modelCapabilities: options.modelCapabilities } : {}),
+        ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+        ...(options.temperature != null ? { temperature: options.temperature } : {}),
+        ...(options.dynamicParams ? { dynamicParams: options.dynamicParams } : {}),
         onPreToolUse: orchestratorOnPreToolUse,
         onPostToolUse: orchestratorOnPostToolUse,
-
         onUserInputRequest: async (request) => handleAgentUserInput(
             nvimClient,
             request.question as string,

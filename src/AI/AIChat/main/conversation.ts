@@ -308,7 +308,7 @@ function parseChatHistory(historyString: string): ChatHistory[] {
     let currentTextLines: string[] = [];
     let currentTimestamp = '';
 
-    const flushMessage = () => {
+    const flushMessage = (): void => {
         if (currentRole !== null && currentTextLines.length > 0) {
             const messageText = currentTextLines.join("\n").trim();
             if (messageText) {

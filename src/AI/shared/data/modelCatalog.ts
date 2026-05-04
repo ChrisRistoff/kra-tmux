@@ -32,13 +32,167 @@ export interface ModelPricing {
     inputPerM: number;
     outputPerM: number;
     cachedInputPerM?: number;
+    reasoningPerM?: number;
 }
+
+export interface ModelCapabilities {
+    /** Whether the model supports reasoning / thinking tokens. */
+    reasoning: boolean;
+    /**
+     * Which field in streaming deltas carries interleaved reasoning content.
+     * - `'reasoning_content'` → DeepSeek-style
+     * - `'reasoning_details'` → Gemini/Google-style structured reasoning
+     * - `undefined` → reasoning not supported or uses raw `reasoning` delta
+     *
+     * The BYOK session inspects this to know which delta fields to watch for
+     * reasoning output so it can route it to `assistant.reasoning_delta`.
+     */
+    reasoningField?: 'reasoning_content' | 'reasoning_details';
+    /** Whether the model supports tool / function calling. */
+    toolCall: boolean;
+    /** Whether the `temperature` parameter is accepted. */
+    temperature: boolean;
+    /** Whether the model supports structured / JSON output. */
+    structuredOutput: boolean;
+    /** Whether the model accepts file attachments (images, PDFs, etc). */
+    attachment: boolean;
+    /** Input modalities the model supports (e.g. 'text', 'image', 'audio'). */
+    inputModalities: string[];
+    /** Output modalities the model supports (e.g. 'text', 'audio'). */
+    outputModalities: string[];
+    /** Reasoning cost per million tokens (if separate from output cost). */
+    reasoningCostPerM?: number;
+    /** Knowledge cutoff date (e.g. '2025-04'). */
+    knowledge?: string;
+    /** When the model was released. */
+    releaseDate?: string;
+    /** Model family (e.g. 'gpt', 'claude', 'deepseek'). */
+    family?: string;
+    /** Whether the model has open weights. */
+    /** Whether the model has open weights. */
+    openWeights?: boolean;
+    /**
+     * Per-parameter descriptors merged from `BUILTIN_PARAM_DESCRIPTORS` and
+     * overlaid with provider/model `canSend` flags from models.dev (Phase 3
+     * of the BYOK parameter overhaul). Keyed by the OpenAI Chat Completions
+     * API parameter name (e.g. `temperature`, `reasoning_effort`, `top_p`).
+     *
+     * The picker (`pickByokRuntime` → `renderDynamicParamPicker`) iterates
+     * this map to build the per-session `dynamicParams` payload, skipping
+     * descriptors with `canSend === false`.
+     */
+    supportedParams?: Record<string, ParamDescriptor>;
+}
+
+/**
+ * Describes a single optional Chat Completions parameter so the BYOK picker
+ * can render a UI for it without hardcoding per-param logic.
+ *
+ * Lives in source code (not on models.dev) because models.dev only exposes a
+ * handful of boolean capability flags — it does NOT carry per-param
+ * type/min/max metadata. The `canSend` flag is the bridge: models.dev
+ * boolean flags overlay onto our descriptor table to disable specific keys
+ * per model (e.g. `temperature: false`).
+ */
+export interface ParamDescriptor {
+    /** Picker label, e.g. 'Reasoning effort'. */
+    label: string;
+    /** Optional longer description shown in details. */
+    description?: string;
+    /** Discriminator for the picker dispatch. */
+    type: 'number' | 'enum' | 'boolean' | 'string';
+    /** OpenAI Chat Completions API key sent in the request body. */
+    apiKey: string;
+    /** Default value (informational; picker may surface in the prompt). */
+    defaultValue?: unknown;
+    /** Allowed enum values when `type === 'enum'`. */
+    enumValues?: readonly string[];
+    /** Inclusive minimum when `type === 'number'`. */
+    min?: number;
+    /** Inclusive maximum when `type === 'number'`. */
+    max?: number;
+    /** Step / increment when `type === 'number'`. */
+    step?: number;
+    /**
+     * When false, the picker skips this descriptor entirely. Used by the
+     * models.dev overlay to disable params the model is known to reject
+     * without removing the descriptor from the registry.
+     */
+    canSend?: boolean;
+    /**
+     * How to encode the value when sending to the provider.
+     *   - `'literal'`: send the picker value unchanged (e.g. `reasoning_effort: 'medium'`).
+     *   - `'boolean'`: coerce any non-null picker value to `true`. Used for BYOK
+     *     proxies that accept the param as a plain on/off boolean.
+     * The picker also dispatches UX off this field: `'literal'` shows the enum
+     * picker; `'boolean'` shows a yes/no toggle.
+     */
+    sendAs?: 'literal' | 'boolean';
+}
+
+/**
+ * Source-of-truth registry of optional Chat Completions parameters the BYOK
+ * picker knows how to prompt for. New parameters added here automatically
+ * surface in the picker (Phase 3) and become candidates for the dynamic
+ * `OPTIONAL_PARAMS` strip-and-retry registry consumed by `byokSession.ts`.
+ */
+export const BUILTIN_PARAM_DESCRIPTORS: Readonly<Record<string, ParamDescriptor>> = {
+    reasoning_effort: {
+        label: 'Reasoning effort',
+        description: 'How much the model should think before responding.',
+        type: 'enum',
+        apiKey: 'reasoning_effort',
+        enumValues: ['low', 'medium', 'high'],
+        defaultValue: 'medium',
+    },
+    temperature: {
+        label: 'Temperature',
+        description: 'Sampling temperature. Lower = more deterministic.',
+        type: 'number',
+        apiKey: 'temperature',
+        min: 0,
+        max: 2,
+        step: 0.1,
+        defaultValue: 1,
+    },
+    top_p: {
+        label: 'Top-p',
+        description: 'Nucleus sampling probability mass.',
+        type: 'number',
+        apiKey: 'top_p',
+        min: 0,
+        max: 1,
+        step: 0.1,
+        defaultValue: 1,
+    },
+    frequency_penalty: {
+        label: 'Frequency penalty',
+        description: 'Penalises repeated tokens by frequency.',
+        type: 'number',
+        apiKey: 'frequency_penalty',
+        min: -2,
+        max: 2,
+        step: 0.1,
+        defaultValue: 0,
+    },
+    presence_penalty: {
+        label: 'Presence penalty',
+        description: 'Penalises tokens already present in the response.',
+        type: 'number',
+        apiKey: 'presence_penalty',
+        min: -2,
+        max: 2,
+        step: 0.1,
+        defaultValue: 0,
+    },
+};
 
 export interface ModelInfo {
     id: string;
     label: string;
     contextWindow: number;
     pricing?: ModelPricing;
+    capabilities?: ModelCapabilities;
 }
 
 export interface CatalogFetchOptions {
@@ -136,6 +290,14 @@ const STATIC_OPENCODE: Record<string, { contextWindow: number; pricing?: ModelPr
     'trinity-large-preview-free': { contextWindow: 200_000, pricing: { inputPerM: 0, outputPerM: 0 } },
 };
 
+// Oxlo — https://api.oxlo.ai/v1/models
+// Pricing and context from the /models endpoint; static entries provide fallback data.
+const STATIC_OXLO: Record<string, { contextWindow: number; pricing?: ModelPricing }> = {
+    'deepseek-r1-70b': { contextWindow: 32_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'llama-3.3-70b': { contextWindow: 32_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    'kimi-k2-thinking': { contextWindow: 32_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+};
+
 const STATIC_FALLBACK_MODELS: Record<SupportedProvider, ModelInfo[]> = {
     'deep-infra': [
         { id: 'moonshotai/Kimi-K2-Instruct', label: 'moonshotai/Kimi-K2-Instruct', contextWindow: 128_000, pricing: { inputPerM: 0.75, outputPerM: 4.00, cachedInputPerM: 0.15 } },
@@ -168,6 +330,15 @@ const STATIC_FALLBACK_MODELS: Record<SupportedProvider, ModelInfo[]> = {
         { id: 'glm-5.1', label: 'glm-5.1', contextWindow: 200_000, pricing: STATIC_OPENCODE['glm-5.1'].pricing! },
         { id: 'minimax-m2.7', label: 'minimax-m2.7', contextWindow: 205_000, pricing: STATIC_OPENCODE['minimax-m2.7'].pricing! },
         { id: 'qwen3.6-plus', label: 'qwen3.6-plus', contextWindow: 256_000, pricing: STATIC_OPENCODE['qwen3.6-plus'].pricing! },
+    ],
+    'oxlo': [
+        { id: 'deepseek-r1-70b', label: 'deepseek-r1-70b', contextWindow: 32_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+        { id: 'llama-3.3-70b', label: 'llama-3.3-70b', contextWindow: 32_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+        { id: 'kimi-k2-thinking', label: 'kimi-k2-thinking', contextWindow: 32_000, pricing: { inputPerM: 0, outputPerM: 0 } },
+    ],
+    'crof': [
+        { id: 'crof-mini', label: 'crof-mini', contextWindow: 32_000 },
+        { id: 'crof-standard', label: 'crof-standard', contextWindow: 128_000 },
     ],
 };
 
@@ -393,15 +564,108 @@ async function fetchOpenCode(apiKey: string): Promise<ModelInfo[]> {
         };
     })
 
-    models.push({
-        id: 'opencode/big-pickle',
-        label: 'big-pickle',
-        contextWindow: 200_000,
-        pricing: { inputPerM: 0, outputPerM: 0 },
-    });
-
     return models;
 }
+
+async function fetchOxlo(apiKey: string): Promise<ModelInfo[]> {
+    const res = await fetch('https://api.oxlo.ai/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!res.ok) {
+        throw new Error(`Oxlo /models returned ${res.status}`);
+    }
+
+    const json = await res.json() as { data: Array<{ id: string; context_length?: number }> };
+
+    return json.data.map((m): ModelInfo => {
+        const meta = STATIC_OXLO[m.id];
+
+        return {
+            id: m.id,
+            label: m.id,
+            contextWindow: m.context_length ?? meta.contextWindow ?? 0,
+            ...(meta.pricing ? { pricing: meta.pricing } : {}),
+        };
+    });
+}
+
+interface CrofModel {
+    id: string;
+    name?: string;
+    context_length?: number;
+    context_window?: number;
+    max_completion_tokens?: number;
+    /** Whether the model accepts the `reasoning_effort` parameter. */
+    reasoning_effort?: boolean;
+    /** Whether the model has its own (non-OpenAI-style) reasoning capability. */
+    custom_reasoning?: boolean;
+    pricing?: {
+        prompt?: string | number;
+        completion?: string | number;
+        cache_prompt?: string | number;
+    };
+}
+
+async function fetchCrof(): Promise<ModelInfo[]> {
+    const res = await fetch('https://crof.ai/v1/models');
+
+    if (!res.ok) {
+        throw new Error(`Crof models returned ${res.status}`);
+    }
+
+    const json = await res.json() as { data: CrofModel[] };
+
+    return json.data.map((m): ModelInfo => {
+        const reasoning = m.reasoning_effort === true || m.custom_reasoning === true;
+
+        const supportedParams: Record<string, ParamDescriptor> = {};
+        for (const [key, desc] of Object.entries(BUILTIN_PARAM_DESCRIPTORS)) {
+            const overlay: Partial<ParamDescriptor> = key === 'reasoning_effort'
+                ? { canSend: m.reasoning_effort === true }
+                : {};
+            supportedParams[key] = { ...desc, ...overlay };
+        }
+
+        const capabilities: ModelCapabilities = {
+            reasoning,
+            toolCall: true,
+            temperature: true,
+            structuredOutput: false,
+            attachment: false,
+            inputModalities: ['text'],
+            outputModalities: ['text'],
+            supportedParams,
+        };
+
+        const pricing = toCrofPricing(m.pricing);
+
+        return {
+            id: m.id,
+            label: m.name ?? m.id,
+            contextWindow: m.context_length ?? m.context_window ?? 0,
+            capabilities,
+            ...(pricing != null ? { pricing } : {}),
+        };
+    });
+}
+
+function toCrofPricing(p: CrofModel['pricing']): ModelPricing | undefined {
+    if (!p) return undefined;
+    const input = typeof p.prompt === 'string' ? parseFloat(p.prompt) : p.prompt;
+    const output = typeof p.completion === 'string' ? parseFloat(p.completion) : p.completion;
+    if (input == null || output == null || Number.isNaN(input) || Number.isNaN(output)) {
+        return undefined;
+    }
+    const cached = typeof p.cache_prompt === 'string' ? parseFloat(p.cache_prompt) : p.cache_prompt;
+
+    return {
+        inputPerM: input,
+        outputPerM: output,
+        ...(cached != null && !Number.isNaN(cached) ? { cachedInputPerM: cached } : {}),
+    };
+}
+
 
 async function fetchLive(provider: SupportedProvider): Promise<ModelInfo[]> {
     switch (provider) {
@@ -419,6 +683,10 @@ async function fetchLive(provider: SupportedProvider): Promise<ModelInfo[]> {
             return fetchMistral(getProviderApiKey(provider));
         case 'open-code':
             return fetchOpenCode(getProviderApiKey(provider));
+        case 'oxlo':
+            return fetchOxlo(getProviderApiKey(provider));
+        case 'crof':
+            return fetchCrof();
         default: {
             const exhaustive: never = provider;
 
@@ -468,14 +736,30 @@ export function formatModelInfoForPicker(modelInfo: ModelInfo): string {
         ? `${Math.round(modelInfo.contextWindow / 1000)}k ctx`.padEnd(10)
         : '? ctx    '.padEnd(10);
 
-    const priceStr = modelInfo.pricing
+    let priceStr = modelInfo.pricing
         ? `$${modelInfo.pricing.inputPerM.toFixed(2)}/$${modelInfo.pricing.outputPerM.toFixed(2)} in/out` +
-        (modelInfo.pricing.cachedInputPerM !== undefined
+        (modelInfo.pricing.cachedInputPerM != null
             ? `  cached $${modelInfo.pricing.cachedInputPerM.toFixed(2)}`
             : '')
         : '? pricing';
 
+    if (modelInfo.pricing?.reasoningPerM != null) {
+        priceStr += `  reason $${modelInfo.pricing.reasoningPerM.toFixed(2)}`;
+    }
+
+    const badges: string[] = [];
+    const c = modelInfo.capabilities;
+
+    if (c) {
+        if (c.reasoning) badges.push('think');
+        if (c.toolCall) badges.push('tools');
+        if (c.attachment) badges.push('attach');
+        if (!c.temperature) badges.push('fixed-temp');
+        if (c.structuredOutput) badges.push('json');
+    }
+
+    const badgeStr = badges.length > 0 ? ` [${badges.join(',')}]` : '';
     const label = modelInfo.label.padEnd(48);
 
-    return `${label}  ${ctxStr}  ${priceStr}`;
+    return `${label}  ${ctxStr}  ${priceStr}${badgeStr}`;
 }
