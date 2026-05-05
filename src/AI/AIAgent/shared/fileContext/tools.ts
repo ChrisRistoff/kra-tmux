@@ -64,7 +64,7 @@ export const TOOLS = [
     },
 
     {
-        name: 'edit',
+        name: 'anchor_edit',
         description: [
             'Anchor-based file editor. Edits are described by content, never by line numbers.',
             'Each entry in `edits` has an `op` ("replace" | "insert" | "delete") and an `anchor` — one or more contiguous lines copied verbatim from the file that uniquely identify the location. The anchor itself is never altered unless the op is replace/delete and it falls inside the affected range.',

@@ -30,6 +30,7 @@ import {
     appendToChat,
 } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { setupSessionEventHandlers } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
+import { appendToAgentChatLayout } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import {
     formatAssistantHeader,
     formatSubAgentHeader,
@@ -203,10 +204,10 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         await setupSessionEventHandlers(parentState, session, {
             agentLabel: bridge.agentLabel,
         });
-        await appendToChat(
-            parentState.chatFile,
-            formatSubAgentHeader(bridge.headerEmoji, bridge.agentLabel, opts.runtime.model)
-        );
+        const subAgentHeader = formatSubAgentHeader(bridge.headerEmoji, bridge.agentLabel, opts.runtime.model);
+        await appendToChat(parentState.chatFile, subAgentHeader);
+        // appendToChat alone leaves the header invisible until a refresh.
+        appendToAgentChatLayout(parentState.nvim, subAgentHeader);
     }
 
     try {
@@ -229,10 +230,9 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         await Promise.race([idle, submitted]);
     } finally {
         if (bridge && parentState) {
-            await appendToChat(
-                parentState.chatFile,
-                formatAssistantHeader(parentState.model)
-            );
+            const assistantHeader = formatAssistantHeader(parentState.model);
+            await appendToChat(parentState.chatFile, assistantHeader);
+            appendToAgentChatLayout(parentState.nvim, assistantHeader);
         }
         if (parentState && parentState.activeSubAgentSession === session) {
             parentState.activeSubAgentSession = undefined;
@@ -242,3 +242,4 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
 
     return { result: captured, events };
 }
+

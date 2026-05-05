@@ -21,7 +21,7 @@ import type {
 const DEFAULT_EXECUTOR_TOOLS = [
     'read_lines',
     'get_outline',
-    'edit',
+    'anchor_edit',
     'create_file',
     'search',
     'lsp_query',

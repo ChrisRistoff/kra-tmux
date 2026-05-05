@@ -37,10 +37,11 @@ import type {
 import { atomicWriteFile } from '@/AI/AIAgent/shared/utils/fileSafety';
 import { refreshAgentLayout } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 
-// Matches the kra-file-context 'edit' tool. We require 'edit' to appear as a
-// distinct token (preceded by start-of-string or a separator commonly used in
-// MCP tool names) so we don't accidentally match 'str_replace_editor',
-// 'edit_file', etc.
+// Matches the kra-file-context 'anchor_edit' tool. We require the trailing
+// 'edit' token to be preceded by a separator (start-of-string or one of the
+// MCP-namespacing characters) so we match `anchor_edit`, `kra-file-context__anchor_edit`,
+// `kra-file-context-anchor_edit`, etc., but never `str_replace_editor`/`edit_file`.
+// (The legacy bare name `edit` also matches via start-of-string.)
 function isAnchorEditTool(name: string): boolean {
     return /(?:^|[_:\-.])edit$/.test(name);
 }
