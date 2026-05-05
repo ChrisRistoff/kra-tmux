@@ -27,13 +27,13 @@ describe('executeTool.coerceResult', () => {
         const missing = coerceResult({ summary: 'hi', events: [] }).status;
         const invalid = coerceResult({ status: 'random-junk', summary: 'hi', events: [] }).status;
 
-        expect(['completed', 'partial', 'blocked', 'needs_replan']).toContain(missing);
-        expect(['completed', 'partial', 'blocked', 'needs_replan']).toContain(invalid);
+        expect(['completed', 'partial', 'blocked', 'needs_replan', 'needs_decision']).toContain(missing);
+        expect(['completed', 'partial', 'blocked', 'needs_replan', 'needs_decision']).toContain(invalid);
         expect(missing).toBe(invalid);
     });
 
     it('accepts every documented status value', () => {
-        for (const s of ['completed', 'partial', 'blocked', 'needs_replan']) {
+        for (const s of ['completed', 'partial', 'blocked', 'needs_replan', 'needs_decision']) {
             expect(coerceResult({ status: s, summary: '', events: [] }).status).toBe(s);
         }
     });
@@ -139,5 +139,63 @@ describe('executeTool.formatExecutionResult', () => {
 
         expect(out).toContain('needs_replan');
         expect(out).toContain('plan does not account for X');
+    });
+
+    it('renders decisionPoint when status = needs_decision', () => {
+        const out = formatExecutionResult({
+            status: 'needs_decision',
+            summary: 's',
+            events: [],
+            decisionPoint: {
+                question: 'Should we cache results in-memory or in Redis?',
+                options: ['in-memory LRU', 'Redis', 'no caching'],
+            },
+        });
+
+        expect(out).toContain('needs_decision');
+        expect(out).toContain('Should we cache results in-memory or in Redis?');
+        expect(out).toContain('in-memory LRU');
+        expect(out).toContain('Redis');
+        expect(out).toContain('no caching');
+    });
+});
+
+describe('executeTool.coerceResult decisionPoint', () => {
+    it('captures decisionPoint when present', () => {
+        const parsed = coerceResult({
+            status: 'needs_decision',
+            summary: 'Hit a crossroad.',
+            events: [],
+            decisionPoint: {
+                question: 'Token format: JWT or opaque?',
+                options: ['JWT', 'opaque'],
+            },
+        });
+
+        expect(parsed.status).toBe('needs_decision');
+        expect(parsed.decisionPoint?.question).toBe('Token format: JWT or opaque?');
+        expect(parsed.decisionPoint?.options).toEqual(['JWT', 'opaque']);
+    });
+
+    it('drops decisionPoint with no question', () => {
+        const parsed = coerceResult({
+            status: 'needs_decision',
+            summary: 's',
+            events: [],
+            decisionPoint: { options: ['a', 'b'] },
+        });
+
+        expect(parsed.decisionPoint).toBeUndefined();
+    });
+
+    it('drops non-string options', () => {
+        const parsed = coerceResult({
+            status: 'needs_decision',
+            summary: 's',
+            events: [],
+            decisionPoint: { question: 'Q?', options: ['ok', 42, null] },
+        });
+
+        expect(parsed.decisionPoint?.options).toEqual(['ok']);
     });
 });

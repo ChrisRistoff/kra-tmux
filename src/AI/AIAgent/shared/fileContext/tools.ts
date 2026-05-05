@@ -1,11 +1,7 @@
 export const TOOLS = [
     {
         name: 'get_outline',
-        description: [
-            'Returns a structured outline of a source file: function/class/method names and their line numbers.',
-            'Call this when you need >150 lines of context, want to navigate a file\'s structure, or are picking the smallest range that contains your target.',
-            'Then use read_lines or read_function to fetch only the sections you need.',
-        ].join(' '),
+        description: 'Returns an outline (function/class/method names + line numbers) of a source file. Use to find the smallest range containing your target, then read_lines/read_function to fetch it.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -17,14 +13,7 @@ export const TOOLS = [
 
     {
         name: 'read_lines',
-        description: [
-            'Returns specific lines from a file (1-indexed, inclusive).',
-            'Each returned line is prefixed with its line number (e.g. `  267: ...`) so you can copy a verbatim slice as the `anchor` for a follow-up `edit` call.',
-            'You can request any range up to 150 lines directly without calling get_outline first — only larger reads on files with a meaningful outline are bounced back. Truly unstructured files (txt, csv, log, plain markdown without headings, …) are never gated.',
-            'Hard cap is 500 lines per call (summed across ranges).',
-            'Supports multiple ranges in one call: pass startLines and endLines as parallel arrays (startLines[i] pairs with endLines[i]).',
-            'Always prefer the array form over multiple separate calls.',
-        ].join(' '),
+        description: 'Returns specific lines from a file (1-indexed, inclusive); each prefixed with its line number for use as an anchor. Up to 150 lines per call; larger reads on structured files are bounced back to get_outline (unstructured files are never gated). Hard cap 500 lines (summed across ranges). Supports multiple ranges via parallel startLines/endLines arrays — prefer that over multiple calls.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -48,11 +37,7 @@ export const TOOLS = [
 
     {
         name: 'read_function',
-        description: [
-            'Returns the full body of a named function, class, or method from a file.',
-            'Convenience wrapper — once get_outline gives you start/end lines for TS/JS/Python/Go files, you can just call read_lines directly.',
-            'Useful for unknown languages where the outline only has start lines.',
-        ].join(' '),
+        description: 'Returns the full body of a named function/class/method. Convenience wrapper; for TS/JS/Python/Go you can usually use read_lines on the outline range directly. Useful when the outline only has start lines.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -66,15 +51,14 @@ export const TOOLS = [
     {
         name: 'anchor_edit',
         description: [
-            'Anchor-based file editor. Edits are described by content, never by line numbers.',
-            'Each entry in `edits` has an `op` ("replace" | "insert" | "delete") and an `anchor` — one or more contiguous lines copied verbatim from the file that uniquely identify the location. The anchor itself is never altered unless the op is replace/delete and it falls inside the affected range.',
-            'replace: removes the anchor block (or the range from `anchor` through `end_anchor` if provided) and writes `content` in its place. Pass content:"" to delete the matched range.',
-            'insert: adds `content` adjacent to the anchor. Use position:"after" (default) or position:"before". The anchor is preserved; nothing is overwritten.',
-            'delete: removes the anchor block (or the range from `anchor` through `end_anchor` if provided). No `content` field.',
-            'Anchors must match EXACTLY ONCE in the file. If your anchor matches zero or multiple lines the call is rejected with hints — extend the anchor with one more adjacent line until it is unique. A blank or whitespace-only anchor is always rejected.',
-            'Anchors may span multiple lines (1–5 is typical). For ranges, both `anchor` and `end_anchor` must independently match exactly once and `end_anchor` must be at or after `anchor`. Whitespace is significant; if a strict match fails the tool will retry with whitespace trimmed and accept it iff that produces exactly one match (it will tell you in the response).',
-            'Multi-edit: pass several entries in `edits`. All anchors are resolved against the ORIGINAL file in parallel, overlapping or identical regions are rejected, and the edits are applied bottom-to-top so positions stay valid.',
-            'The replaced region is always bounded by content you named explicitly, so you cannot accidentally clobber surrounding lines.',
+            'Anchor-based file editor. Each edit has an `op` (replace/insert/delete) and an `anchor` — contiguous lines copied verbatim from the file that uniquely identify the location.',
+            'replace: swaps anchor block (or anchor..end_anchor range) for `content` (use "" to delete). insert: adds `content` before/after anchor (anchor preserved). delete: removes anchor block / range.',
+            'Anchors must match EXACTLY ONCE; widen with adjacent lines if ambiguous. Whitespace is significant, but a strict miss is retried with trimmed whitespace and accepted if that gives exactly one match. Blank anchors rejected.',
+            'For ranges, anchor and end_anchor must each match once and end_anchor must come at or after anchor.',
+            'Multi-edit: pass several edits; resolved against the original file in parallel (overlaps rejected) and applied bottom-to-top.',
+            'Examples: replace single line → { op:"replace", anchor:"const TIMEOUT_MS = 5000;", content:"const TIMEOUT_MS = 30000;" }.',
+            'Replace multi-line region → { op:"replace", anchor:"function oldImpl() {", end_anchor:"} // oldImpl", content:"function newImpl() {\\n    return doIt();\\n}" }.',
+            'Insert after import → { op:"insert", anchor:"import { foo } from \'./foo\';", position:"after", content:"import { bar } from \'./bar\';" }.',
         ].join(' '),
         inputSchema: {
             type: 'object',
@@ -120,13 +104,7 @@ export const TOOLS = [
 
     {
         name: 'create_file',
-        description: [
-            'Creates a NEW file with the given content. Refuses if the target path already exists.',
-            'To MODIFY an existing file, use the `edit` tool (anchor-based; pass several entries in `edits` for multiple changes in one call).',
-            'Parent directories are created automatically.',
-            'Use this instead of str_replace_editor or write_file for new-file creation.',
-            'Writes are atomic (temp file + rename) so a crash mid-write cannot corrupt the destination.',
-        ].join(' '),
+        description: 'Creates a NEW file (refuses if the path already exists; use anchor_edit to modify existing files). Parent directories are created automatically; writes are atomic.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -139,15 +117,7 @@ export const TOOLS = [
 
     {
         name: 'search',
-        description: [
-            'Unified file finder + content grep. Replaces the built-in grep/glob tools.',
-            'Use this for exact symbol, literal string, or file/path lookups once you know what token you want to search for.',
-            'For conceptual discovery or unfamiliar code paths, prefer `semantic_search` first.',
-            'Provide name_pattern (glob) to filter by file name/path, content_pattern (regex) to search file contents, or both to intersect.',
-            'Every result is annotated with the file\'s line count as `path (N lines)` so you can decide whether to read the whole file with read_lines or use get_outline first.',
-            'A file under ~100 lines can usually just be read whole — no need for get_outline.',
-            'Powered by ripgrep; respects .gitignore by default.',
-        ].join(' '),
+        description: 'Unified file finder + content grep (ripgrep, respects .gitignore). Use for exact symbol/string/path lookups; for conceptual discovery prefer `semantic_search`. Provide name_pattern (glob), content_pattern (regex), or both. Results annotated with file line counts so you can choose read_lines vs get_outline.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -194,13 +164,7 @@ export const TOOLS = [
 
     {
         name: 'lsp_query',
-        description: [
-            'Queries a configured Language Server (gopls, pyright, rust-analyzer, ...) about a position in a file.',
-            'Use for hover docs, go-to-definition, references, implementations, type definitions, or a flat list of document symbols.',
-            'Server is selected automatically by the file extension based on [lsp.*] entries in settings.toml.',
-            'Position can be given as (line, col) or (line, symbol) where symbol is searched within that line; both are 1-indexed.',
-            'For document_symbols only file_path is required. The first call per language pays a startup + indexing cost.',
-        ].join(' '),
+        description: 'Queries a Language Server (selected by file extension via [lsp.*] in settings.toml) for hover, definition, references, implementations, type definitions, or document_symbols. Position is (line, col) or (line, symbol); both 1-indexed. document_symbols needs only file_path. First call per language pays startup + indexing cost.',
         inputSchema: {
             type: 'object',
             properties: {

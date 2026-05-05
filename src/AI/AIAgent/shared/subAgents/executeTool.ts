@@ -55,12 +55,18 @@ export interface ExecutionEvent {
     diff?: string;
 }
 
+export interface DecisionPoint {
+    question: string;
+    options?: string[];
+}
+
 export interface ExecutionResult {
-    status: 'completed' | 'partial' | 'blocked' | 'needs_replan';
+    status: 'completed' | 'partial' | 'blocked' | 'needs_replan' | 'needs_decision';
     summary: string;
     events: ExecutionEvent[];
     blockers?: string[];
     replanReason?: string;
+    decisionPoint?: DecisionPoint;
 }
 
 const EXECUTE_PARAMETERS: Record<string, unknown> = {
@@ -68,24 +74,11 @@ const EXECUTE_PARAMETERS: Record<string, unknown> = {
     properties: {
         plan: {
             type: 'string',
-            description: [
-                'A concise, directive plan for the executor to carry out: numbered',
-                'steps in order, naming the files/symbols to touch and the intended',
-                'outcome of each step. Keep it terse — do NOT restate findings,',
-                'paste file contents, or summarise prior investigations here. The',
-                'executor automatically receives a transcript of your prior',
-                '`investigate` calls, file reads, searches, and reasoning since the',
-                'last execute, so it already has the evidence; just tell it what',
-                'to do.',
-            ].join(' '),
+            description: 'Concise directive plan: numbered steps naming files/symbols + intended outcomes. Do NOT restate findings or paste file contents — the executor receives a transcript of your prior investigations, reads, and reasoning automatically.',
         },
         successCriteria: {
             type: 'string',
-            description: [
-                'Optional explicit criteria for what counts as "done". The executor',
-                'will only mark `status: completed` if these are met; otherwise it',
-                'returns `partial` or `blocked` with a reason.',
-            ].join(' '),
+            description: 'Optional explicit criteria for "done". Executor only marks `completed` if met; otherwise returns `partial`/`blocked`.',
         },
     },
     required: ['plan'],
@@ -102,32 +95,21 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
         name: 'execute',
         serverLabel: 'kra-subagent',
         description: [
-            'PREFERRED execution tool. Delegate any concrete, multi-step body of work',
-            '— edits across several files, a refactor, a new feature implementation —',
-            'to a smaller, cheaper executor model.',
+            'PREFERRED execution tool. Delegate concrete, multi-step work — multi-file edits,',
+            'refactors, feature implementations — to a smaller, cheaper executor model.',
+            'Returns ONLY a curated event log + summary; raw tool traffic stays out of your context.',
             '',
-            'Why use it:',
-            '  - The executor runs the work end-to-end and returns ONLY a curated',
-            '    event log + summary; the raw tool traffic (file reads, search results,',
-            '    intermediate edits) never enters your context. That cuts the token',
-            '    cost of tasks whose bulk is mechanical reads + edits rather than',
-            '    reasoning.',
+            'Plan: pass a terse, directive `plan` (numbered steps, named files/symbols). The executor',
+            'is automatically given a transcript of your prior `investigate` calls, file reads, searches,',
+            'and reasoning since the last execute — do NOT restate findings or paste contents in `plan`.',
+            'Optional `successCriteria` gates `status: completed`.',
             '',
-            'Workflow:',
-            '  - Think the plan through (optionally call `investigate` first).',
-            '  - Call `execute` with a terse, directive `plan` and (optionally)',
-            '    `successCriteria`. The executor will only mark `status: completed`',
-            '    if those criteria are met; otherwise it returns `partial` or',
-            '    `blocked` with a reason.',
-            '  - You do NOT need to copy findings or file contents into the plan —',
-            '    the executor is automatically given a transcript of your prior',
-            '    investigations, file reads, and reasoning since the last execute call.',
+            'Possible result statuses: `completed`, `partial`, `blocked`, `needs_replan`,',
+            'or `needs_decision` — when the executor hits a real design crossroad it bounces back',
+            'to you with a `decisionPoint` (question + options) for you (and the user) to resolve.',
             '',
-            'Skip `execute` only for one-line trivial edits or for tasks that genuinely',
-            'need orchestrator-grade reasoning at every step.',
-            '',
-            'Only ONE execution can run at a time. Wait for the in-flight execution',
-            'to return before issuing another.',
+            'Skip `execute` only for one-line edits or work that needs orchestrator-grade reasoning',
+            'at every step. Only ONE execution can run at a time.',
         ].join('\n'),
         parameters: EXECUTE_PARAMETERS,
         handler: async (rawArgs) => {
@@ -186,62 +168,36 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
 
 function buildExecutorSystemPrompt(settings: ExecutorRuntime['settings']): string {
     return [
-        'You are an executor sub-agent. Your job is to carry out a concrete plan',
-        'handed to you by an orchestrator. You are NOT the planner — do not',
-        're-scope the work, do not ask for permission, just execute.',
-        '',
-        'You are a small, fast model. Bias toward the obvious answer; do not',
-        'over-think. The orchestrator has already done the hard reasoning.',
+        'You are an executor sub-agent. Carry out the concrete plan given by an orchestrator.',
+        'You are NOT the planner — do not re-scope or ask for permission. You are a small fast',
+        'model: bias toward the obvious answer; the orchestrator did the hard reasoning.',
         '',
         'Workflow:',
-        '  1. Read the two evidence blocks FIRST: <orchestrator_investigations>',
-        '     (pre-digested findings from prior investigations) and',
-        '     <orchestrator_chat> (the orchestrator\'s prior file reads, searches,',
-        '     reasoning, and the user messages that led to this call). Treat both',
-        '     as authoritative — do NOT re-read files the orchestrator already read.',
-        '  2. Then read the <plan>. The plan tells you WHAT to do; the evidence',
-        '     blocks tell you what is already known about WHERE.',
-        '  3. For each step, use the smallest tool sequence that gets it done.',
-        '     Prefer narrow, targeted reads over reading whole files.',
-        '  4. When you make an edit, it lands in a proposal workspace — the user',
-        '     will review the diff before it touches the real repo, so be precise',
-        '     but do not be timid.',
-        '  5. Track each meaningful action (edit, create, run) as you go; you will',
-        '     report them all at once as `events[]` in your single `submit_result`',
-        '     call at the end. Reads/searches that directly inform an edit can be',
-        '     summarised in one `read` event.',
-        '  6. When all steps are done OR you hit a blocker, call `submit_result`',
-        '     exactly once with the appropriate `status`:',
-        '       - `completed`   = every step done, success criteria met',
-        '       - `partial`     = some steps done, others skipped (explain why)',
-        '       - `blocked`     = a step cannot proceed (explain why in `blockers`)',
-        `       - \`needs_replan\` = the plan itself is wrong${settings.allowReplanEscape
+        '  1. Read <orchestrator_investigations> and <orchestrator_chat> FIRST — treat as',
+        '     authoritative; do NOT re-read files the orchestrator already read.',
+        '  2. Then read <plan> (WHAT to do) — the evidence blocks tell you WHERE.',
+        '  3. Use the smallest tool sequence per step. Prefer narrow targeted reads.',
+        '  4. Edits land in a proposal workspace (user reviews diff) — be precise but not timid.',
+        '  5. Track meaningful actions as `events[]`; report them in your single `submit_result` call.',
+        '  6. When done OR stuck, call `submit_result` exactly once with a `status`:',
+        '       - `completed`      = every step done, success criteria met',
+        '       - `partial`        = some done, others skipped (explain in summary)',
+        '       - `blocked`        = a step cannot proceed (set `blockers`)',
+        `       - \`needs_replan\`   = the plan itself is wrong${settings.allowReplanEscape
             ? ' (set `replanReason`)'
-            : ' — DISABLED in settings, do not use'}`,
-        '     Then output a brief acknowledgement and stop. Do NOT call any tool',
-        '     after `submit_result`, and never call any orchestrator-only',
-        '     end-of-turn tool — the orchestrator owns the turn.',
-        `  7. Hard cap: ${settings.maxToolCalls} tool calls. If you are nearing the cap`,
-        '     without finishing, submit with `status: partial`, list what was done',
-        '     in `events`, and explain the remaining work in `summary`.',
+            : ' — DISABLED, do not use'}`,
+        '       - `needs_decision` = you hit a real design crossroad (multiple reasonable',
+        '         approaches, ambiguous requirement, unexpected scope question that the',
+        '         orchestrator/user should answer). Set `decisionPoint.question` and, when',
+        '         possible, `decisionPoint.options[]`. Do NOT guess at crossroads — bounce back.',
+        '         Only use this for genuine decisions, not minor implementation choices you can pick.',
+        '     Then briefly acknowledge and stop. Do NOT call any tool after `submit_result`,',
+        '     and never call orchestrator-only end-of-turn tools — the orchestrator owns the turn.',
+        `  7. Hard cap: ${settings.maxToolCalls} tool calls. If nearing the cap unfinished,`,
+        '     submit `partial` with what was done in `events` and remaining work in `summary`.',
         '',
-        'Quality bar:',
-        '  - Make MINIMAL, SURGICAL edits. Do not reformat untouched code.',
-        '  - Every event\'s `detail` is a single human-readable sentence.',
-        '  - Keep `summary` to 2–6 sentences.',
-        '  - If you read a file you do not edit, mention it as a `read` event so',
-        '    the orchestrator knows what informed your decisions.',
-        '',
-        'Example submit_result shape:',
-        '  {',
-        '    "status": "completed",',
-        '    "summary": "Renamed `foo` to `bar` in 3 files; updated 1 test.",',
-        '    "events": [',
-        '      { "kind": "edit", "detail": "Renamed foo→bar.", "path": "src/x.ts" },',
-        '      { "kind": "edit", "detail": "Updated import.", "path": "src/y.ts" },',
-        '      { "kind": "edit", "detail": "Updated test name.", "path": "__tests__/x.test.ts" }',
-        '    ]',
-        '  }',
+        'Quality bar: minimal surgical edits, no reformatting; each event `detail` is one sentence;',
+        '`summary` is 2–6 sentences; mention any read-only file as a `read` event.',
     ].join('\n');
 }
 
@@ -269,7 +225,7 @@ function buildResultSchema(): Record<string, unknown> {
         properties: {
             status: {
                 type: 'string',
-                enum: ['completed', 'partial', 'blocked', 'needs_replan'],
+                enum: ['completed', 'partial', 'blocked', 'needs_replan', 'needs_decision'],
                 description: 'Outcome of the execution. See system prompt for the meaning of each value.',
             },
             summary: {
@@ -314,6 +270,20 @@ function buildResultSchema(): Record<string, unknown> {
                 type: 'string',
                 description: 'Required when status = needs_replan: why the plan itself is wrong.',
             },
+            decisionPoint: {
+                type: 'object',
+                description: 'Required when status = needs_decision: a design crossroad needing the orchestrator\u2019s call.',
+                properties: {
+                    question: { type: 'string', description: 'The decision being faced, in one sentence.' },
+                    options: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional list of the reasonable options you considered.',
+                    },
+                },
+                required: ['question'],
+                additionalProperties: false,
+            },
         },
         required: ['status', 'summary', 'events'],
         additionalProperties: false,
@@ -326,6 +296,7 @@ export function coerceResult(raw: Record<string, unknown>): ExecutionResult {
         || raw['status'] === 'partial'
         || raw['status'] === 'blocked'
         || raw['status'] === 'needs_replan'
+        || raw['status'] === 'needs_decision'
     ) ? raw['status'] : 'partial';
 
     const summary = typeof raw['summary'] === 'string' ? raw['summary'] : '';
@@ -360,6 +331,22 @@ export function coerceResult(raw: Record<string, unknown>): ExecutionResult {
         result.replanReason = raw['replanReason'];
     }
 
+    if (typeof raw['decisionPoint'] === 'object' && raw['decisionPoint'] !== null) {
+        const dp = raw['decisionPoint'] as Record<string, unknown>;
+        const question = typeof dp['question'] === 'string' ? dp['question'] : '';
+
+        if (question) {
+            const decision: DecisionPoint = { question };
+
+            if (Array.isArray(dp['options'])) {
+                const options = (dp['options'] as unknown[]).filter((o): o is string => typeof o === 'string');
+                if (options.length > 0) decision.options = options;
+            }
+
+            result.decisionPoint = decision;
+        }
+    }
+
     return result;
 }
 
@@ -391,6 +378,16 @@ export function formatExecutionResult(r: ExecutionResult): string {
 
     if (r.replanReason) {
         lines.push('', `replanReason: ${r.replanReason}`);
+    }
+
+    if (r.decisionPoint) {
+        lines.push('', `decisionPoint: ${r.decisionPoint.question}`);
+
+        if (r.decisionPoint.options && r.decisionPoint.options.length > 0) {
+            for (const opt of r.decisionPoint.options) {
+                lines.push(`  - ${opt}`);
+            }
+        }
     }
 
     return lines.join('\n');

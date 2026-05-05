@@ -19,12 +19,7 @@ import type { DocsSource } from '@/types/settingsTypes';
 
 const REMEMBER_TOOL = {
     name: 'remember',
-    description: [
-        'Persist a long-term note about this repo so the next session has it.',
-        'Use for non-obvious bug fixes, gotchas, design decisions, investigation results,',
-        'or to PARK an idea you want to revisit later (kind="revisit" → stays open until you call update_memory).',
-        'Include enough detail in body that a future session can act on it without re-investigating.',
-    ].join(' '),
+    description: 'Persist a long-term note about this repo (bug-fix, gotcha, decision, investigation, note) or PARK an idea via kind="revisit" (stays open until update_memory). Body must contain enough detail for a future session to act without re-investigating.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -41,14 +36,7 @@ const REMEMBER_TOOL = {
 
 const RECALL_TOOL = {
     name: 'recall',
-    description: [
-        'Look up memory entries. With `query`, runs vector search and returns the top-k most semantically similar entries.',
-        'Primary use: listing/filtering stored entries, checking revisits, or narrowing to a specific memory kind.',
-        'For first-step conceptual discovery across long-term memories, prefer `semantic_search({ scope: "memory" | "both", memoryKind: "findings" })` instead of brute-forcing `recall` queries.',
-        'WITHOUT `query`, runs in list mode (newest-first). Use `kind: "findings"` to search long-term findings memories,',
-        '`kind: "revisit"` for parked discussions, or a specific finding kind to narrow the findings table.',
-        'All filters (kind / tagsAny / status) compose with both modes.',
-    ].join(' '),
+    description: 'Look up memory entries. With `query`: vector search (top-k). Without `query`: list mode (newest-first). `kind` is required (`findings`, `revisit`, or a specific finding kind). For conceptual discovery across memories prefer `semantic_search({ scope: "memory"|"both", memoryKind: "findings" })`. Filters (tagsAny/status) compose with both modes.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -65,10 +53,7 @@ const RECALL_TOOL = {
 
 const UPDATE_MEMORY_TOOL = {
     name: 'update_memory',
-    description: [
-        'Mark a memory entry as resolved (acted on) or dismissed (no longer planning to do it).',
-        'Primarily used to close out kind="revisit" entries returned by recall.',
-    ].join(' '),
+    description: 'Mark a memory entry as resolved (acted on) or dismissed. Primarily used to close out kind="revisit" entries.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -83,13 +68,10 @@ const UPDATE_MEMORY_TOOL = {
 const SEMANTIC_SEARCH_TOOL = {
     name: 'semantic_search',
     description: [
-        'Conceptual vector search over the indexed codebase (and optionally memory entries).',
-        'Preferred first-step discovery tool for conceptual codebase lookup and prior-memory retrieval.',
-        'Use this before text search when you do not already know the exact symbol, file, path, or literal string.',
-        'For new non-trivial tasks, start with `scope: "both", memoryKind: "findings"` unless the task is a tiny exact lookup.',
-        'For known string/symbol/path lookups prefer the file-context `search` tool or `lsp_query` — they are complementary.',
-        'Returns ONE entry per matched file (deduped) with parallel `startLines` / `endLines` arrays of the matched ranges (already merged), plus an annotated `outline` whose entries carry a `matched` flag indicating which symbols overlap those ranges. No source code is returned — follow up with `read_lines` (you can pass `startLines`/`endLines` straight from the response) or `read_function` for the actual content.',
-        'When scope includes "memory", pass `memoryKind: "findings"` for long-term memories, `memoryKind: "revisit"` for parked discussions, or a specific finding kind to narrow the findings table.',
+        'Conceptual vector search over the indexed codebase (and optionally memory). Preferred first-step discovery when you do NOT already know the exact symbol/file/path/string.',
+        'For new non-trivial tasks, start with `scope: "both", memoryKind: "findings"`. For known literals, prefer the file-context `search` or `lsp_query`.',
+        'Returns ONE entry per matched file (deduped) with parallel `startLines`/`endLines` of merged matched ranges, plus an `outline` annotated with a `matched` flag. No source code returned — follow up with `read_lines` (you can pass startLines/endLines straight through) or `read_function`.',
+        'When scope includes "memory", set `memoryKind` (`findings`, `revisit`, or a specific finding kind).',
     ].join(' '),
     inputSchema: {
         type: 'object',
@@ -107,10 +89,7 @@ const SEMANTIC_SEARCH_TOOL = {
 
 const EDIT_MEMORY_TOOL = {
     name: 'edit_memory',
-    description: [
-        'Edit an existing memory entry in place: title, body, tags, paths, or branch.',
-        'Re-embeds the vector when title or body change. Works for both findings and revisits.',
-    ].join(' '),
+    description: 'Edit an existing memory entry in place (title/body/tags/paths/branch). Re-embeds the vector when title or body changes. Works for findings and revisits.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -128,13 +107,9 @@ const EDIT_MEMORY_TOOL = {
 const DOCS_SEARCH_TOOL_BASE = {
     name: 'docs_search',
     description: [
-        'PREFERRED first-step lookup for any question about an external library, framework, SDK, or service whose docs are listed below.',
-        'Vector search over the indexed documentation corpus populated by `kra ai update-docs` (local LanceDB, no network).',
-        'Returns one entry per matched page (deduped by URL) with the best-scoring sections inlined as markdown,',
-        'so you can read the docs directly in the response without a follow-up fetch.',
-        'Pass `sourceAlias` to scope to a single configured source.',
-        'Always try this BEFORE `web_search` / `web_fetch` when the topic matches one of the available sources listed below \u2014 it is faster, offline, and version-pinned to what the user actually has installed.',
-        'Use `semantic_search` instead for questions about THIS repo\u2019s own code. In case semantic search is denied, use confirm_task_complete to ask the user instead.',
+        'PREFERRED first-step lookup for questions about external libraries/SDKs/services whose docs are listed below. Vector search over the local indexed docs corpus (no network).',
+        'Returns one entry per matched page (deduped by URL) with best-scoring sections inlined as markdown \u2014 read directly, no follow-up fetch needed. Use `sourceAlias` to scope to a single source.',
+        'Try this BEFORE `web_search`/`web_fetch` when the topic matches a listed source (faster, offline, version-pinned). Use `semantic_search` for questions about THIS repo\u2019s own code.',
     ].join(' '),
 };
 

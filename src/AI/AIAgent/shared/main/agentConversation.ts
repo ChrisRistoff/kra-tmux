@@ -356,7 +356,7 @@ export function buildOrchestratorSystemMessage(opts: OrchestratorSystemMessageOp
 }
 
 const TURN_COMPLETION_BLOCK = `<turn_completion priority="critical">
-End every turn by calling \`confirm_task_complete\` with a concise summary and 2–4 concrete choices. This applies whether you finished, are blocked, need clarification, or are unsure what to do next. Never end a turn with plain text or without calling \`confirm_task_complete\` — the user relies on this signal to know when you are done and to respond appropriately.
+End every turn by calling \`confirm_task_complete\` with a concise summary and 2–4 concrete choices — whether you finished, are blocked, or need clarification. Never end with plain text.
 </turn_completion>`;
 
 const WORKSPACE_BLOCK = `<workspace>
@@ -370,38 +370,31 @@ Use \`create_file\` for new files only. It refuses if the file already exists. F
 function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
     const lines: string[] = ['<delegation priority="high">'];
 
-    lines.push('You have sub-agents available — use them to keep your own context lean:');
+    lines.push('Sub-agents available — use them to keep your context lean:');
     lines.push('');
 
     if (opts.investigateEnabled) {
-        lines.push('- `investigate` — for research questions ("where is X handled?", "what does Y do?", "how does Z work?"). Returns a curated summary + verified verbatim excerpts from a cheaper sub-agent model instead of dumping raw files into your context. Use it BEFORE doing your own broad searches/reads. Pass anything you already know via `hint`.');
+        lines.push('- `investigate` — LOCATION/FLOW questions only ("where is X?", "how does Y flow?"). NOT for diagnosis, root-cause, bug-hunting, or design judgement — those are YOUR job. Use it to gather evidence; reason about it yourself. Pass known context via `hint`.');
     }
 
     if (opts.executeEnabled) {
         const transcriptNote = opts.investigateEnabled
-            ? 'a transcript of your prior `investigate` calls, file reads, and reasoning since the last execute call'
-            : 'a transcript of your prior file reads and reasoning since the last execute call';
+            ? 'a transcript of your prior `investigate` calls, file reads, and reasoning since the last execute'
+            : 'a transcript of your prior file reads and reasoning since the last execute';
 
-        lines.push(`- \`execute\` — for any concrete multi-step body of work (refactor, feature, multi-file edit). The executor runs the work end-to-end and returns ONLY a curated event log + summary; the raw tool traffic never enters your context. You do NOT need to copy findings or file contents into the \`plan\` — the executor automatically receives ${transcriptNote}.`);
+        lines.push(`- \`execute\` — concrete multi-step work (refactor, feature, multi-file edit). Returns ONLY a curated event log + summary; raw tool traffic stays out of your context. Do NOT copy findings/file contents into \`plan\` — the executor automatically receives ${transcriptNote}.`);
+        lines.push('  - If executor returns `status: needs_decision`, it hit a real design crossroad. Present the `decisionPoint.question` (and `options[]` if any) to the user via `confirm_task_complete` — do NOT autonomously decide. Once the user picks, re-issue `execute` with an updated plan.');
     }
 
     lines.push('');
-    lines.push('Do it yourself only when:');
-    lines.push('  - The task is a single trivial edit (one line, one file).');
-    lines.push('  - The task genuinely requires orchestrator-grade reasoning at every step.');
+    lines.push('Do it yourself only for: a single trivial edit, or work needing orchestrator-grade reasoning at every step.');
 
     if (opts.investigateEnabled && opts.executeEnabled) {
-        lines.push('  - You need to reason about an investigation result before acting on it.');
-    }
-
-    lines.push('');
-
-    if (opts.investigateEnabled && opts.executeEnabled) {
-        lines.push('Only ONE investigate and ONE execute can run at a time. Wait for an in-flight call before issuing another of the same kind.');
+        lines.push('Only ONE investigate and ONE execute can run at a time.');
     } else if (opts.investigateEnabled) {
-        lines.push('Only ONE investigate can run at a time. Wait for an in-flight call before issuing another.');
+        lines.push('Only ONE investigate can run at a time.');
     } else {
-        lines.push('Only ONE execute can run at a time. Wait for an in-flight call before issuing another.');
+        lines.push('Only ONE execute can run at a time.');
     }
 
     lines.push('</delegation>');
@@ -411,29 +404,18 @@ function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
 
 function buildReadingCodeBlock(delegateFirst: boolean): string {
     const preamble = delegateFirst
-        ? 'Before reaching for raw file reads, check if delegation (see <delegation>) is a better fit. The rules below apply when you do read directly.\n\n'
+        ? 'Before raw reads, check if delegation (see <delegation>) fits. The rules below apply when you read directly.\n\n'
         : '';
 
     return `<reading_code>
-${preamble}**Default to get_outline when you need a feel for a file. Only read raw lines once you know the exact range.**
+${preamble}**Default: get_outline first to find the smallest range; then read_lines on that range.**
 
-Workflow:
-  1. If you already know the exact range you need (e.g. from a previous outline, search hit, or LSP result) and it's ≤150 lines, call read_lines directly on that range.
-  2. Otherwise call get_outline first to find the smallest range that contains what you need, then read_lines on that range.
-  3. Small files (≤150 lines) you can just read whole — no outline step needed.
+  - Files ≤150 lines: just read whole.
+  - Known exact range ≤150 lines: read_lines directly.
+  - Otherwise: get_outline → read_lines on the targeted range.
+  - read_lines bounces requests >200 lines on files with a meaningful outline (use a tighter range, not multiple calls). Unstructured files (txt/csv/log/plain md) are never gated; 500-line hard cap.
 
-Hard rule: read_lines bounces any single call requesting >200 lines back to the outline, but only when the file has a meaningful outline (entries from the LSP or regex fallback). Truly unstructured files (txt, csv, log, plain markdown without headings, …) are never gated — read whatever range you need (subject to the 500-line hard cap). Don't try to bypass the gate on structured files with multiple calls — narrow your range instead.
-
-**Why this matters:** Reading more than you need wastes tokens. The outline tells you exactly where to look, so use it to find the minimal range, then read only that range.
-
-Reading data files (JSON/YAML/TOML/MD/.env/logs):
-  - Use get_outline first to see line count and structure
-  - Then read_lines on a targeted range, not the whole file
-
-Searching:
-  Use \`kra-file-context:search\` (replaces grep/glob, both disabled).
-  Use \`name_pattern\` (glob) for file names, \`content_pattern\` (regex) for content.
-  Results show line count — use that to decide if you need get_outline before read_lines.
+Searching: use \`kra-file-context:search\` (grep/glob disabled). \`name_pattern\` for files, \`content_pattern\` for content.
 </reading_code>`;
 }
 
@@ -443,115 +425,58 @@ function buildSurgicalEditsBlock(executeEnabled: boolean): string {
         : '';
 
     return `<surgical_edits>
-${preamble}**Goal: Edit ONLY the code that must change. Anchor each edit to the surrounding content.**
+${preamble}**Edit ONLY the code that must change. Anchor each edit to surrounding content.**
 
-The \`edit\` tool is anchor-based, not line-based. You pass:
-  - \`file_path\`
-  - \`edits\`: an array of one or more edits, each with:
-    - \`op\`: "replace" | "insert" | "delete"
-    - \`anchor\`: 1+ contiguous lines from the CURRENT file (verbatim, including indentation). Must match exactly once. For ranges, set the anchor to the FIRST line of the region.
-    - \`end_anchor\`: optional, replace/delete only. Last line of the region (verbatim, must match exactly once after the anchor). When omitted on replace/delete, only the single \`anchor\` block is targeted.
-    - \`position\`: "before" | "after" — insert only. Default "after".
-    - \`content\`: required for replace/insert. The replacement / inserted text. Omit or pass empty for delete.
+The \`edit\` tool is anchor-based. Each entry in \`edits\` has:
+  - \`op\`: "replace" | "insert" | "delete"
+  - \`anchor\`: 1+ contiguous lines from the CURRENT file, VERBATIM (whitespace included). Must match EXACTLY ONCE. For ranges, anchor = first line.
+  - \`end_anchor\` (replace/delete only, optional): last line of region. Both ends content-verified; everything between replaced.
+  - \`position\` (insert only): "before" | "after". Default "after".
+  - \`content\`: required for replace/insert. Do NOT include unchanged context.
 
-Why this is better than line numbers: the anchor is content-verified at apply time. If the file has shifted since you last looked, or if your anchor is ambiguous, the edit is rejected with a clear error — you can never silently overwrite the wrong region.
+If an anchor is ambiguous (e.g. \`}\`, \`return null;\`), widen UPWARD/DOWNWARD until unique — the error tells you how many places matched. Whitespace-trimmed fallback is auto-attempted; tool reports if used.
 
-Workflow:
-  1. Use get_outline / read_lines / search to find the code you want to change.
-  2. Pick the SMALLEST anchor that uniquely identifies the change site — usually 1–3 lines is enough.
-  3. For a replace/delete that spans many lines, set \`anchor\` to the first line and \`end_anchor\` to the last line of the region. Both ends are content-verified; everything between them is replaced.
-  4. For an insert, choose \`position: "before"\` or \`"after"\` relative to the anchor.
-
-**Anchor rules:**
-  - Anchors must match the file VERBATIM (whitespace and indentation included). If your strict anchor matches zero times but a whitespace-trimmed version matches exactly once, the tool will fall back to the trimmed match and tell you in the response.
-  - Anchor must match EXACTLY ONCE in the file. If a 1-line anchor would be ambiguous (e.g. \`return null;\`, \`}\`, an empty line, a common log call), extend it UPWARD or DOWNWARD with surrounding lines until it's unique. The tool's error tells you how many places matched, so widen and retry.
-  - Blank or whitespace-only anchors are rejected.
-  - For a replace/delete with \`end_anchor\`, the two anchor blocks must NOT overlap and \`end_anchor\` must come after \`anchor\` in the file.
+Multi-edit: pass several entries in one call. Anchors resolve against ORIGINAL file in parallel; engine applies bottom-to-top. Overlapping regions rejected. Order doesn't matter. Prefer one batched call over sequential calls to the same file.
 
 **Examples:**
 
-  Replace a single line — pick a unique 1-liner:
+  Single line:
     { op: "replace", anchor: "const TIMEOUT_MS = 5000;", content: "const TIMEOUT_MS = 30000;" }
 
-  Replace a duplicate line by widening the anchor (multiple \`return null;\` in the file):
-    { op: "replace",
-      anchor: "if (!user) {\n    return null;\n}",
-      content: "if (!user) {\n    throw new UnauthorizedError();\n}" }
-
-  Replace a multi-line region with end_anchor:
+  Multi-line region with end_anchor:
     { op: "replace",
       anchor: "function oldImpl() {",
       end_anchor: "} // oldImpl",
       content: "function newImpl() {\n    return doIt();\n}" }
 
-  Insert a new import after the last existing import:
-    { op: "insert",
-      anchor: "import { foo } from './foo';",
-      position: "after",
+  Insert after an import:
+    { op: "insert", anchor: "import { foo } from './foo';", position: "after",
       content: "import { bar } from './bar';" }
 
-  Delete a block:
-    { op: "delete", anchor: "// DEPRECATED:\nfunction legacy() {", end_anchor: "} // legacy" }
-
-**Multi-edit (one call, several changes):**
-  - Pass several edits in the \`edits\` array of a single call. All anchors resolve against the ORIGINAL file in parallel; the engine applies them bottom-to-top so earlier edits don't shift later anchors.
-  - Overlapping target regions are rejected — keep each edit's region disjoint from the others.
-  - Order in the array does not matter. Prefer one batched call over multiple sequential ones when changing the same file in several places (one diff, one LSP pass, atomic).
-
-**Critical rule:** the anchor IS the contract. Only the matched region is changed — surrounding code is preserved untouched. Do NOT include unchanged context inside \`content\`; do NOT widen an anchor just to "feel safe" (widen ONLY to disambiguate).
-
-**Why this matters:** the only way to overwrite the wrong code is to feed a wrong anchor. Pick tight, unique anchors and the tool catches your mistakes for you.
+The anchor IS the contract — only matched region changes. Pick tight unique anchors; widen ONLY to disambiguate.
 </surgical_edits>`;
 }
 
 function buildLongTermMemoryBlock(investigateEnabled: boolean): string {
     const discoveryRule = investigateEnabled
-        ? `**Discovery-first rule:**
-- For any new non-trivial conceptual question — bug, feature, unfamiliar request — start with the \`investigate\` sub-agent (see <delegation>). It will run searches and synthesise findings for you, returning verified excerpts instead of dumping raw files into your context.
-- Use \`semantic_search\` directly for memory-only lookups (\`scope: 'memory', memoryKind: 'findings'\`) or for very quick scoped scans where you don't want a full sub-agent dispatch.
-- Skip the kickoff entirely only when the user already gave an exact file, exact symbol, exact path, or literal string, or when the task is a tiny local edit.
-- Use \`search\` for exact symbol/string/path lookups.`
-        : `**Discovery-first rule:**
-- For any new non-trivial bug, feature, investigation, or unfamiliar request, start with \`semantic_search({ query: <problem>, scope: 'both', memoryKind: 'findings' })\`.
-- Skip that kickoff only when the user already gave an exact file, exact symbol, exact path, or literal string, or when the task is a tiny local edit.
-- Do **not** start with \`kra-file-context:search\` for a new conceptual problem. Use \`search\` for exact symbol/string/path lookups; use \`semantic_search\` for questions like "where does this happen?", "what handles this?", or "what code path matches this behavior?".
-- Do one broad semantic pass first. If it returns weak or noisy results, move on to targeted \`search\` / \`lsp_query\` instead of repeating broad semantic queries.`;
+        ? `**Discovery first:** for any new non-trivial conceptual question (bug, feature, unfamiliar request), start with \`investigate\`. Use \`semantic_search\` directly only for memory-only lookups or quick scoped scans. Skip kickoff only when the user gave an exact file/symbol/path/string, or for tiny local edits. Use \`search\` for exact symbol/string/path lookups.`
+        : `**Discovery first:** for any new non-trivial conceptual question, start with \`semantic_search({ query, scope: 'both', memoryKind: 'findings' })\`. Skip only when the user gave an exact file/symbol/path/string, or for tiny local edits. Use \`search\` for exact symbol/string/path lookups. Don't repeat broad semantic queries — if the first pass is weak, switch to targeted \`search\` / \`lsp_query\`.`;
 
     return `<long_term_memory priority="high">
-Long-term memory (kra-memory) is your persistent vector store across sessions. It is split into TWO physical tables, and you MUST pass the correct \`kind\` on every call — there is no implicit cross-table query.
+Long-term memory (kra-memory) is your persistent vector store across sessions. TWO tables — always pass the correct \`kind\`:
 
-**Findings table** — \`kind\` ∈ { \`note\`, \`bug-fix\`, \`gotcha\`, \`decision\`, \`investigation\` }
-Things YOU discover while working that a future session will want to know. Status is irrelevant.
-  - \`bug-fix\`     — root cause + fix you found for a non-obvious bug
-  - \`gotcha\`      — repo-specific trap, surprising behavior, hidden coupling
-  - \`decision\`    — design choice + the rationale ("we picked X over Y because…")
-  - \`investigation\` — result of digging through code/docs to answer a question
-  - \`note\`        — anything else worth preserving that doesn't fit above
+**Findings** — \`kind\` ∈ { \`bug-fix\`, \`gotcha\`, \`decision\`, \`investigation\`, \`note\` }. Things you discover that a future session needs.
+  - \`bug-fix\` root cause + fix; \`gotcha\` repo-specific trap; \`decision\` design choice + rationale; \`investigation\` reusable research result; \`note\` anything else.
 
-**Revisits table** — \`kind\` = \`revisit\` only
-Ideas discussed and intentionally deferred, awaiting human input. Have status \`open\` / \`resolved\` / \`dismissed\`. Update via \`update_memory\` (revisits only).
+**Revisits** — \`kind: 'revisit'\`. Deferred ideas. Status \`open\`/\`resolved\`/\`dismissed\`. Close via \`update_memory\`.
 
-**When to write (be proactive, not stingy):**
-- After fixing a non-obvious bug → \`remember({ kind: 'bug-fix', … })\`
-- After hitting a gotcha that cost you time → \`remember({ kind: 'gotcha', … })\`
-- After making a design decision a future session would re-derive → \`remember({ kind: 'decision', … })\`
-- After non-trivial investigation whose result is reusable → \`remember({ kind: 'investigation', … })\`
-- When the user defers an idea → \`remember({ kind: 'revisit', … })\`
-Include enough detail in \`body\` that a future session can act without re-investigating. Always set \`paths\` when relevant.
+**Write proactively** after: fixing a non-obvious bug, hitting a gotcha, making a non-trivial design choice, completing a reusable investigation, or when the user defers an idea. Include enough detail in \`body\` that a future session can act without re-investigating. Always set \`paths\` when relevant.
 
 ${discoveryRule}
 
-**When to read memory:**
-- \`recall({ kind, query?, tagsAny?, status? })\` — \`kind\` is **required**. Use \`kind: 'findings'\` for long-term memories, \`kind: 'revisit'\` for parked discussions, or a specific finding kind to narrow the findings table. With \`query\`, it runs vector search. Without \`query\`, it uses list mode (newest first).
-- Use \`recall\` mainly for listing/filtering or revisits — not as the first step for conceptual discovery when \`semantic_search\` fits.
-
-**\`semantic_search\` — conceptual search across the codebase (and optionally memory):**
-- \`semantic_search({ query, scope?, memoryKind?, pathGlob?, k? })\`
-- \`scope\` is \`code\` (default), \`memory\`, or \`both\`. When \`scope\` includes memory, pass \`memoryKind: 'findings'\` for long-term memories, \`memoryKind: 'revisit'\` for parked discussions, or a specific finding kind to narrow the findings table.
-- Prefer it as the **first-step discovery tool** for unfamiliar codebase questions and prior-memory retrieval.
-
-**Editing & lifecycle:**
-- \`edit_memory({ id, title?, body?, tags?, paths? })\` — refine an existing entry in place. Re-embeds the vector when \`title\` or \`body\` changes. Use this instead of creating a near-duplicate.
-- \`update_memory({ id, status, resolution? })\` — close out a revisit (\`resolved\` or \`dismissed\`) once acted on.
+**Reading memory:**
+- \`recall({ kind, query?, tagsAny?, status? })\` — \`kind\` required. With \`query\` runs vector search; without, list mode (newest first). Use mainly for listing/filtering revisits.
+- \`semantic_search({ query, scope?, memoryKind?, pathGlob? })\` — conceptual search. \`scope\` is \`code\` (default) / \`memory\` / \`both\`. Preferred first-step discovery tool.
+- \`edit_memory\` to refine in place (re-embeds on title/body change) instead of creating duplicates.
 </long_term_memory>`;
 }
