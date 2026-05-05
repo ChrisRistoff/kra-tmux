@@ -38,7 +38,7 @@ describe('buildDocsSearchTool', () => {
 
     it('keeps the base description text intact and required: query', () => {
         const tool = buildDocsSearchTool(sources);
-        expect(tool.description).toContain('Vector search over the indexed documentation corpus');
+        expect(tool.description).toContain('Vector search over the local indexed docs corpus');
         expect(tool.inputSchema.required).toEqual(['query']);
     });
 });
