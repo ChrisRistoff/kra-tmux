@@ -4,11 +4,32 @@ local state = require("kra_agent.ui.state")
 local rpc = require("kra_agent.util.rpc")
 local json = require("kra_agent.util.json")
 
-function M.upsert_history(tool_name, details, args_json)
+-- Resolve the existing history entry for a given tool_call_id, falling back
+-- to the legacy single active_entry_index when no id is provided. Returns
+-- (index, entry) or (nil, nil) if no entry exists yet.
+local function find_entry(tool_call_id)
+    if tool_call_id and state.entries_by_call_id[tool_call_id] then
+        local idx = state.entries_by_call_id[tool_call_id]
+        local entry = state.history[idx]
+        if entry then
+            return idx, entry
+        end
+        -- Stale mapping: the entry was wiped. Drop the dangling pointer.
+        state.entries_by_call_id[tool_call_id] = nil
+    end
+
+    if not tool_call_id and state.active_entry_index and state.history[state.active_entry_index] then
+        return state.active_entry_index, state.history[state.active_entry_index]
+    end
+
+    return nil, nil
+end
+
+function M.upsert_history(tool_name, details, args_json, tool_call_id)
     local timestamp = os.date("%H:%M:%S")
 
-    if state.active_entry_index and state.history[state.active_entry_index] then
-        local entry = state.history[state.active_entry_index]
+    local _, entry = find_entry(tool_call_id)
+    if entry then
         entry.details = details
         entry.updated_at = timestamp
         if args_json and args_json ~= "" and (entry.args_json == nil or entry.args_json == "") then
@@ -17,25 +38,33 @@ function M.upsert_history(tool_name, details, args_json)
         return entry
     end
 
-    local entry = {
+    entry = {
         args_json = args_json or "",
         details = details,
         started_at = timestamp,
         status = "running",
         title = tool_name,
+        tool_call_id = tool_call_id,
         updated_at = timestamp,
     }
     table.insert(state.history, entry)
-    state.active_entry_index = #state.history
+    local idx = #state.history
+    if tool_call_id then
+        state.entries_by_call_id[tool_call_id] = idx
+    else
+        -- Legacy callers (no tool_call_id) rely on the single active pointer.
+        state.active_entry_index = idx
+    end
     return entry
 end
 
-function M.complete_history(tool_name, details, success, full_result)
-    local entry
-    if state.active_entry_index and state.history[state.active_entry_index] then
-        entry = state.history[state.active_entry_index]
-    else
-        entry = M.upsert_history(tool_name, details)
+function M.complete_history(tool_name, details, success, full_result, tool_call_id)
+    local _, entry = find_entry(tool_call_id)
+    if not entry then
+        -- No matching start_tool was recorded — create a placeholder so the
+        -- result still shows up in history. Args will be empty in this case;
+        -- that is intentional, since they were never reported.
+        entry = M.upsert_history(tool_name, details, nil, tool_call_id)
     end
 
     entry.title = tool_name
@@ -44,7 +73,12 @@ function M.complete_history(tool_name, details, success, full_result)
     entry.details = details
     entry.status = success and "done" or "failed"
     entry.updated_at = os.date("%H:%M:%S")
-    state.active_entry_index = nil
+
+    if tool_call_id then
+        state.entries_by_call_id[tool_call_id] = nil
+    else
+        state.active_entry_index = nil
+    end
 end
 
 local function open_history_view(entry)

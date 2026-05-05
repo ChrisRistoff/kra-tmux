@@ -119,7 +119,17 @@ export function formatToolCompletion(
     error?: unknown
 ): string {
     if (!success) {
-        return truncateMultiline(extractErrorMessage(error));
+        const errorText = extractErrorMessage(error);
+        if (errorText !== 'Tool failed.') {
+            return truncateMultiline(errorText);
+        }
+
+        const fallback = result?.detailedContent ?? result?.content;
+        if (fallback) {
+            return truncateMultiline(fallback);
+        }
+
+        return truncateMultiline(errorText);
     }
 
     const resultText = result?.detailedContent ?? result?.content ?? 'Completed successfully.';

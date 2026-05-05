@@ -441,6 +441,10 @@ export class OpenAICompatibleSession implements AgentSession {
         this.cachedStreamingMode = override.streamingMode;
     }
 
+    public getMessages(): ChatCompletionMessageParam[] {
+        return [...this.messages];
+    }
+
     public on: AgentSession['on'] = (event, handler) => {
         const list = (this.listeners[event] ??= []) as EventListener<typeof event>[];
         list.push(handler);
@@ -502,6 +506,12 @@ export class OpenAICompatibleSession implements AgentSession {
 
         const sysContent = this.buildSystemMessage();
         this.messages.push({ role: 'system', content: sysContent });
+
+        if (this.opts.initialMessages) {
+            for (const msg of this.opts.initialMessages) {
+                this.messages.push(msg);
+            }
+        }
     }
 
     private buildSystemMessage(): string {
@@ -1280,6 +1290,7 @@ export class OpenAICompatibleSession implements AgentSession {
                 toolCallId: call.id,
                 success,
                 result: { content: output },
+                ...(success ? {} : { error: output }),
             },
         });
     }
@@ -1309,3 +1320,4 @@ export class OpenAICompatibleSession implements AgentSession {
         return this.executableToolBridge.executeTool(title, args);
     };
 }
+

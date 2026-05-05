@@ -1,5 +1,6 @@
 import type * as neovim from 'neovim';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { AgentHistory, BashSnapshot } from '@/AI/AIAgent/shared/utils/agentHistory';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
@@ -120,6 +121,12 @@ export interface AgentSession {
     disconnect: () => Promise<void>;
     listExecutableTools?: () => Array<{ title: string; server: string; name: string }>;
     executeTool?: (title: string, args: Record<string, unknown>) => Promise<string>;
+    /**
+     * Optional. Returns a copy of the current conversation messages array.
+     * BYOK sessions implement this for session-continuation support;
+     * Copilot SDK sessions do not (returns undefined).
+     */
+    getMessages?: () => ChatCompletionMessageParam[] | Promise<ChatCompletionMessageParam[]>;
 }
 
 
@@ -196,6 +203,13 @@ export interface AgentSessionOptions {
      * thresholds).
      */
     isSubAgent?: boolean;
+    /**
+     * Optional. Messages to inject after the system prompt during init().
+     * Used by executor session continuation — the stored conversation
+     * (sans system message) is passed here so a fresh session picks up
+     * where the previous one left off.
+     */
+    initialMessages?: ChatCompletionMessageParam[];
 }
 
 export interface LocalTool {
