@@ -4,7 +4,7 @@ describe('matchesSubAgentWhitelist', () => {
     const whitelist = [
         'read_lines',
         'get_outline',
-        'edit',
+        'anchor_edit',
         'lsp_query',
         'search',
         'submit_result',

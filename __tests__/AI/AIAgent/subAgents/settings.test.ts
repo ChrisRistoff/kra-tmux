@@ -10,7 +10,7 @@ describe('mergeExecutor', () => {
         expect(merged.allowReplanEscape).toBe(true);
         expect(merged.includeDiffsInLog).toBe(true);
         expect(merged.maxToolCalls).toBe(60);
-        expect(merged.toolWhitelist).toEqual(expect.arrayContaining(['read_lines', 'edit', 'bash']));
+        expect(merged.toolWhitelist).toEqual(expect.arrayContaining(['read_lines', 'anchor_edit', 'bash']));
     });
 
     it('respects partial overrides and falls back to defaults for the rest', () => {

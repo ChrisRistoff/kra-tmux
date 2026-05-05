@@ -25,7 +25,7 @@ export async function buildCoreMcpServers(): Promise<Record<string, MCPServerCon
             'get_outline',
             'read_lines',
             'read_function',
-            'edit',
+            'anchor_edit',
             'create_file',
             'search',
             'lsp_query',

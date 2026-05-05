@@ -37,7 +37,7 @@ export async function dispatchFileContextTool(
         case 'read_function':
             return handleReadFunction(filePath, args);
 
-        case 'edit':
+        case 'anchor_edit':
             return handleEdit(filePath, args);
 
         case 'create_file':
