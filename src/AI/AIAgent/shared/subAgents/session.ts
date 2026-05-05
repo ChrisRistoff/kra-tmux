@@ -26,6 +26,7 @@ import type {
     LocalTool,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import type { SubAgentRuntime } from '@/AI/AIAgent/shared/subAgents/types';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import {
     appendToChat,
 } from '@/AI/AIAgent/shared/utils/agentToolHook';
@@ -86,6 +87,37 @@ export interface SubAgentRunOptions {
      * same chat file.
      */
     chatBridge?: SubAgentChatBridge;
+    /**
+     * Optional. Messages to inject after the system prompt.
+     * Used for BYOK-only session continuation — the stored conversation
+     * (sans system message) is passed here so the agent can resume. Ignored
+     * when `existingHandle` is provided (session is already live with history).
+     */
+    initialMessages?: ChatCompletionMessageParam[];
+    /**
+     * Optional. Reuse a previously kept-alive sub-agent session
+     */
+    existingHandle?: SubAgentSessionHandle;
+    /**
+     * Optional. When true, do NOT call `session.disconnect()` after the turn.
+     */
+    keepAliveOnPause?: boolean;
+}
+
+/**
+ * Mutable handle for a kept-alive sub-agent session. The submit_result tool
+ * handler and the event-emit closure are bound at session-creation time but
+ * reference these mutable slots so subsequent turns can rebind them without
+ * re-registering tools or re-attaching listeners.
+ */
+export interface SubAgentSessionHandle {
+    session: AgentSession;
+    /** Per-turn capture target — reset before each `runSubAgentTask` call. */
+    submitSlot: { captured?: Record<string, unknown>; resolveSubmitted?: () => void };
+    /** Per-turn event sink — reset before each call so events route to the current run's array. */
+    emitSlot: { current: (e: SubAgentEvent) => void };
+    bridge?: SubAgentChatBridge;
+    parentState?: AgentConversationState;
 }
 
 export interface SubAgentRunResult {
@@ -93,6 +125,34 @@ export interface SubAgentRunResult {
     result: Record<string, unknown> | undefined;
     /** Captured event log (post-hoc; for the orchestrator's audit trail). */
     events: SubAgentEvent[];
+    /**
+     * The session's full message array after execution.
+     * Only populated when the sub-agent called submit_result AND the underlying
+     * provider supports `getMessages()` (BYOK only). Prefer `liveHandle` for
+     * cross-provider session continuation.
+     */
+    messages?: ChatCompletionMessageParam[];
+    /**
+     * Populated when `keepAliveOnPause` was true. Pass back as `existingHandle`
+     * on the next `runSubAgentTask` call to continue the same session, or
+     * dispose via `disposeSubAgentHandle` to release resources.
+     */
+    liveHandle?: SubAgentSessionHandle;
+}
+
+/**
+ * Tear down a kept-alive sub-agent session. Best-effort — swallows errors
+ * because cleanup is fire-and-forget.
+ */
+export async function disposeSubAgentHandle(handle: SubAgentSessionHandle): Promise<void> {
+    if (handle.parentState && handle.parentState.activeSubAgentSession === handle.session) {
+        handle.parentState.activeSubAgentSession = undefined;
+    }
+    try {
+        await handle.session.disconnect();
+    } catch {
+        // disconnect is best-effort; nothing useful to do on failure.
+    }
 }
 
 export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgentRunResult> {
@@ -102,113 +162,151 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         opts.onEvent?.(e);
     };
 
-    let captured: Record<string, unknown> | undefined;
-    let resolveSubmitted: (() => void) | undefined;
-    const submitted = new Promise<void>((resolve) => {
-        resolveSubmitted = resolve;
-    });
+    let handle: SubAgentSessionHandle;
+    let isReused: boolean;
 
-    const submitTool: LocalTool = {
-        name: 'submit_result',
-        description:
-            'Submit your final structured result. Calling this signals the task is complete. ' +
-            'After calling this, output a brief acknowledgement and STOP — do not call any further tools.',
-        parameters: opts.resultSchema,
-        serverLabel: 'kra-subagent',
-        handler: async (args) => {
-            captured = args;
-            resolveSubmitted?.();
+    if (opts.existingHandle) {
+        // ── Reuse path ───────────────────────────────────────────────────
+        // Session is already live with full conversation history (tool calls
+        // and tool results included). The submit_result tool was registered
+        // at original creation; its handler closes over `submitSlot`, which
+        // we reset below. Listeners and bridge wiring are preserved.
+        handle = opts.existingHandle;
+        isReused = true;
 
-            return 'Result accepted. End your turn now without calling any more tools.';
-        },
-    };
+        if (handle.parentState) {
+            handle.parentState.activeSubAgentSession = handle.session;
+        }
+    } else {
+        // ── Fresh path ───────────────────────────────────────────────────
+        const submitSlot: SubAgentSessionHandle['submitSlot'] = {};
+        const emitSlot: SubAgentSessionHandle['emitSlot'] = { current: emit };
 
-    const bridge = opts.chatBridge;
+        const submitTool: LocalTool = {
+            name: 'submit_result',
+            description:
+                'Submit your final structured result. Calling this signals the task is complete. ' +
+                'After calling this, output a brief acknowledgement and STOP — do not call any further tools.',
+            parameters: opts.resultSchema,
+            serverLabel: 'kra-subagent',
+            handler: async (args) => {
+                submitSlot.captured = args;
+                submitSlot.resolveSubmitted?.();
 
-    const onPreToolUse = async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
-        // submit_result is a synthetic local tool — always allow it.
-        if (input.toolName === 'submit_result') {
+                return 'Result accepted. End your turn now without calling any more tools.';
+            },
+        };
+
+        const bridge = opts.chatBridge;
+
+        const onPreToolUse = async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
+            if (input.toolName === 'submit_result') {
+                return { permissionDecision: 'allow' };
+            }
+
+            if (bridge) {
+                return bridge.parentOnPreToolUse({
+                    ...input,
+                    agentLabel: bridge.agentLabel,
+                });
+            }
+
             return { permissionDecision: 'allow' };
-        }
+        };
 
-        if (bridge) {
-            return bridge.parentOnPreToolUse({
-                ...input,
-                agentLabel: bridge.agentLabel,
-            });
-        }
+        const onPostToolUse = async (
+            input: AgentPostToolUseHookInput
+        ): Promise<AgentPostToolUseHookOutput | void> => {
+            if (input.toolName === 'submit_result') {
+                return;
+            }
 
-        return { permissionDecision: 'allow' };
-    };
+            if (bridge) {
+                return bridge.parentOnPostToolUse({
+                    ...input,
+                    agentLabel: bridge.agentLabel,
+                });
+            }
 
-    const onPostToolUse = async (
-        input: AgentPostToolUseHookInput
-    ): Promise<AgentPostToolUseHookOutput | void> => {
-        if (input.toolName === 'submit_result') {
             return;
+        };
+
+        const session: AgentSession = await opts.runtime.client.createSession({
+            model: opts.runtime.model,
+            workingDirectory: opts.workingDirectory,
+            mcpServers: opts.mcpServers,
+            localTools: [submitTool],
+            systemMessage: { mode: 'replace', content: opts.systemPrompt },
+            ...(opts.contextWindow !== undefined ? { contextWindow: opts.contextWindow } : {}),
+            excludedTools: [
+                'str_replace_editor', 'write_file', 'read_file', 'edit', 'view',
+                'grep', 'glob', 'create', 'apply_patch',
+                'bash', 'shell', 'run_in_terminal', 'execute', 'report_intent',
+            ],
+            ...(opts.initialMessages ? { initialMessages: opts.initialMessages } : {}),
+            allowedTools: [...opts.toolWhitelist, 'submit_result'],
+            onPreToolUse,
+            onPostToolUse,
+            isSubAgent: true,
+        });
+
+        // Listeners read from emitSlot.current, so reused sessions route events
+        // to the CURRENT run's array rather than the original run's (closed over).
+        session.on('assistant.message_delta', (e) => {
+            emitSlot.current({ kind: 'message', text: e.data.deltaContent });
+        });
+        session.on('tool.execution_start', (e) => {
+            emitSlot.current({ kind: 'tool_start', toolName: e.data.toolName });
+        });
+        session.on('tool.execution_complete', (e) => {
+            emitSlot.current({ kind: 'tool_complete', success: e.data.success });
+        });
+
+        const parentState = bridge?.getParentState();
+        if (parentState) {
+            parentState.activeSubAgentSession = session;
         }
 
-        if (bridge) {
-            return bridge.parentOnPostToolUse({
-                ...input,
+        if (bridge && parentState) {
+            await setupSessionEventHandlers(parentState, session, {
                 agentLabel: bridge.agentLabel,
             });
         }
 
-        return;
-    };
+        handle = {
+            session,
+            submitSlot,
+            emitSlot,
+            ...(bridge ? { bridge } : {}),
+            ...(parentState ? { parentState } : {}),
+        };
 
-    // The provider wrappers honour `allowedTools` by filtering the MCP/built-in
-    // tool inventory advertised to the model BEFORE the turn starts. We still
-    // pass the static `excludedTools` list so the SDK's own built-in editors
-    // (which we replace with our MCP-served versions) never appear.
-    const session: AgentSession = await opts.runtime.client.createSession({
-        model: opts.runtime.model,
-        workingDirectory: opts.workingDirectory,
-        mcpServers: opts.mcpServers,
-        localTools: [submitTool],
-        systemMessage: { mode: 'replace', content: opts.systemPrompt },
-        ...(opts.contextWindow !== undefined ? { contextWindow: opts.contextWindow } : {}),
-        excludedTools: [
-            'str_replace_editor', 'write_file', 'read_file', 'edit', 'view',
-            'grep', 'glob', 'create', 'apply_patch',
-            'bash', 'shell', 'run_in_terminal', 'execute', 'report_intent',
-        ],
-        allowedTools: [...opts.toolWhitelist, 'submit_result'],
-        onPreToolUse,
-        onPostToolUse,
-        isSubAgent: true,
-    });
-    // Always capture into the local event log for the caller's audit trail.
-    session.on('assistant.message_delta', (e) => {
-        emit({ kind: 'message', text: e.data.deltaContent });
-    });
-    session.on('tool.execution_start', (e) => {
-        emit({ kind: 'tool_start', toolName: e.data.toolName });
-    });
-    session.on('tool.execution_complete', (e) => {
-        emit({ kind: 'tool_complete', success: e.data.success });
-    });
-
-    // Track this session on the parent state so the user's `stop_stream`
-    // action can also abort the sub-agent (otherwise hitting stop only stops
-    // the orchestrator and the sub-agent keeps running tools).
-    const parentState = bridge?.getParentState();
-
-    if (parentState) {
-        parentState.activeSubAgentSession = session;
+        isReused = false;
     }
 
-    // If bridged, mirror the session into the orchestrator's chat/nvim UI.
+    // Per-turn rebinding: reset capture state and route events into THIS run.
+    delete handle.submitSlot.captured;
+    delete handle.submitSlot.resolveSubmitted;
+    handle.emitSlot.current = emit;
+
+    const submitted = new Promise<void>((resolve) => {
+        handle.submitSlot.resolveSubmitted = resolve;
+    });
+
+    const session = handle.session;
+    const bridge = handle.bridge;
+    const parentState = handle.parentState;
+
+    // Emit the sub-agent header for every turn (fresh OR resumed) so the chat
+    // shows the executor handing off cleanly. On resume this acts as a visual
+    // marker that the executor has picked the conversation back up.
     if (bridge && parentState) {
-        await setupSessionEventHandlers(parentState, session, {
-            agentLabel: bridge.agentLabel,
-        });
         const subAgentHeader = formatSubAgentHeader(bridge.headerEmoji, bridge.agentLabel, opts.runtime.model);
         await appendToChat(parentState.chatFile, subAgentHeader);
-        // appendToChat alone leaves the header invisible until a refresh.
         appendToAgentChatLayout(parentState.nvim, subAgentHeader);
     }
+
+    let finalMessages: ChatCompletionMessageParam[] | undefined;
 
     try {
         // Provider semantics differ: BYOK's send() blocks until the turn loop
@@ -216,12 +314,8 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         // the prompt and the model runs asynchronously, with completion signalled
         // via the `session.idle` event. We wait for idle in both cases so the
         // sub-agent reliably finishes (and submit_result fires) before we
-        // disconnect.
-        // We ALSO race against `submitted` (resolved synchronously by the
-        // submit_result handler): some models keep emitting text or denied
-        // tool calls after submitting, which delays or never fires `idle`.
-        // Once we have a captured result there is nothing useful left for the
-        // model to do, so we hand control back to the orchestrator immediately.
+        // disconnect. We race against `submitted` (resolved by submit_result)
+        // because some models keep emitting after submit, delaying `idle`.
         const idle = new Promise<void>((resolve) => {
             session.on('session.idle', () => resolve());
         });
@@ -234,12 +328,48 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
             await appendToChat(parentState.chatFile, assistantHeader);
             appendToAgentChatLayout(parentState.nvim, assistantHeader);
         }
-        if (parentState && parentState.activeSubAgentSession === session) {
-            parentState.activeSubAgentSession = undefined;
+
+        if (opts.keepAliveOnPause) {
+            // Skip disconnect; caller owns lifecycle via the returned liveHandle.
+            // Leave activeSubAgentSession set so user-abort still tears it down.
+        } else {
+            if (parentState && parentState.activeSubAgentSession === session) {
+                parentState.activeSubAgentSession = undefined;
+            }
+
+            // Capture messages BEFORE disconnect. The Copilot SDK's getMessages()
+            // is an RPC into the session daemon; once disconnect() tears the
+            // session down, the in-flight RPC rejects with `Session not found`.
+            if (handle.submitSlot.captured) {
+                try {
+                    finalMessages = await session.getMessages?.();
+                } catch {
+                    finalMessages = undefined;
+                }
+            }
+
+            try {
+                await session.disconnect();
+            } catch {
+                // Disconnect is best-effort; never let cleanup errors mask the result.
+            }
         }
-        await session.disconnect();
     }
 
-    return { result: captured, events };
+    const captured = handle.submitSlot.captured;
+    const result: SubAgentRunResult = { result: captured, events };
+
+    if (finalMessages) {
+        result.messages = finalMessages;
+    }
+    if (opts.keepAliveOnPause) {
+        result.liveHandle = handle;
+    }
+
+    // Suppress unused-variable warning for isReused — retained for future
+    // diagnostics / logging hooks.
+    void isReused;
+
+    return result;
 }
 

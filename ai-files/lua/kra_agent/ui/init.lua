@@ -49,8 +49,8 @@ function M.start_turn(model)
     })
 end
 
-function M.start_tool(tool_name, details, args_json)
-    history.upsert_history(tool_name, details, args_json)
+function M.start_tool(tool_name, details, args_json, tool_call_id)
+    history.upsert_history(tool_name, details, args_json, tool_call_id)
     set_state({
         title = string.format("Tool · %s", tool_name),
         body = details,
@@ -60,8 +60,8 @@ function M.start_tool(tool_name, details, args_json)
     })
 end
 
-function M.update_tool(tool_name, details)
-    history.upsert_history(tool_name, details)
+function M.update_tool(tool_name, details, tool_call_id)
+    history.upsert_history(tool_name, details, nil, tool_call_id)
     set_state({
         title = string.format("Tool · %s", tool_name),
         body = details,
@@ -71,8 +71,8 @@ function M.update_tool(tool_name, details)
     })
 end
 
-function M.complete_tool(tool_name, details, success, full_result)
-    history.complete_history(tool_name, details, success, full_result)
+function M.complete_tool(tool_name, details, success, full_result, tool_call_id)
+    history.complete_history(tool_name, details, success, full_result, tool_call_id)
     set_state({
         title = string.format("Tool · %s", tool_name),
         body = string.format("%s\n\nPress <Space>h for tool history.", details),

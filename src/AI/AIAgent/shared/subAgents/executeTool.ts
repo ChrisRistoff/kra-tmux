@@ -21,7 +21,13 @@
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import type { LocalTool } from '@/AI/AIAgent/shared/types/agentTypes';
 import type { ExecutorRuntime } from '@/AI/AIAgent/shared/subAgents/types';
-import { runSubAgentTask, type SubAgentChatBridge, type SubAgentEvent } from '@/AI/AIAgent/shared/subAgents/session';
+import {
+    disposeSubAgentHandle,
+    runSubAgentTask,
+    type SubAgentChatBridge,
+    type SubAgentEvent,
+    type SubAgentSessionHandle,
+} from '@/AI/AIAgent/shared/subAgents/session';
 import { buildExecutorTranscriptBlocks } from '@/AI/AIAgent/shared/subAgents/buildExecutorTranscript';
 import type { TranscriptEntry } from '@/AI/AIAgent/shared/main/orchestratorTranscript';
 
@@ -33,6 +39,8 @@ export interface CreateExecuteToolOptions {
 }
 
 interface ExecuteArgs {
+    /** Optional. Pass back the sessionId from a previous paused execution to resume it. */
+    sessionId?: string;
     plan: string;
     successCriteria?: string;
 }
@@ -60,6 +68,36 @@ export interface DecisionPoint {
     options?: string[];
 }
 
+/** @internal Live executor session kept alive across pauses. */
+interface StoredExecutorSession {
+    handle: SubAgentSessionHandle;
+    sessionId: string;
+}
+
+/** @internal Single-slot store — only one executor at a time. */
+let storedExecutorSession: StoredExecutorSession | null = null;
+let sessionCounter = 0;
+
+/**
+ * Best-effort dispose of the currently stored executor session, if any.
+ * Used when starting a fresh run that supersedes an old paused one.
+ */
+async function disposeStoredExecutorSession(): Promise<void> {
+    if (!storedExecutorSession) {
+        return;
+    }
+    const previous = storedExecutorSession;
+    storedExecutorSession = null;
+    await disposeSubAgentHandle(previous.handle);
+}
+
+const PAUSABLE_STATUSES: ExecutionResult['status'][] = [
+    'blocked',
+    'needs_replan',
+    'needs_decision',
+];
+
+
 export interface ExecutionResult {
     status: 'completed' | 'partial' | 'blocked' | 'needs_replan' | 'needs_decision';
     summary: string;
@@ -76,6 +114,11 @@ const EXECUTE_PARAMETERS: Record<string, unknown> = {
             type: 'string',
             description: 'Concise directive plan: numbered steps naming files/symbols + intended outcomes. Do NOT restate findings or paste file contents — the executor receives a transcript of your prior investigations, reads, and reasoning automatically.',
         },
+        sessionId: {
+            type: 'string',
+            description: 'Optional. Pass back the sessionId from a previous paused execution to resume it. When set, the executor continues from its stored conversation rather than starting fresh.',
+        },
+
         successCriteria: {
             type: 'string',
             description: 'Optional explicit criteria for "done". Executor only marks `completed` if met; otherwise returns `partial`/`blocked`.',
@@ -127,14 +170,54 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
                 : [];
             const run = (async (): Promise<string> => {
                 const systemPrompt = buildExecutorSystemPrompt(settings);
-                const taskPrompt = buildExecutorTaskPrompt(args, transcriptSlice);
 
-                const { result, events } = await runSubAgentTask({
+                let existingHandle: SubAgentSessionHandle | undefined;
+                let taskPrompt: string;
+
+                if (
+                    args.sessionId
+                    && storedExecutorSession
+                    && storedExecutorSession.sessionId === args.sessionId
+                ) {
+                    // ── Resume path ────────────────────────────────────────
+                    // The stored messages are everything after the system prompt.
+                    // The fresh session's init() will push its own system prompt,
+                    // then these stored messages, then taskPrompt (the resume msg).
+                    // The kept-alive session has the full conversation history
+                    // (tool calls + results), so we just send a fresh prompt and
+                    // let the executor pick up where it left off. Both BYOK and
+                    // Copilot SDK support multi-turn send() on the same session.
+                    existingHandle = storedExecutorSession.handle;
+                    storedExecutorSession = null; // will re-store below if still paused
+
+                    const resumeParts: string[] = [
+                        '[Resume] The orchestrator has provided updated direction.',
+                    ];
+                    if (transcriptSlice.length > 0) {
+                        resumeParts.push(
+                            '',
+                            'Additional context gathered since you paused:',
+                            buildExecutorTranscriptBlocks(transcriptSlice),
+                        );
+                    }
+                    resumeParts.push('', `Proceed with:\n\n${args.plan}`);
+                    taskPrompt = resumeParts.join('\n');
+                } else {
+                    // Fresh path. Tear down any orphaned paused session first —
+                    // the daemon's session pool is finite and we don't want to
+                    // leak handles when the orchestrator gives up on a resume.
+                    await disposeStoredExecutorSession();
+                    taskPrompt = buildExecutorTaskPrompt(args, transcriptSlice);
+                }
+
+                const { result, events, liveHandle } = await runSubAgentTask({
                     runtime,
                     mcpServers,
                     workingDirectory,
                     systemPrompt,
                     taskPrompt,
+                    ...(existingHandle ? { existingHandle } : {}),
+                    keepAliveOnPause: true,
                     toolWhitelist: settings.toolWhitelist,
                     resultSchema: buildResultSchema(),
                     ...(runtime.contextWindow !== undefined ? { contextWindow: runtime.contextWindow } : {}),
@@ -142,6 +225,11 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
                 });
 
                 if (!result) {
+                    // Executor never called submit_result — the live session
+                    // is in an unknown state and unsafe to resume. Dispose it.
+                    if (liveHandle) {
+                        await disposeSubAgentHandle(liveHandle);
+                    }
                     return [
                         'Executor did not call submit_result. It may have hit a tool-call',
                         'limit, refused the task, or been aborted by the user.',
@@ -152,7 +240,19 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
 
                 const parsed = coerceResult(result);
 
-                return formatExecutionResult(parsed);
+                // Manage session store for continuation. The session is held
+                // open across pauses so the executor can resume with full
+                // conversation context (tool calls + results) on both providers.
+                let sessionId: string | undefined;
+                if (PAUSABLE_STATUSES.includes(parsed.status) && liveHandle) {
+                    sessionId = `exec_${++sessionCounter}`;
+                    storedExecutorSession = { handle: liveHandle, sessionId };
+                } else if (liveHandle) {
+                    // Terminal status (or non-pausable) — release the session.
+                    await disposeSubAgentHandle(liveHandle);
+                }
+
+                return formatExecutionResult(parsed, sessionId);
             })();
 
             activeRun = run;
@@ -350,7 +450,7 @@ export function coerceResult(raw: Record<string, unknown>): ExecutionResult {
     return result;
 }
 
-export function formatExecutionResult(r: ExecutionResult): string {
+export function formatExecutionResult(r: ExecutionResult, sessionId?: string): string {
     const lines: string[] = [
         `status: ${r.status}`,
         `summary: ${r.summary}`,
@@ -390,6 +490,10 @@ export function formatExecutionResult(r: ExecutionResult): string {
         }
     }
 
+    if (sessionId) {
+        lines.push('', `sessionId: ${sessionId}`);
+    }
+
     return lines.join('\n');
 }
 
@@ -403,3 +507,4 @@ function summariseRawEvents(events: SubAgentEvent[]): string {
         })
         .join(', ');
 }
+

@@ -1,5 +1,11 @@
 local state = {
     active_entry_index = nil,
+    -- Map of tool_call_id -> history index. Lets concurrent tool executions
+    -- (multiple in-flight at once) update the right history entry instead of
+    -- clobbering whichever one happened to be active_entry_index. The single
+    -- active_entry_index is kept as a fallback for legacy callers that don't
+    -- pass a tool_call_id (e.g. AIChat path).
+    entries_by_call_id = {},
     body = "Ready",
     history = {},
     icon = "󱚩",

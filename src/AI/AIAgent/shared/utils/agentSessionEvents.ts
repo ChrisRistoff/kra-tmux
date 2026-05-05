@@ -345,19 +345,19 @@ export async function setupSessionEventHandlers(
 
         const details = `Running ${toolName}\n\nArguments:\n${formatToolArguments(event.data.arguments)}`;
         const argsJson = JSON.stringify(event.data.arguments ?? {}, null, 2);
-        void updateAgentUi(state.nvim, 'start_tool', [toolName, details, argsJson]);
+        void updateAgentUi(state.nvim, 'start_tool', [toolName, details, argsJson, event.data.toolCallId]);
     });
 
     session.on('tool.execution_progress', (event) => {
         currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Running tool\n\n${formatToolProgress(event.data.progressMessage)}`;
-        void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details]);
+        void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details, event.data.toolCallId]);
     });
 
     session.on('tool.execution_partial_result', (event) => {
         currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Streaming tool output\n\n${formatToolProgress(event.data.partialOutput)}`;
-        void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details]);
+        void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details, event.data.toolCallId]);
     });
 
     session.on('tool.execution_complete', (event) => {
@@ -385,6 +385,7 @@ export async function setupSessionEventHandlers(
             details,
             event.data.success,
             fullResult,
+            event.data.toolCallId,
         ]);
 
         state.nvim

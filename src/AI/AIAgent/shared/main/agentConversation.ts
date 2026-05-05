@@ -384,6 +384,8 @@ function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
 
         lines.push(`- \`execute\` — concrete multi-step work (refactor, feature, multi-file edit). Returns ONLY a curated event log + summary; raw tool traffic stays out of your context. Do NOT copy findings/file contents into \`plan\` — the executor automatically receives ${transcriptNote}.`);
         lines.push('  - If executor returns `status: needs_decision`, it hit a real design crossroad. Present the `decisionPoint.question` (and `options[]` if any) to the user via `confirm_task_complete` — do NOT autonomously decide. Once the user picks, re-issue `execute` with an updated plan.');
+        lines.push('  - `needs_replan` and `blocked` also allow re-issue with an updated plan.');
+        lines.push('  - **Session continuation**: If the result includes a `sessionId`, pass it back as `sessionId` on the re-issued `execute` call. The executor then continues from its stored conversation rather than starting fresh — you do NOT need to repeat prior context in the new plan.');
     }
 
     lines.push('');
