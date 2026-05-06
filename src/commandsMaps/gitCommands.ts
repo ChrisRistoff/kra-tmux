@@ -136,4 +136,14 @@ export const gitCommands: GitCommands = {
             'Press `B` to scope the reflog to a specific branch.',
         ],
     },
+    'scout': {
+        run: git.scout,
+        description: 'Scan for git repos in the workspace and inspect their status',
+        details: 'Walks up to 2 levels deep from the current workspace root, discovers every .git repo, and shows each repo\'s branch, dirty/clean state, ahead/behind count, and last commit. Pick a repo to see its full context.',
+        highlights: [
+            'Great for multi-repo workspaces — one view of everything.',
+            'Shows dirty state, modified/untracked counts, and remote divergence at a glance.',
+            'Lets you quickly find repos with uncommitted work or stale branches.',
+        ],
+    },
 };

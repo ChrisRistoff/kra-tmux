@@ -489,7 +489,7 @@ function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
     lines.push('');
 
     if (opts.investigateEnabled) {
-        lines.push('- `investigate` — LOCATION/FLOW questions only ("where is X?", "how does Y flow?"). NOT for diagnosis, root-cause, bug-hunting, or design judgement — those are YOUR job. Use it to gather evidence; reason about it yourself. Pass known context via `hint`.');
+        lines.push('- `investigate` — LOCATION/FLOW questions only ("where is X?", "how does Y flow?"). NOT for diagnosis, root-cause, bug-hunting, or design judgement — those are YOUR job. Use it to gather information about how a system works; reason about the issue yourself. Pass known context via `hint`.');
     }
 
     if (opts.executeEnabled) {

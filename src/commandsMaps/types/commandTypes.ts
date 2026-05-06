@@ -24,7 +24,8 @@ export type GitCommandName =
     | 'open-pr'
     | 'create-branch'
     | 'checkout'
-    | 'reflog';
+    | 'reflog'
+    | 'scout';
 export type AiCommandName =
     | 'chat'
     | 'agent'

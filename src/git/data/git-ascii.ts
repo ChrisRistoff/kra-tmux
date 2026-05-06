@@ -43,6 +43,8 @@ export const gitAscii = `
             | checkout               | ⏳  Switch branches with recent activity and commit context beside the list.    |
             |------------------------|--------------------------------------------------------------------------------|
             | reflog                 | 🧭  Browse the reflog in the same multi-pane dashboard as git log.              |
+            |------------------------|--------------------------------------------------------------------------------|
+            | scout                  | 🔭  Scan the workspace for git repos and inspect their status at a glance.      |
             +------------------------+--------------------------------------------------------------------------------+
 
             Use: kra git <command>
