@@ -13,7 +13,7 @@ export function formatToolLine(toolSummary: string, success: boolean): string {
 }
 
 /**
- * Written to the chat file when confirm_task_complete fires so the user can
+ * Written to the chat file when ask_kra fires so the user can
  * see what the AI is asking before and after they answer the popup.
  */
 export function formatConfirmQuestion(question: string, choices: string[]): string {

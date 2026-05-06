@@ -100,12 +100,12 @@ describe('buildExecutorTranscriptBlocks', () => {
         expect(chat).toContain(fullFile);
     });
 
-    it('filters out unrelated tool families (web_*, ask_user, confirm_task_complete, sub-agents)', () => {
+    it('filters out unrelated tool families (web_*, ask_user, ask_kra, sub-agents)', () => {
         const slice: TranscriptEntry[] = [
             { kind: 'tool_call', toolName: 'web_search', args: { query: 'foo' }, result: 'WEB RESULT', success: true },
             { kind: 'tool_call', toolName: 'web_fetch', args: { url: 'http://x' }, result: 'PAGE', success: true },
             { kind: 'tool_call', toolName: 'ask_user', args: { question: 'q' }, result: 'a', success: true },
-            { kind: 'tool_call', toolName: 'confirm_task_complete', args: {}, result: '', success: true },
+            { kind: 'tool_call', toolName: 'ask_kra', args: {}, result: '', success: true },
             { kind: 'tool_call', toolName: 'execute', args: {}, result: 'sub-agent ran', success: true },
             { kind: 'tool_call', toolName: 'get_outline', args: { file_path: 'a.ts' }, result: 'KEEP_THIS', success: true },
         ];

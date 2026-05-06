@@ -41,7 +41,7 @@ export function buildExecutorTranscriptBlocks(slice: TranscriptEntry[]): string 
         }
 
         if (entry.kind === 'tool_call' && !isFileContextToolName(entry.toolName)) {
-            // Drop unrelated tool families (web_*, ask_user, confirm_task_complete,
+            // Drop unrelated tool families (web_*, ask_user, ask_kra,
             // sub-agent dispatch results, etc.).
             continue;
         }

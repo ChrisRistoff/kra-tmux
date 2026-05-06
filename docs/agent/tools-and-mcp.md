@@ -166,7 +166,7 @@ Behavior notes:
 - `Ctrl-C` (`stop_stream`) aborts the executor and returns control to the
   orchestrator. The orchestrator sees the partial event log captured so far.
 - Executor tool whitelist (default): `read_lines`, `get_outline`, `anchor_edit`,
-  `create_file`, `search`, `lsp_query`, `bash`. `confirm_task_complete` and
+  `create_file`, `search`, `lsp_query`, `bash`. `ask_kra` and
   other end-of-turn tools are forbidden — the orchestrator owns the turn.
 - Hard cap of `maxToolCalls` (default 60) tool calls before the executor is
   expected to submit — prevents runaway loops on bad plans.

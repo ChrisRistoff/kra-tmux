@@ -59,11 +59,11 @@ Use `<leader>d` to open the proposal diff tab at any time to review what changed
 3. **Review** — Use `<leader>d` to open the proposal diff tab. Inspect, edit files, then apply or reject
 4. **Apply** — `<leader>a` (or `a` in the diff tab) acknowledges the changes (already written to disk)
 5. **Continue** — Submit the next prompt; changes accumulate as uncommitted diffs across turns
-6. **End session** — When the agent calls `confirm_task_complete` and you select "End session", the session closes
+6. **End session** — When the agent calls `ask_kra` and you select "End session", the session closes
 
 ### Confirm-Before-Done Protocol
 
-The agent is instructed to always call `confirm_task_complete` before ending a turn. This presents a popup in Neovim with a summary and 2–4 choices. Selecting a choice sends your reply back to the agent. Only "End session" terminates the turn.
+The agent is instructed to always call `ask_kra` before ending a turn. This presents a popup in Neovim with a summary and 2–4 choices. Selecting a choice sends your reply back to the agent. Only "End session" terminates the turn.
 
 ### Agent History (per-session)
 
@@ -121,7 +121,7 @@ graph TB
     subgraph "Session Control"
         CONTINUE[Continue session]
         SDIFF[Optional session diff browser]
-        CONFIRM{confirm_task_complete}
+        CONFIRM{ask_kra}
         END[End session]
 
         DONE --> CONTINUE --> PROMPT

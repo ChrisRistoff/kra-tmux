@@ -1,6 +1,5 @@
 import { formatOutline, getFileOutline } from '../utils/fileOutline';
-import { getDiagnosticsForFile } from '../utils/lspDiagnostics';
-import { getLspDiagnosticsForFile } from '../utils/lspDiagnosticsBridge';
+import { getProjectDiagnostics } from '../utils/lspDiagnosticsBridge';
 
 /**
  * Build a compact outline string for read_function not-found errors so we don't
@@ -30,35 +29,13 @@ export function totalRequestedLines(starts: number[], ends: number[]): number {
 }
 
 /**
- * Append diagnostics (errors + warnings, single-file scope) to an edit
- * summary so the agent sees them in the same turn it made the change.
- *
- * Source order:
- *   1. If the file's extension has a configured LSP server in settings.toml,
- *      ask that server (pull-mode `textDocument/diagnostic`, falling back to
- *      cached push-mode `publishDiagnostics`). This is the same code path
- *      used by editors like VS Code and Neovim.
- *   2. Otherwise (or if the LSP path returned nothing usable), fall back to
- *      the in-process TypeScript Compiler API check for .ts/.js files.
- *
- * Silent no-op when neither path produces diagnostics.
+ * Append diagnostics to an edit summary so the agent sees them in the same
+ * turn it made the change — no need for it to run `tsc` / `npm run build` /
+ * `cargo check` / `go build` etc. separately. Routing happens inside
+ * `getProjectDiagnostics`; see lspDiagnosticsBridge.ts for the source order.
  */
 export async function withDiagnostics(filePath: string, summary: string): Promise<string> {
-    let diags: string | undefined;
-
-    try {
-        diags = await getLspDiagnosticsForFile(filePath);
-    } catch {
-        // ignore; try the in-process fallback
-    }
-
-    if (!diags) {
-        try {
-            diags = getDiagnosticsForFile(filePath);
-        } catch {
-            return summary;
-        }
-    }
+    const diags = await getProjectDiagnostics(filePath);
 
     return diags ? `${summary}\n\n${diags}` : summary;
 }

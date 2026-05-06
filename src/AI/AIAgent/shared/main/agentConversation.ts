@@ -166,7 +166,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         model: options.model,
         workingDirectory: cwd,
         mcpServers: mergedMcpServers,
-        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch', 'report_intent', ...(options.provider === 'byok' ? ['confirm_task_complete'] : [])],
+        excludedTools: ['str_replace_editor', 'write_file', 'read_file', 'edit', 'view', 'grep', 'glob', 'create', 'apply_patch', 'report_intent', ...(options.provider === 'copilot' ? ['ask_user'] : [])],
         ...(orchestratorLocalTools.length > 0 ? { localTools: orchestratorLocalTools } : {}),
         ...(options.contextWindow !== undefined ? { contextWindow: options.contextWindow } : {}),
         ...(options.modelCapabilities ? { modelCapabilities: options.modelCapabilities } : {}),
@@ -349,14 +349,14 @@ export function buildOrchestratorSystemMessage(opts: OrchestratorSystemMessageOp
     sections.push(buildLongTermMemoryBlock(investigateEnabled));
 
     if (opts.isCopilot) {
-        sections.push('Reminder: Always call confirm_task_complete before ending your turn.');
+        sections.push('Reminder: Always call ask_kra before ending your turn.');
     }
 
     return sections.join('\n\n');
 }
 
 const TURN_COMPLETION_BLOCK = `<turn_completion priority="critical">
-End every turn by calling \`confirm_task_complete\` with a concise summary and 2–4 concrete choices — whether you finished, are blocked, or need clarification. Never end with plain text.
+End every turn by calling \`ask_kra\` with a concise summary and 2–4 concrete choices — whether you finished, are blocked, or need clarification. Never end with plain text.
 </turn_completion>`;
 
 const WORKSPACE_BLOCK = `<workspace>
@@ -365,6 +365,10 @@ You are in a detached proposal workspace. Edits land in the real repository only
 
 const CREATING_FILES_BLOCK = `<creating_files>
 Use \`create_file\` for new files only. It refuses if the file already exists. For existing files, use the \`edit\` tool.
+
+Do NOT use bash/shell for file mutations (no \`cat > file\`, \`echo ... >\`, \`sed -i\`, \`tee\`, heredocs writing files, etc.). Use \`anchor_edit\` for in-place changes. If you need to almost completely rewrite a file, delete it via bash \`rm\` and then \`create_file\` with the new content.
+
+Project-wide LSP diagnostics are auto-appended to every \`edit\`/\`create_file\` result for the touched language. Do NOT run \`tsc\`, \`tsc --noEmit\`, \`npm run build\`, \`cargo check\`, \`go build\`, or similar type-check/build commands just to surface errors — that work has already been done. Only invoke build/test commands when you actually need their side effects (running tests, producing artifacts).
 </creating_files>`;
 
 function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
@@ -383,7 +387,7 @@ function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
             : 'a transcript of your prior file reads and reasoning since the last execute';
 
         lines.push(`- \`execute\` — concrete multi-step work (refactor, feature, multi-file edit). Returns ONLY a curated event log + summary; raw tool traffic stays out of your context. Do NOT copy findings/file contents into \`plan\` — the executor automatically receives ${transcriptNote}.`);
-        lines.push('  - If executor returns `status: needs_decision`, it hit a real design crossroad. Present the `decisionPoint.question` (and `options[]` if any) to the user via `confirm_task_complete` — do NOT autonomously decide. Once the user picks, re-issue `execute` with an updated plan.');
+        lines.push('  - If executor returns `status: needs_decision`, it hit a real design crossroad. Present the `decisionPoint.question` (and `options[]` if any) to the user via `ask_kra` — do NOT autonomously decide. Once the user picks, re-issue `execute` with an updated plan.');
         lines.push('  - `needs_replan` and `blocked` also allow re-issue with an updated plan.');
         lines.push('  - **Session continuation**: If the result includes a `sessionId`, pass it back as `sessionId` on the re-issued `execute` call. The executor then continues from its stored conversation rather than starting fresh — you do NOT need to repeat prior context in the new plan.');
     }
@@ -456,6 +460,8 @@ Multi-edit: pass several entries in one call. Anchors resolve against ORIGINAL f
       content: "import { bar } from './bar';" }
 
 The anchor IS the contract — only matched region changes. Pick tight unique anchors; widen ONLY to disambiguate.
+
+**Minimum-footprint rule:** the lines you replace must be approximately the lines that actually change. If only 2 lines change, only ~2 lines should be in \`anchor\` + \`content\` — not 20, not 200, not the whole function or file. Do NOT pad the anchor or content with surrounding unchanged code as a "buffer". If a small edit is rejected, read the reason carefully, and retry with a *different* small anchor (or several small edits batched in one call); never widen scope to the whole block/file as a workaround. Whole-file rewrites belong to \`rm\` + \`create_file\`, not \`anchor_edit\`.
 </surgical_edits>`;
 }
 
@@ -482,3 +488,6 @@ ${discoveryRule}
 - \`edit_memory\` to refine in place (re-embeds on title/body change) instead of creating duplicates.
 </long_term_memory>`;
 }
+
+
+
