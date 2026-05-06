@@ -7,8 +7,8 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 const BINARY_CHECK_BYTES = 8 * 1024;   // 8 KB
 
 export interface BashSnapshot {
-    statusByPath: Map<string, string>;
-    cwd: string;
+    /** git status snapshots keyed by repo cwd. */
+    statusByCwd: Map<string, Map<string, string>>;
 }
 
 interface MutationEntry {
@@ -83,7 +83,11 @@ async function gitStatus(cwd: string): Promise<Map<string, string>> {
     }
 }
 
-export function createAgentHistory(cwd: string): AgentHistory {
+export function createAgentHistory(cwds: string[]): AgentHistory {
+    if (cwds.length === 0) {
+        throw new Error('createAgentHistory: at least one cwd required');
+    }
+    const trackedCwds: string[] = [...new Set(cwds)];
     // First-seen "before" per absolute path — the pre-session original.
     const originalContent = new Map<string, string | null>();
     const entries: MutationEntry[] = [];
@@ -144,57 +148,63 @@ export function createAgentHistory(cwd: string): AgentHistory {
     }
 
     async function bashSnapshotBefore(): Promise<BashSnapshot> {
-        const statusByPath = await gitStatus(cwd);
+        const statusByCwd = new Map<string, Map<string, string>>();
+        await Promise.all(trackedCwds.map(async (c) => {
+            statusByCwd.set(c, await gitStatus(c));
+        }));
 
-        return { statusByPath, cwd };
+        return { statusByCwd };
     }
 
     async function bashSnapshotAfter(before: BashSnapshot): Promise<void> {
-        const after = await gitStatus(cwd);
-        const changedRelPaths = new Set<string>();
+        for (const c of trackedCwds) {
+            const beforeStatus = before.statusByCwd.get(c) ?? new Map<string, string>();
+            const after = await gitStatus(c);
+            const changedRelPaths = new Set<string>();
 
-        for (const [p, status] of after) {
-            if (!before.statusByPath.has(p) || before.statusByPath.get(p) !== status) {
-                changedRelPaths.add(p);
-            }
-        }
-        // Paths that were dirty before but are now clean (e.g. reverted by bash).
-        for (const [p] of before.statusByPath) {
-            if (!after.has(p)) changedRelPaths.add(p);
-        }
-
-        for (const relPath of changedRelPaths) {
-            const absPath = path.join(cwd, relPath);
-
-            // Determine beforeContent (pre-bash state).
-            let beforeContent: string | null;
-            if (originalContent.has(absPath)) {
-                // Already tracked — original is already correct in the map; pass it
-                // again so the entry is still meaningful but won't overwrite the map.
-                beforeContent = originalContent.get(absPath) ?? null;
-            } else {
-                try {
-                    const result = await execCommand(
-                        `git -C ${quoteForShell(cwd)} show HEAD:${quoteForShell(relPath)}`
-                    );
-                    beforeContent = result.stdout;
-                } catch {
-                    beforeContent = null; // new untracked file
+            for (const [p, status] of after) {
+                if (!beforeStatus.has(p) || beforeStatus.get(p) !== status) {
+                    changedRelPaths.add(p);
                 }
             }
-
-            // Determine afterContent (post-bash state on disk).
-            let afterContent: string | null;
-            try {
-                const stat = await fs.stat(absPath);
-                if (stat.size > MAX_FILE_SIZE) continue; // skip very large files
-                const raw = await fs.readFile(absPath);
-                afterContent = isBinaryBuffer(raw) ? null : raw.toString('utf8');
-            } catch {
-                afterContent = null; // file was deleted
+            // Paths that were dirty before but are now clean (e.g. reverted by bash).
+            for (const [p] of beforeStatus) {
+                if (!after.has(p)) changedRelPaths.add(p);
             }
 
-            recordMutation({ path: absPath, beforeContent, afterContent, source: 'bash' });
+            for (const relPath of changedRelPaths) {
+                const absPath = path.join(c, relPath);
+
+                // Determine beforeContent (pre-bash state).
+                let beforeContent: string | null;
+                if (originalContent.has(absPath)) {
+                    // Already tracked — original is already correct in the map; pass it
+                    // again so the entry is still meaningful but won't overwrite the map.
+                    beforeContent = originalContent.get(absPath) ?? null;
+                } else {
+                    try {
+                        const result = await execCommand(
+                            `git -C ${quoteForShell(c)} show HEAD:${quoteForShell(relPath)}`
+                        );
+                        beforeContent = result.stdout;
+                    } catch {
+                        beforeContent = null; // new untracked file
+                    }
+                }
+
+                // Determine afterContent (post-bash state on disk).
+                let afterContent: string | null;
+                try {
+                    const stat = await fs.stat(absPath);
+                    if (stat.size > MAX_FILE_SIZE) continue; // skip very large files
+                    const raw = await fs.readFile(absPath);
+                    afterContent = isBinaryBuffer(raw) ? null : raw.toString('utf8');
+                } catch {
+                    afterContent = null; // file was deleted
+                }
+
+                recordMutation({ path: absPath, beforeContent, afterContent, source: 'bash' });
+            }
         }
     }
 

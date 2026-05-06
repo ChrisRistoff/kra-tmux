@@ -68,3 +68,12 @@ export function repoStorageDirForKey(repoKey: string): string {
 export function _resetRepoStorageCacheForTest(): void {
     cache = null;
 }
+
+/**
+ * Clear the per-process repo-storage cache so the next `resolveRepoStorage()`
+ * call re-derives the key from the current `WORKING_DIR`. Used when iterating
+ * over multiple repos in one process (e.g. multi-repo startup indexing).
+ */
+export function clearRepoStorageCache(): void {
+    cache = null;
+}

@@ -146,6 +146,39 @@ export async function selectFileOrFolder(nvim: NeovimClient): Promise<FilePicker
                 local tmpfile = vim.fn.tempname()
                 local input_file = vim.fn.tempname()
 
+                -- Multi-repo workspace support: if the parent agent process
+                -- advertised a selected repo set via KRA_SELECTED_REPO_ROOTS,
+                -- enumerate every selected repo (with absolute paths so the
+                -- caller can tell them apart). Falls back to the single-cwd
+                -- enumeration when the env var is missing.
+                local repo_roots = {}
+                local repos_file = vim.env.KRA_SELECTED_REPO_ROOTS_FILE or ''
+                if repos_file ~= '' and vim.fn.filereadable(repos_file) == 1 then
+                    local raw = table.concat(vim.fn.readfile(repos_file), '\\n')
+                    local ok_json, decoded = pcall(vim.json.decode, raw)
+                    if ok_json and type(decoded) == 'table' then
+                        for _, entry in ipairs(decoded) do
+                            if type(entry) == 'table' and entry.alias and entry.root then
+                                table.insert(repo_roots, { alias = entry.alias, root = entry.root })
+                            end
+                        end
+                    end
+                end
+                if #repo_roots == 0 then
+                    -- Fallback for legacy callers that set the newline-separated
+                    -- env var directly (non-tmux launches inherit env from the
+                    -- node process, so the inline form still works there).
+                    local selected_env = vim.env.KRA_SELECTED_REPO_ROOTS or ''
+                    if selected_env ~= '' then
+                        for line in string.gmatch(selected_env, '[^\\n]+') do
+                            local alias, root = string.match(line, '^([^\\t]+)\\t(.+)$')
+                            if alias and root then
+                                table.insert(repo_roots, { alias = alias, root = root })
+                            end
+                        end
+                    end
+                end
+
                 local entries = {}
                 local seen_entry = {}
                 local function add_entry(p)
@@ -156,7 +189,42 @@ export async function selectFileOrFolder(nvim: NeovimClient): Promise<FilePicker
                     end
                 end
 
-                if vim.fn.isdirectory(cwd .. '/.git') == 1 and vim.fn.executable('git') == 1 then
+                local function enumerate_repo(root)
+                    if vim.fn.isdirectory(root .. '/.git') == 1 and vim.fn.executable('git') == 1 then
+                        local files = vim.fn.systemlist({ 'git', '-C', root, 'ls-files', '--cached', '--others', '--exclude-standard' })
+                        for _, f in ipairs(files) do
+                            local abs = root .. '/' .. f
+                            add_entry(abs)
+                            local dir = abs
+                            while true do
+                                dir = vim.fn.fnamemodify(dir, ':h')
+                                if dir == '.' or dir == '/' or dir == '' or dir == root then break end
+                                add_entry(dir)
+                                if not vim.startswith(dir, root .. '/') then break end
+                            end
+                        end
+                        add_entry(root)
+                    else
+                        local list_cmd
+                        if vim.fn.executable('fd') == 1 then
+                            list_cmd = { 'fd', '--type', 'f', '--type', 'd', '--hidden', '--follow', '--exclude', '.git', '.', root }
+                        elseif vim.fn.executable('fdfind') == 1 then
+                            list_cmd = { 'fdfind', '--type', 'f', '--type', 'd', '--hidden', '--follow', '--exclude', '.git', '.', root }
+                        else
+                            list_cmd = { 'find', root, '-not', '-path', '*/.git/*', '-not', '-path', '*/node_modules/*' }
+                        end
+                        local out = vim.fn.systemlist(list_cmd)
+                        for _, p in ipairs(out) do add_entry(p) end
+                    end
+                end
+
+                if #repo_roots > 0 then
+                    for _, repo in ipairs(repo_roots) do
+                        enumerate_repo(repo.root)
+                    end
+                    table.sort(entries)
+                    vim.fn.writefile(entries, input_file)
+                elseif vim.fn.isdirectory(cwd .. '/.git') == 1 and vim.fn.executable('git') == 1 then
                     local files = vim.fn.systemlist({ 'git', '-C', cwd, 'ls-files', '--cached', '--others', '--exclude-standard' })
                     for _, f in ipairs(files) do
                         add_entry(f)

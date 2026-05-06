@@ -36,10 +36,10 @@ export interface IndexResult {
  * Reindex every indexable file in the workspace. Safe to re-run; chunks whose
  * contentHash hasn't changed are skipped.
  */
-export async function reindexAll(opts: { onProgress?: ProgressFn } = {}): Promise<IndexResult> {
+export async function reindexAll(opts: { onProgress?: ProgressFn; root?: string; repoKey?: string } = {}): Promise<IndexResult> {
     const started = Date.now();
     const settings = await loadMemorySettings();
-    const root = workspaceRoot();
+    const root = opts.root ?? workspaceRoot();
     const files = await listIndexableFiles(root, settings);
 
     opts.onProgress?.({
@@ -67,7 +67,7 @@ export async function reindexAll(opts: { onProgress?: ProgressFn } = {}): Promis
         });
 
         try {
-            const result = await indexFile(rel, { settings, root });
+            const result = await indexFile(rel, opts.repoKey ? { settings, root, repoKey: opts.repoKey } : { settings, root });
 
             chunksWritten += result.chunksWritten;
             chunksSkipped += result.chunksSkipped;
@@ -97,6 +97,7 @@ export async function reindexAll(opts: { onProgress?: ProgressFn } = {}): Promis
 interface IndexFileOpts {
     settings?: MemorySettings;
     root?: string;
+    repoKey?: string;
 }
 
 interface PerFileResult {
@@ -121,14 +122,14 @@ export async function indexFile(relPath: string, opts: IndexFileOpts = {}): Prom
     try {
         const stat = await fs.stat(abs);
 
-        if (!stat.isFile()) return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel) };
+        if (!stat.isFile()) return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
 
         if (!isIndexable(rel, settings)) {
-            return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel) };
+            return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
         }
         content = await fs.readFile(abs, 'utf8');
     } catch {
-        return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel) };
+        return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
     }
 
     const built = buildChunks({
@@ -140,10 +141,10 @@ export async function indexFile(relPath: string, opts: IndexFileOpts = {}): Prom
     });
 
     if (built.length === 0) {
-        return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel) };
+        return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
     }
 
-    const existingIds = await existingChunkIdsForPath(rel);
+    const existingIds = await existingChunkIdsForPath(rel, opts.repoKey);
     const newIds = new Set(built.map((b) => b.row.id));
     const toDelete = [...existingIds].filter((id) => !newIds.has(id));
     const toInsert = built.filter((b) => !existingIds.has(b.row.id));
@@ -159,7 +160,7 @@ export async function indexFile(relPath: string, opts: IndexFileOpts = {}): Prom
     const rows: CodeChunkRow[] = toInsert.map((b, i) => ({ ...b.row, vector: vectors[i] }));
 
     const seedRow = rows[0] ?? null;
-    const { table, justCreated } = await getCodeChunksTable(seedRow);
+    const { table, justCreated } = await getCodeChunksTable(seedRow, opts.repoKey);
 
     if (!table) return { chunksWritten: 0, chunksSkipped: skipped, chunksDeleted: 0 };
 
@@ -190,12 +191,12 @@ export async function indexFile(relPath: string, opts: IndexFileOpts = {}): Prom
  * Remove every chunk row associated with `relPath`. Returns the number of
  * chunks removed (0 if the table doesn't exist yet).
  */
-export async function removeFile(relPath: string): Promise<number> {
-    const { table } = await getCodeChunksTable(null);
+export async function removeFile(relPath: string, repoKey?: string): Promise<number> {
+    const { table } = await getCodeChunksTable(null, repoKey);
 
     if (!table) return 0;
 
-    const existing = await existingChunkIdsForPath(relPath);
+    const existing = await existingChunkIdsForPath(relPath, repoKey);
 
     if (existing.size === 0) return 0;
 
@@ -204,8 +205,8 @@ export async function removeFile(relPath: string): Promise<number> {
     return existing.size;
 }
 
-async function existingChunkIdsForPath(relPath: string): Promise<Set<string>> {
-    const { table } = await getCodeChunksTable(null);
+async function existingChunkIdsForPath(relPath: string, repoKey?: string): Promise<Set<string>> {
+    const { table } = await getCodeChunksTable(null, repoKey);
 
     if (!table) return new Set();
 
@@ -342,3 +343,4 @@ function globToRegex(glob: string): RegExp {
 
     return new RegExp(pattern);
 }
+

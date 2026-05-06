@@ -136,7 +136,7 @@ export async function getLspDiagnosticsForFile(filePath: string, waitMs = DEFAUL
     const more = filtered.length > MAX_DIAGNOSTICS
         ? `\n  ...and ${filtered.length - MAX_DIAGNOSTICS} more`
         : '';
-    const rel = path.relative(process.cwd(), absPath) || path.basename(absPath);
+    const rel = path.relative(process.env['WORKING_DIR'] ?? process.cwd(), absPath) || path.basename(absPath);
 
     return `Diagnostics for ${rel} (${filtered.length}):\n${shown.join('\n')}${more}`;
 }
@@ -209,7 +209,7 @@ async function tryWorkspaceDiagnostics(
     let truncated = 0;
 
     for (const f of ordered) {
-        const rel = path.relative(process.cwd(), f) || path.basename(f);
+        const rel = path.relative(process.env['WORKING_DIR'] ?? process.cwd(), f) || path.basename(f);
         const fileLines: string[] = [];
 
         for (const d of byFile.get(f) ?? []) {

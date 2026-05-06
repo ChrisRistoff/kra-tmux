@@ -98,6 +98,20 @@ export async function saveRegistry(reg: Registry): Promise<void> {
     await atomicWriteFile(registryPath(), `${JSON.stringify(reg, null, 2)}\n`);
 }
 
+// Serialize all read-modify-write operations on the registry JSON file. The
+// registry is a single shared file: when multiple repos finish indexing in
+// parallel and call upsertRegistryEntry concurrently, an unguarded
+// load->modify->save sequence races and one repo's entry clobbers the other's.
+// All callers go through `withRegistryLock` to make the read-modify-write
+// atomic at the process level.
+let registryWriteQueue: Promise<unknown> = Promise.resolve();
+async function withRegistryLock<T>(fn: () => Promise<T>): Promise<T> {
+    const next = registryWriteQueue.then(fn, fn);
+    registryWriteQueue = next.catch(() => undefined);
+
+    return next;
+}
+
 export async function getRegistryEntry(id: string): Promise<RegistryEntry | undefined> {
     const reg = await loadRegistry();
 
@@ -112,30 +126,34 @@ export async function upsertRegistryEntry(
     id: string,
     patch: Partial<RegistryEntry> & { alias?: string; rootPath?: string },
 ): Promise<RegistryEntry> {
-    const reg = await loadRegistry();
-    const existing: RegistryEntry | undefined = reg.repos[id];
+    return withRegistryLock(async () => {
+        const reg = await loadRegistry();
+        const existing: RegistryEntry | undefined = reg.repos[id];
 
-    const next: RegistryEntry = {
-        alias: patch.alias ?? existing?.alias ?? id,
-        rootPath: patch.rootPath ?? existing?.rootPath ?? '',
-        repoKey: patch.repoKey ?? existing?.repoKey ?? computeRepoKey(id),
-        lastIndexedCommit: patch.lastIndexedCommit ?? existing?.lastIndexedCommit ?? '',
-        lastIndexedAt: patch.lastIndexedAt ?? existing?.lastIndexedAt ?? 0,
-        chunksCount: patch.chunksCount ?? existing?.chunksCount ?? 0,
-    };
+        const next: RegistryEntry = {
+            alias: patch.alias ?? existing?.alias ?? id,
+            rootPath: patch.rootPath ?? existing?.rootPath ?? '',
+            repoKey: patch.repoKey ?? existing?.repoKey ?? computeRepoKey(id),
+            lastIndexedCommit: patch.lastIndexedCommit ?? existing?.lastIndexedCommit ?? '',
+            lastIndexedAt: patch.lastIndexedAt ?? existing?.lastIndexedAt ?? 0,
+            chunksCount: patch.chunksCount ?? existing?.chunksCount ?? 0,
+        };
 
-    reg.repos[id] = next;
-    await saveRegistry(reg);
+        reg.repos[id] = next;
+        await saveRegistry(reg);
 
-    return next;
+        return next;
+    });
 }
 
 export async function removeRegistryEntry(id: string): Promise<boolean> {
-    const reg = await loadRegistry();
+    return withRegistryLock(async () => {
+        const reg = await loadRegistry();
 
-    if (!(id in reg.repos)) return false;
-    delete reg.repos[id];
-    await saveRegistry(reg);
+        if (!(id in reg.repos)) return false;
+        delete reg.repos[id];
+        await saveRegistry(reg);
 
-    return true;
+        return true;
+    });
 }

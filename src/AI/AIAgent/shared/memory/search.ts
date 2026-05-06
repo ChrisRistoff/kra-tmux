@@ -162,17 +162,22 @@ async function resolveRepoSearchSet(): Promise<string[]> {
 
 async function searchMemory(vector: number[], k: number, kind: MemoryLookupKind, selectedIds?: string[]): Promise<SemanticSearchHit[]> {
     const getter = kind === 'findings' || isFindingKind(kind) ? getFindingsTable : getRevisitsTable;
-    const { table } = await getter(null);
-
-    if (!table) return [];
+    const repoKeys = await resolveRepoSearchSet();
+    if (repoKeys.length === 0) return [];
 
     const selectedIdSet = selectedIds !== undefined ? new Set(selectedIds.filter((id): id is string => typeof id === 'string' && id.length > 0)) : undefined;
-
     const fetchK = Math.min(k * 4, 200);
-    const rows = await table.search(vector).limit(fetchK).toArray();
 
-    return rows
-        .map(toMemoryHit)
+    const perRepoHits = await Promise.all(repoKeys.map(async (repoKey): Promise<SemanticSearchHit[]> => {
+        const { table } = await getter(null, repoKey);
+        if (!table) return [];
+        const rows = await table.search(vector).limit(fetchK).toArray();
+
+        return rows.map(toMemoryHit);
+    }));
+
+    return perRepoHits
+        .flat()
         .filter((hit) => {
             if (!hit.memory) {
                 return false;
@@ -188,6 +193,7 @@ async function searchMemory(vector: number[], k: number, kind: MemoryLookupKind,
 
             return true;
         })
+        .sort((a, b) => b.score - a.score)
         .slice(0, k);
 }
 

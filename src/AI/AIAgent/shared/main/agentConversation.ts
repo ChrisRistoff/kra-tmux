@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
-import { execCommand } from '@/utils/bashHelper';
+import * as nodePath from 'path';
+import * as os from 'os';
 import { createAgentHistory } from '@/AI/AIAgent/shared/utils/agentHistory';
 import { buildCoreMcpServers } from '@/AI/AIAgent/mcp/serverConfig';
 import * as conversation from '@/AI/shared/conversation';
@@ -17,7 +18,7 @@ import { createExecuteTool } from '@/AI/AIAgent/shared/subAgents/executeTool';
 import { createOrchestratorTranscript } from '@/AI/AIAgent/shared/main/orchestratorTranscript';
 
 import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
-import { runStartupIndexingFlow } from '@/AI/AIAgent/shared/main/agentIndexingFlow';
+import { runMultiRepoIndexingFlow } from '@/AI/AIAgent/shared/main/agentIndexingFlow';
 import { setupSessionEventHandlers, updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import {
     addAgentCommands,
@@ -29,6 +30,10 @@ import {
     setupAgentSplitLayout,
 } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import { getErrorMessage, setupEventHandlers } from '@/AI/AIAgent/shared/main/agentPromptActions';
+import { selectRepoRoots } from '@/AI/AIAgent/commands/repoSelection';
+import { getRepoIdentity } from '@/AI/AIAgent/shared/memory/registry';
+import { computeRepoKey } from '@/AI/AIAgent/shared/memory/repoKey';
+import type { WatcherHandle } from '@/AI/AIAgent/shared/memory/watcher';
 
 const aiNeovimHelper = conversation;
 const fileContext = conversation;
@@ -43,6 +48,17 @@ async function cleanup(state: AgentConversationState): Promise<void> {
     }
 
     await fs.rm(state.chatFile, { force: true });
+    const reposFile = process.env['KRA_SELECTED_REPO_ROOTS_FILE'];
+    if (reposFile) {
+        await fs.rm(reposFile, { force: true });
+    }
+    if (state.watcher) {
+        try {
+            await state.watcher.close();
+        } catch {
+            /* best effort */
+        }
+    }
     await state.session.disconnect();
     await state.client.stop();
     process.exit(0);
@@ -51,13 +67,69 @@ async function cleanup(state: AgentConversationState): Promise<void> {
 export async function converseAgent(options: AgentConversationOptions): Promise<void> {
     fileContext.clearFileContexts();
 
-    const cwd = (await execCommand('git rev-parse --show-toplevel')).stdout.trim();
-    const history = createAgentHistory(cwd);
+    const repoRoots = await selectRepoRoots();
+    const cwd = repoRoots[0];
+    // Anchor the parent process to the primary repo so anything that resolves
+    // workspaceRoot() (indexer, registry, kra-memory db key) sees a real root
+    // instead of falling back to process.cwd() (the launch directory, which
+    // may contain many sibling repos).
+    process.env['WORKING_DIR'] = cwd;
+
+    // Resolve every selected repo's identity + repoKey now so we can:
+    //   (a) index each one on startup, and
+    //   (b) advertise them to MCP servers via KRA_SEARCH_REPO_KEYS so
+    //       semantic_search fans out across all of them.
+    const selectedRepos: { root: string; alias: string; repoKey: string }[] = [];
+    for (const root of repoRoots) {
+        const identity = await getRepoIdentity(root);
+        selectedRepos.push({
+            root,
+            alias: identity.alias,
+            repoKey: computeRepoKey(identity.id),
+        });
+    }
+    process.env['KRA_SEARCH_REPO_KEYS'] = selectedRepos.map((r) => r.repoKey).join(',');
+    // Newline-separated `alias\troot` lines so MCP servers (which inherit the
+    // parent process env directly) know exactly which repos are in scope.
+    process.env['KRA_SELECTED_REPO_ROOTS'] = selectedRepos.map((r) => `${r.alias}\t${r.root}`).join('\n');
+
+    // Mirror the same data into a JSON sidecar file. The Neovim @-picker reads
+    // this file because Neovim is launched via `tmux split-window … send-keys`,
+    // which spawns a fresh shell that does NOT inherit env vars set on this
+    // node process after the agent started. We propagate ONLY the file path
+    // (short, ASCII) through tmux `-e`, and the picker JSON-decodes it.
+    const reposFile = nodePath.join(os.tmpdir(), `kra-agent-repos-${process.pid}.json`);
+    await fs.writeFile(reposFile, JSON.stringify(selectedRepos), 'utf8');
+    process.env['KRA_SELECTED_REPO_ROOTS_FILE'] = reposFile;
+
+    if (selectedRepos.length > 1) {
+        console.log(
+            `kra ai agent: ${selectedRepos.length} repos in scope. Primary: ${selectedRepos[0].alias} (${cwd}). ` +
+            `Other repos: ${selectedRepos.slice(1).map((r) => `${r.alias} (${r.root})`).join(', ')}.`
+        );
+    }
+
+    const history = createAgentHistory(selectedRepos.map((r) => r.root));
     const chatFile = `/tmp/kra-agent-chat-${Date.now()}.md`;
     await createAgentChatFile(chatFile);
 
     const nvimClient = await openAgentNeovim(chatFile);
-    await runStartupIndexingFlow(nvimClient, cwd);
+
+    // Index every selected repo in parallel. The indexer threads `repoKey`
+    // explicitly through to LanceDB so we no longer need to mutate WORKING_DIR
+    // around each call. One combined progress modal aggregates per-repo lines.
+    await runMultiRepoIndexingFlow(nvimClient, selectedRepos.map((r) => r.root));
+
+    // Start the on-save reindex watcher across every selected repo. Deferred
+    // until now (rather than in startAgentChat) because we don't know the
+    // full set of roots until the user has picked them above.
+    let watcher: WatcherHandle | null = null;
+    try {
+        const { startWatcher } = await import('@/AI/AIAgent/shared/memory/watcher');
+        watcher = await startWatcher(selectedRepos.map((r) => r.root));
+    } catch (err) {
+        console.warn(`kra-memory: watcher failed to start: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     const mcpServers = await buildCoreMcpServers();
     const stateRef: { current?: AgentConversationState } = {};
@@ -65,6 +137,22 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         ...mcpServers,
         ...(options.additionalMcpServers ?? {}),
     };
+    // Make sure every spawned MCP server inherits the multi-repo env. Some SDK
+    // transports (notably the Copilot SDK) do not forward arbitrary parent env
+    // vars unless they appear in the per-server `env` field, so plumb the keys
+    // we care about explicitly here.
+    const inheritedMcpEnv: Record<string, string> = {
+        ...Object.fromEntries(
+            Object.entries(process.env).filter(([, value]) => typeof value === 'string') as [string, string][],
+        ),
+    };
+
+    for (const cfg of Object.values(mergedMcpServers)) {
+        if (cfg.type === 'local' || cfg.type === 'stdio') {
+            cfg.env = { ...inheritedMcpEnv, ...(cfg.env ?? {}) };
+        }
+    }
+
     const orchestratorOnPreToolUse = async (input: AgentPreToolUseHookInput): Promise<AgentPreToolUseHookOutput> => {
         if (!stateRef.current) {
             return {
@@ -185,6 +273,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         systemMessage: {
             mode: 'append',
             content: buildOrchestratorSystemMessage({
+                selectedRepos,
                 investigateEnabled: !!options.investigator,
                 executeEnabled: !!options.executor,
                 isCopilot: options.provider === 'copilot',
@@ -205,6 +294,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         approvalMode: 'strict',
         allowedToolFamilies: new Set<string>(),
         transcript: createOrchestratorTranscript(),
+        watcher,
     };
     stateRef.current = state;
 
@@ -326,6 +416,7 @@ interface OrchestratorSystemMessageOpts {
     investigateEnabled: boolean;
     executeEnabled: boolean;
     isCopilot?: boolean;
+    selectedRepos?: { root: string; alias: string; repoKey: string }[];
 }
 
 export function buildOrchestratorSystemMessage(opts: OrchestratorSystemMessageOpts): string {
@@ -337,7 +428,7 @@ export function buildOrchestratorSystemMessage(opts: OrchestratorSystemMessageOp
         sections.push(TURN_COMPLETION_BLOCK);
     }
 
-    sections.push(WORKSPACE_BLOCK);
+    sections.push(buildWorkspaceBlock(opts.selectedRepos));
 
     if (anySubAgent) {
         sections.push(buildDelegationBlock(opts));
@@ -359,9 +450,29 @@ const TURN_COMPLETION_BLOCK = `<turn_completion priority="critical">
 End every turn by calling \`ask_kra\` with a concise summary and 2–4 concrete choices — whether you finished, are blocked, or need clarification. Never end with plain text.
 </turn_completion>`;
 
-const WORKSPACE_BLOCK = `<workspace>
-You are in a detached proposal workspace. Edits land in the real repository only after the user reviews the resulting git diff in Neovim, so edit files freely.
-</workspace>`;
+function buildWorkspaceBlock(selectedRepos?: { root: string; alias: string }[]): string {
+    const lines: string[] = ['<workspace>'];
+    lines.push('You are in a detached proposal workspace. Edits land in the real repository only after the user reviews the resulting git diff in Neovim, so edit files freely.');
+
+    if (selectedRepos && selectedRepos.length > 1) {
+        lines.push('');
+        lines.push(`**Multi-repo workspace** — ${selectedRepos.length} repos are in scope:`);
+        for (const repo of selectedRepos) {
+            const isPrimary = repo.root === selectedRepos[0].root;
+            lines.push(`  - \`${repo.alias}\` → ${repo.root}${isPrimary ? ' (primary)' : ''}`);
+        }
+        lines.push('');
+        lines.push('**All tools work across every listed repo.** Use absolute paths to address files outside the primary repo:');
+        lines.push('  - `semantic_search` automatically fans out across every listed repo; results are absolute paths so you can tell them apart.');
+        lines.push('  - `read_lines` / `get_outline` / `read_function` / `anchor_edit` / `create_file` / `lsp_query` / `search` accept absolute paths under any selected repo. Relative paths resolve against the **primary** repo.');
+        lines.push('  - `bash` accepts an optional `cwd` argument (an absolute path under any selected repo, OR a repo alias like `' + selectedRepos[1].alias + '`). Without `cwd`, it runs in the primary repo.');
+        lines.push('  - User-provided file contexts (the `@` picker) span all selected repos and arrive as absolute paths.');
+    }
+
+    lines.push('</workspace>');
+
+    return lines.join('\n');
+}
 
 const CREATING_FILES_BLOCK = `<creating_files>
 Use \`create_file\` for new files only. It refuses if the file already exists. For existing files, use the \`edit\` tool.
@@ -488,6 +599,18 @@ ${discoveryRule}
 - \`edit_memory\` to refine in place (re-embeds on title/body change) instead of creating duplicates.
 </long_term_memory>`;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

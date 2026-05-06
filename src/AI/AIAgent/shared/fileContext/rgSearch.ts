@@ -192,7 +192,7 @@ export interface SearchOpts {
 }
 
 export async function searchNameOnly(opts: SearchOpts): Promise<string> {
-    const args = ['--files', '--color', 'never'];
+    const args = ['--files', '--color', 'never', '--glob', '!**/.git/**'];
 
     if (opts.namePattern) {
         args.push('--glob', opts.namePattern);
@@ -204,7 +204,7 @@ export async function searchNameOnly(opts: SearchOpts): Promise<string> {
 
     args.push('--', opts.rootPath);
 
-    const { stdout, stderr, code } = await runRg(args, process.cwd());
+    const { stdout, stderr, code } = await runRg(args, process.env['WORKING_DIR'] ?? process.cwd());
     // rg returns 1 when no matches, 0 on matches; >1 is a real error.
     if (code > 1) {
         throw new Error(stderr.trim() || `ripgrep exited with code ${code}`);
@@ -228,7 +228,7 @@ export async function searchNameOnly(opts: SearchOpts): Promise<string> {
 }
 
 export async function searchContent(opts: SearchOpts): Promise<string> {
-    const args = ['--json', '--color', 'never'];
+    const args = ['--json', '--color', 'never', '--glob', '!**/.git/**'];
 
     if (opts.namePattern) {
         args.push('--glob', opts.namePattern);
@@ -252,7 +252,7 @@ export async function searchContent(opts: SearchOpts): Promise<string> {
 
     args.push('--', opts.contentPattern ?? '', opts.rootPath);
 
-    const { stdout, stderr, code } = await runRg(args, process.cwd());
+    const { stdout, stderr, code } = await runRg(args, process.env['WORKING_DIR'] ?? process.cwd());
 
     if (code > 1) {
         throw new Error(stderr.trim() || `ripgrep exited with code ${code}`);

@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { errorContent, ToolResult } from './toolResult';
 import { handleCreateFile } from './handlers/createFile';
 import { handleEdit } from './handlers/edit';
@@ -8,6 +9,18 @@ import { handleReadLines } from './handlers/readLines';
 import { handleSearch } from './handlers/search';
 
 /**
+ * Resolve a tool-supplied path against the primary repo (WORKING_DIR).
+ * Absolute paths pass through unchanged — this is how the agent targets
+ * non-primary repos in a multi-repo workspace.
+ */
+function normalizePath(p: string): string {
+    if (path.isAbsolute(p)) return p;
+    const root = process.env['WORKING_DIR'] ?? process.cwd();
+
+    return path.resolve(root, p);
+}
+
+/**
  * Dispatches a tool call to the appropriate handler. Tools that take a
  * `file_path` are validated centrally so each handler can assume non-empty.
  */
@@ -16,16 +29,21 @@ export async function dispatchFileContextTool(
     args: Record<string, unknown>,
 ): Promise<ToolResult> {
     if (name === 'lsp_query') {
-        return handleLspQuery(args);
+        const fp = typeof args.file_path === 'string' ? args.file_path : '';
+
+        return handleLspQuery({ ...args, file_path: fp ? normalizePath(fp) : '' });
     }
 
     if (name === 'search') {
-        return handleSearch(args);
+        const p = typeof args.path === 'string' && args.path.length > 0 ? args.path : '';
+
+        return handleSearch({ ...args, ...(p ? { path: normalizePath(p) } : {}) });
     }
 
-    const filePath = typeof args.file_path === 'string' ? args.file_path : undefined;
+    const rawFilePath = typeof args.file_path === 'string' ? args.file_path : undefined;
 
-    if (!filePath) return errorContent('file_path argument is required.');
+    if (!rawFilePath) return errorContent('file_path argument is required.');
+    const filePath = normalizePath(rawFilePath);
 
     switch (name) {
         case 'get_outline':
