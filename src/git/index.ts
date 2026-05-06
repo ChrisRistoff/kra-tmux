@@ -8,3 +8,4 @@ export * from './core/gitBranch';
 export * from './commands/gitNewBranch';
 export * from './commands/gitCheckout';
 export * from './commands/gitReflog';
+export * from './commands/gitScout';

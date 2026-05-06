@@ -281,6 +281,7 @@ kra git
 | **create-branch** 🌿     | Checkout base branch with automatic sync, fetch/prune, hard reset, then create and switch to new branch.                                               |
 | **checkout** ⏳          | Filter branches by activity date with dynamic search and smart stash handling.                                                  |
 | **reflog** 🧭            | Browse the reflog in the same multi-pane dashboard as `git log`, with side-panel commit stats for each HEAD movement.           |
+| **scout** 🔭             | Scan the workspace for every git repo and inspect branch, dirty state, ahead/behind, and recent activity at a glance.          |
 
 All interactive lists feature **intelligent grep search** with **real-time filtering** and **contextual highlighting**.
 
@@ -385,6 +386,14 @@ Date-filtered branch selection with automatic stash handling, conflict detection
 <summary>🧭 <strong>kra git reflog</strong> - Recover lost work from HEAD movements</summary>
 
 Reuses the multi-pane log dashboard against `git reflog`, so each entry (checkout / reset / rebase / commit) shows its full commit context, stat summary, and changed files in side panels. Useful for finding commits orphaned by a reset, rebase, or accidental branch delete. Inherits the dashboard keymaps, including the interactive cherry-pick menu on `c` (with the in-place conflict resolver), `A` to abort an in-progress cherry-pick, and `B` to scope the reflog to a specific branch.
+</details>
+
+<details>
+<summary>🔭 <strong>kra git scout</strong> - Multi-repo workspace overview</summary>
+
+Scans the workspace for every git repository (up to 2 levels deep) and shows them in a full multi-pane dashboard. Dirty repos bubble to the top. Three always-visible right-side panels — **repo details** (branch, modified/untracked counts, ahead/behind, stash count), **recent log** (last 20 commits), and **git status** — all load automatically as you navigate.
+
+Keybindings: `enter` open Neovim, `l` open `kra git log` for that repo (pauses scout, restores it on quit), `d` file-by-file diff picker (opens each changed file in a fugitive split), `f` fetch, `p` pull, `D`/`S-d` toggle dirty-only filter, `r` rescan, `y` copy path, `s`/`/` search by name · path · branch, `Tab` cycle panels, `q` quit.
 </details>
 
 ---
