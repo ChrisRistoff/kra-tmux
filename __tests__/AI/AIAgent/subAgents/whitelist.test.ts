@@ -32,7 +32,7 @@ describe('matchesSubAgentWhitelist', () => {
 
     it('rejects tools not in the whitelist', () => {
         expect(matchesSubAgentWhitelist('bash', whitelist)).toBe(false);
-        expect(matchesSubAgentWhitelist('confirm_task_complete', whitelist)).toBe(false);
+        expect(matchesSubAgentWhitelist('ask_kra', whitelist)).toBe(false);
         expect(matchesSubAgentWhitelist('kra-bash-bash', whitelist)).toBe(false);
     });
 

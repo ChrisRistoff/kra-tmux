@@ -104,7 +104,7 @@ export function getToolFamily(toolName: string): string {
 }
 
 export function shouldAutoApproveTool(toolName: string): boolean {
-    return toolName === 'confirm_task_complete';
+    return toolName === 'ask_kra';
 }
 
 export function extractWriteRequest(toolArgs: unknown, workspacePath: string): ToolWriteRequest | undefined {

@@ -47,7 +47,7 @@ Opens searchable history of all tool calls in this session.
 
 Auto-approved tools:
 
-- `confirm_task_complete`
+- `ask_kra`
 
 All other tools require approval in strict mode.
 

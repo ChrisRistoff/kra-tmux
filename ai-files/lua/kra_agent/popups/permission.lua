@@ -324,6 +324,20 @@ function M.request_permission(channel_id, payload)
         end
     end
 
+    local function prompt_deny_reason()
+        vim.ui.input({ prompt = "Deny reason (Enter = skip, Esc = cancel back): " }, function(reason)
+            if reason == nil then
+                vim.schedule(function()
+                    if win and vim.api.nvim_win_is_valid(win) then
+                        vim.api.nvim_set_current_win(win)
+                    end
+                end)
+                return
+            end
+            send_permission(channel_id, "deny", reason)
+        end)
+    end
+
     local function execute_action(action_id)
         if action_id == "allow" then
             send_permission(channel_id, "allow")
@@ -340,7 +354,7 @@ function M.request_permission(channel_id, payload)
         elseif action_id == "yolo" then
             send_permission(channel_id, "yolo")
         else
-            send_permission(channel_id, "deny")
+            prompt_deny_reason()
         end
     end
 

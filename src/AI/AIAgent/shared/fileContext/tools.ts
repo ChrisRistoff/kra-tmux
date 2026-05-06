@@ -59,6 +59,7 @@ export const TOOLS = [
             'Examples: replace single line → { op:"replace", anchor:"const TIMEOUT_MS = 5000;", content:"const TIMEOUT_MS = 30000;" }.',
             'Replace multi-line region → { op:"replace", anchor:"function oldImpl() {", end_anchor:"} // oldImpl", content:"function newImpl() {\\n    return doIt();\\n}" }.',
             'Insert after import → { op:"insert", anchor:"import { foo } from \'./foo\';", position:"after", content:"import { bar } from \'./bar\';" }.',
+            'After every successful edit, project-wide diagnostics are appended automatically (errors across the whole project; warnings on the edited file). Do NOT run `tsc` / `npm run build` / `cargo check` / `go build` etc. yourself — only run them if the diagnostics block is truncated ("...and N more") or absent for a language you expect to be checked.',
         ].join(' '),
         inputSchema: {
             type: 'object',
@@ -104,7 +105,7 @@ export const TOOLS = [
 
     {
         name: 'create_file',
-        description: 'Creates a NEW file (refuses if the path already exists; use anchor_edit to modify existing files). Parent directories are created automatically; writes are atomic.',
+        description: 'Creates a NEW file (refuses if the path already exists; use anchor_edit to modify existing files). Parent directories are created automatically; writes are atomic. After a successful create, project-wide diagnostics are appended automatically — do NOT run `tsc` / `npm run build` / `cargo check` / `go build` etc. yourself unless the diagnostics block is truncated or absent.',
         inputSchema: {
             type: 'object',
             properties: {

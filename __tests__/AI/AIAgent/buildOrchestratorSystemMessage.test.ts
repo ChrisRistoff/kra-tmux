@@ -10,7 +10,7 @@ describe('buildOrchestratorSystemMessage', () => {
         expect(out).toContain('<surgical_edits>');
         expect(out).toContain('<creating_files>');
         expect(out).toContain('<long_term_memory');
-        expect(out).toContain('Reminder: Always call confirm_task_complete');
+        expect(out).toContain('Reminder: Always call ask_kra');
     });
 
     it('omits the delegation block when no sub-agents are enabled', () => {

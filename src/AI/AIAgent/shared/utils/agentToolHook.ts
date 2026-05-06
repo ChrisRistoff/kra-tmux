@@ -480,7 +480,8 @@ export async function promptToolApproval(
                 return;
             }
 
-            resolve({ action: 'deny' });
+            const reasonRaw = typeof args[1] === 'string' ? args[1].trim() : '';
+            resolve({ action: 'deny', ...(reasonRaw.length > 0 ? { denyReason: reasonRaw } : {}) });
         };
 
         nvimClient.on('notification', handler);
@@ -595,7 +596,7 @@ export async function applyStrReplaceEditorDirectly(
     };
 }
 
-export async function handleConfirmTaskComplete(
+export async function handleAskKra(
     state: AgentConversationState,
     input: AgentPreToolUseHookInput
 ): Promise<AgentPreToolUseHookOutput> {
@@ -639,7 +640,7 @@ export async function handleConfirmTaskComplete(
     // (free, no extra credit) and acts on the user's reply.
     return {
         permissionDecision: 'deny',
-        permissionDecisionReason: `User says: "${answer}". Continue based on this reply. Do not end your turn — call confirm_task_complete again only when you need the user again.`,
+        permissionDecisionReason: `User says: "${answer}". Continue based on this reply. Do not end your turn — call ask_kra again only when you need the user again.`,
     };
 }
 
@@ -788,11 +789,11 @@ export async function handlePreToolUse(
     const toolFamily = getToolFamily(input.toolName);
     const workspacePath = state.cwd;
 
-    // `confirm_task_complete` can arrive as bare name or MCP-prefixed
-    // (e.g. "kra-session-complete:confirm_task_complete", or with underscores
+    // `ask_kra` can arrive as bare name or MCP-prefixed
+    // (e.g. "kra-session-complete:ask_kra", or with underscores
     // depending on SDK version). Use includes() so any format matches.
-    if (input.toolName.includes('confirm_task_complete')) {
-        return handleConfirmTaskComplete(state, input);
+    if (input.toolName.includes('ask_kra')) {
+        return handleAskKra(state, input);
     }
 
     if (shouldAutoApproveTool(input.toolName)) {
@@ -882,9 +883,14 @@ export async function handlePreToolUse(
     }
 
     if (decision.action === 'deny') {
+        const baseReason = 'Denied by user. Do not retry this tool call. Call ask_kra immediately to explain what you were trying to do and ask the user what they want instead.';
+        const reason = decision.denyReason
+            ? `User denied this tool call with reason: "${decision.denyReason}". Treat the user's reason as authoritative direction and follow it. Only call ask_kra if you need more information to proceed.`
+            : baseReason;
+
         return {
             permissionDecision: 'deny',
-            permissionDecisionReason: 'Denied by user. Do not retry this tool call. Call confirm_task_complete immediately to explain what you were trying to do and ask the user what they want instead.',
+            permissionDecisionReason: reason,
         };
     }
 
@@ -992,3 +998,4 @@ export async function handlePreToolUse(
 
     return { permissionDecision: 'allow' };
 }
+

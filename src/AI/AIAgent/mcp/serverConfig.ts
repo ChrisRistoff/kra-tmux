@@ -20,7 +20,7 @@ export async function buildCoreMcpServers(): Promise<Record<string, MCPServerCon
 
     return {
         ...configuredServers,
-        'kra-session-complete': stdioServer('sessionCompleteMcpServer.js', ['confirm_task_complete']),
+        'kra-session-complete': stdioServer('sessionCompleteMcpServer.js', ['ask_kra']),
         'kra-file-context': stdioServer('fileContextMcpServer.js', [
             'get_outline',
             'read_lines',

@@ -202,6 +202,7 @@ export class LspClient {
                 workspace: {
                     workspaceFolders: true,
                     configuration: false,
+                    diagnostics: { refreshSupport: true },
                 },
             },
             initializationOptions: this.spec.initOptions ?? null,

@@ -76,7 +76,7 @@ export function extractTimestampFromHeader(line: string): string {
 /**
  * Replace the last `(draft)` marker in the chat file with a timestamped
  * USER header. No-op if no draft marker is present (e.g. when the agent
- * resumes mid-turn after `confirm_task_complete`).
+ * resumes mid-turn after `ask_kra`).
  */
 export async function materializeUserDraft(
     filePath: string,

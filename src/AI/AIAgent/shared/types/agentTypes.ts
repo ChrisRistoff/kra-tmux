@@ -284,6 +284,8 @@ export interface AgentConversationState {
 export interface ToolApprovalResult {
     action: 'allow' | 'deny' | 'allow-family' | 'yolo';
     modifiedArgs?: unknown;
+    /** Optional free-form reason supplied by the user when explicitly denying. */
+    denyReason?: string;
 }
 
 // ─── Hook input/output (used by both providers and agentToolHook) ────────────
