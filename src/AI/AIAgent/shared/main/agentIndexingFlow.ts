@@ -1,39 +1,43 @@
 /**
- * Startup indexing flow: prompt the user whether to enable code search,
- * bring the local index up to date if so, stream progress to the Neovim
- * modal, and report whether `semantic_search` should be exposed for this
- * agent session.
+ * Startup indexing flow: bring every selected repo's local code-chunks
+ * index up to date in parallel, stream progress to a single Neovim modal,
+ * and report whether `semantic_search` should be exposed for this agent
+ * session.
  *
  * Sequence on launch:
- *   1. Identify the repo (git origin / top-level path).
- *   2. Show a Yes/No modal in Neovim.
- *   3. If "no" — return `{ semanticSearchEnabled: false }`. The agent will
- *      drop `semantic_search` from its tool list and from the MCP exposure.
- *   4. If "yes" — load the registry entry. If no entry exists or the repo
- *      has never been indexed, run a full `reindexAll`. Otherwise compute
- *      a catch-up plan (git diff vs `lastIndexedCommit`, or mtime fallback)
- *      and reindex only the changed files. Above
- *      `CATCHUP_FULL_REINDEX_THRESHOLD` ask whether to fall back to a full
- *      reindex.
- *   5. Show progress in a Neovim floating tab. Each indexed file is
- *      appended live. The modal stays open until the user dismisses it.
- *   6. Persist the new `lastIndexedCommit` / `lastIndexedAt` /
- *      `chunksCount` to the registry.
+ *   1. Identify each selected repo (git origin / top-level path).
+ *   2. Build a per-repo plan in parallel (fresh full reindex vs catch-up
+ *      based on registry state).
+ *   3. Show ONE combined progress modal whose total = sum of per-repo
+ *      file counts. Each line is prefixed with `[<repoAlias>]` so the
+ *      user can tell which repo a file belongs to.
+ *   4. Run every repo's index work concurrently (Promise.all). I/O,
+ *      chunking, git diff, and LanceDB writes overlap; embedding calls
+ *      serialize through fastembed's shared model (mutex in embedder.ts).
+ *   5. Persist registry entries for every repo, then mark the modal done
+ *      and wait for the user to dismiss it.
+ *
+ * Per-repo opt-out (Yes/No) is gone: by getting this far the user has
+ * already explicitly selected these repos in the picker, so we always
+ * proceed. Anything they DON'T want indexed simply shouldn't be selected.
  */
 
 import type * as neovim from 'neovim';
-import { computeChangedFiles, CATCHUP_FULL_REINDEX_THRESHOLD } from '@/AI/AIAgent/shared/memory/catchup';
+import { computeChangedFiles } from '@/AI/AIAgent/shared/memory/catchup';
+import type { CatchupChange } from '@/AI/AIAgent/shared/memory/catchup';
 import {
     getRepoIdentity,
     getRegistryEntry,
     upsertRegistryEntry,
 } from '@/AI/AIAgent/shared/memory/registry';
-import { indexFile, reindexAll, removeFile, workspaceRoot } from '@/AI/AIAgent/shared/memory/indexer';
+import { indexFile, listIndexableFiles, reindexAll, removeFile } from '@/AI/AIAgent/shared/memory/indexer';
 import { countCodeChunks } from '@/AI/AIAgent/shared/memory/db';
+import { computeRepoKey } from '@/AI/AIAgent/shared/memory/repoKey';
 import { loadMemorySettings } from '@/AI/AIAgent/shared/memory/settings';
+import type { MemorySettings } from '@/AI/AIAgent/shared/memory/types';
 import { execCommand } from '@/utils/bashHelper';
-import { handleAgentUserInput } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
+import { handleAgentUserInput } from '@/AI/AIAgent/shared/utils/agentToolHook';
 
 export interface StartupIndexingResult {
     semanticSearchEnabled: boolean;
@@ -89,70 +93,157 @@ async function appendLine(ctx: ProgressContext, line: string): Promise<void> {
     await updateAgentUi(ctx.nvimClient, 'append_index_progress', [{ line }]);
 }
 
-async function runFullReindex(ctx: ProgressContext, alias: string): Promise<{ chunksWritten: number; filesScanned: number; elapsedMs: number }> {
-    let lastFilesTotal = 0;
-    let lastPath = '';
-    await showProgressModal(ctx, alias, 0, 'initial');
-    const result = await reindexAll({
-        onProgress: (p) => {
-            lastFilesTotal = p.filesTotal;
-            if (p.phase === 'embedding' && p.currentPath && p.currentPath !== lastPath) {
-                lastPath = p.currentPath;
-                void appendProgress(ctx, formatProgressLine(p.filesDone + 1, p.filesTotal, `✓ ${p.currentPath}`), p.filesDone + 1, p.filesTotal);
-            }
-            if (p.phase === 'scanning') {
-                void updateAgentUi(ctx.nvimClient, 'set_index_progress_total', [{ total_files: p.filesTotal }]);
-            }
-        },
-    });
-    void lastFilesTotal;
-
-    return { chunksWritten: result.chunksWritten, filesScanned: result.filesScanned, elapsedMs: result.elapsedMs };
+interface RepoIndexingPlan {
+    cwd: string;
+    identity: { id: string; rootPath: string; alias: string };
+    repoKey: string;
+    aliasLabel: string;
+    existing: Awaited<ReturnType<typeof getRegistryEntry>>;
+    mode: 'fresh' | 'catchup';
+    files: string[];
+    changes: CatchupChange[];
+    headCommit: string | null;
 }
 
-async function runCatchup(
-    ctx: ProgressContext,
-    alias: string,
-    changes: { relPath: string; kind: 'index' | 'delete' }[],
-): Promise<{ chunksWritten: number; filesScanned: number; elapsedMs: number }> {
+interface RepoExecutionResult {
+    plan: RepoIndexingPlan;
+    chunksWritten: number;
+    filesScanned: number;
+    elapsedMs: number;
+    error?: string;
+}
+
+async function buildRepoPlan(cwd: string, settings: MemorySettings): Promise<RepoIndexingPlan> {
+    const identity = await getRepoIdentity(cwd);
+    const repoKey = computeRepoKey(identity.id);
+    const existing = await getRegistryEntry(identity.id);
+    const aliasLabel = existing?.alias ?? identity.alias;
+
+    const dbChunkCount = await countCodeChunks(repoKey).catch(() => 0);
+    const needsFreshIndex = !existing?.lastIndexedAt || dbChunkCount === 0;
+
+    if (needsFreshIndex) {
+        const files = await listIndexableFiles(identity.rootPath, settings).catch(() => []);
+
+        return {
+            cwd,
+            identity,
+            repoKey,
+            aliasLabel,
+            existing,
+            mode: 'fresh',
+            files,
+            changes: [],
+            headCommit: null,
+        };
+    }
+
+    const catchup = await computeChangedFiles({
+        repoRoot: identity.rootPath,
+        lastIndexedCommit: existing.lastIndexedCommit,
+        lastIndexedAt: existing.lastIndexedAt,
+    });
+
+    return {
+        cwd,
+        identity,
+        repoKey,
+        aliasLabel,
+        existing,
+        mode: 'catchup',
+        files: [],
+        changes: catchup.changes,
+        headCommit: catchup.headCommit,
+    };
+}
+
+async function executeRepoPlan(
+    plan: RepoIndexingPlan,
+    settings: MemorySettings,
+    onFileDone: (line: string) => void,
+): Promise<RepoExecutionResult> {
     const started = Date.now();
-    const total = changes.length;
-    await showProgressModal(ctx, alias, total, 'catchup');
-    const settings = await loadMemorySettings();
-    const root = workspaceRoot();
     let chunksWritten = 0;
     let filesScanned = 0;
 
-    if (total === 0) {
-        await appendProgress(ctx, '— Nothing to catch up. Index is current.', 0, 0);
-
-        return { chunksWritten: 0, filesScanned: 0, elapsedMs: Date.now() - started };
-    }
-
-    for (let i = 0; i < changes.length; i++) {
-        const change = changes[i];
+    if (plan.mode === 'fresh') {
         try {
-            if (change.kind === 'delete') {
-                const removed = await removeFile(change.relPath);
-                await appendProgress(ctx, formatProgressLine(i + 1, total, `🗑  ${change.relPath} (${removed} chunks removed)`), i + 1, total);
-            } else {
-                const r = await indexFile(change.relPath, { settings, root });
-                chunksWritten += r.chunksWritten;
-                filesScanned += 1;
-                await appendProgress(ctx, formatProgressLine(i + 1, total, `✓ ${change.relPath} (+${r.chunksWritten} chunks)`), i + 1, total);
-            }
+            let lastPath = '';
+            const result = await reindexAll({
+                root: plan.identity.rootPath,
+                repoKey: plan.repoKey,
+                onProgress: (p) => {
+                    if (p.phase === 'embedding' && p.currentPath && p.currentPath !== lastPath) {
+                        lastPath = p.currentPath;
+                        onFileDone(`✓ ${p.currentPath}`);
+                    }
+                },
+            });
+
+            return {
+                plan,
+                chunksWritten: result.chunksWritten,
+                filesScanned: result.filesScanned,
+                elapsedMs: Date.now() - started,
+            };
         } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            await appendProgress(ctx, formatProgressLine(i + 1, total, `✗ ${change.relPath}: ${msg}`), i + 1, total);
+            return {
+                plan,
+                chunksWritten,
+                filesScanned,
+                elapsedMs: Date.now() - started,
+                error: err instanceof Error ? err.message : String(err),
+            };
         }
     }
 
-    return { chunksWritten, filesScanned, elapsedMs: Date.now() - started };
+    for (const change of plan.changes) {
+        try {
+            if (change.kind === 'delete') {
+                const removed = await removeFile(change.relPath, plan.repoKey);
+                onFileDone(`🗑  ${change.relPath} (${removed} chunks removed)`);
+            } else {
+                const r = await indexFile(change.relPath, {
+                    settings,
+                    root: plan.identity.rootPath,
+                    repoKey: plan.repoKey,
+                });
+                chunksWritten += r.chunksWritten;
+                filesScanned += 1;
+                onFileDone(`✓ ${change.relPath} (+${r.chunksWritten} chunks)`);
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            onFileDone(`✗ ${change.relPath}: ${msg}`);
+        }
+    }
+
+    return {
+        plan,
+        chunksWritten,
+        filesScanned,
+        elapsedMs: Date.now() - started,
+    };
 }
 
-export async function runStartupIndexingFlow(
+function planTotalFiles(plan: RepoIndexingPlan): number {
+    return plan.mode === 'fresh' ? plan.files.length : plan.changes.length;
+}
+
+function summaryAlias(plans: RepoIndexingPlan[]): string {
+    if (plans.length === 1) return plans[0].aliasLabel;
+    const aliases = plans.map((p) => p.aliasLabel).join(', ');
+
+    return `${plans.length} repos: ${aliases}`;
+}
+
+/**
+ * Index every selected repo in parallel and stream progress to a single
+ * Neovim modal. The modal stays open until the user dismisses it.
+ */
+export async function runMultiRepoIndexingFlow(
     nvimClient: neovim.NeovimClient,
-    cwd: string,
+    repoCwds: string[],
 ): Promise<StartupIndexingResult> {
     const settings = await loadMemorySettings();
 
@@ -160,97 +251,101 @@ export async function runStartupIndexingFlow(
         return { semanticSearchEnabled: false };
     }
 
-    const identity = await getRepoIdentity(cwd);
-    const existing = await getRegistryEntry(identity.id);
-    const aliasLabel = existing?.alias ?? identity.alias;
-
-    const prompt = await handleAgentUserInput(
-        nvimClient,
-        `Enable code semantic_search for '${aliasLabel}'? This will ${existing ? 'catch the index up' : 'index the repo for the first time'}.`,
-        ['Yes', 'No'],
-        false,
-    );
-
-    const answer = prompt.answer.trim().toLowerCase();
-    if (answer !== 'yes' && answer !== 'y') {
+    if (repoCwds.length === 0) {
         return { semanticSearchEnabled: false };
     }
 
+    const plans = await Promise.all(repoCwds.map((cwd) => buildRepoPlan(cwd, settings)));
+    const totalFiles = plans.reduce((sum, p) => sum + planTotalFiles(p), 0);
     const ctx: ProgressContext = { nvimClient };
-    let summary = '';
+    const aliasHeader = summaryAlias(plans);
+    const mode: 'initial' | 'catchup' = plans.every((p) => p.mode === 'catchup') ? 'catchup' : 'initial';
 
-    const dbChunkCount = await countCodeChunks().catch(() => 0);
-    const needsFreshIndex = !existing?.lastIndexedAt || dbChunkCount === 0;
-
-    if (needsFreshIndex) {
-        const r = await runFullReindex(ctx, aliasLabel);
-        const total = await countCodeChunks().catch(() => r.chunksWritten);
-        await upsertRegistryEntry(identity.id, {
-            alias: identity.alias,
-            rootPath: identity.rootPath,
-            lastIndexedCommit: await safeHeadCommit(identity.rootPath),
-            lastIndexedAt: Date.now(),
-            chunksCount: total,
-        });
-        await appendLine(ctx, '');
-        await appendLine(ctx, `indexed ${r.filesScanned} files in ${(r.elapsedMs / 1000).toFixed(1)}s`);
-        await appendLine(ctx, `${r.chunksWritten} chunks written`);
-        await appendLine(ctx, `registry updated for '${identity.alias}' (${total} total chunks)`);
-        summary = 'Done.';
-    } else {
-        const plan = await computeChangedFiles({
-            repoRoot: identity.rootPath,
-            lastIndexedCommit: existing.lastIndexedCommit,
-            lastIndexedAt: existing.lastIndexedAt,
-        });
-
-        let useFullReindex = false;
-        if (plan.exceedsThreshold) {
-            const confirm = await handleAgentUserInput(
-                nvimClient,
-                `Catch-up would reindex ${plan.changes.length} files (>${CATCHUP_FULL_REINDEX_THRESHOLD}). Run a full reindex instead?`,
-                ['Yes', 'No'],
-                false,
-            );
-            const a = confirm.answer.trim().toLowerCase();
-            useFullReindex = a === 'yes' || a === 'y';
-        }
-
-        if (useFullReindex) {
-            const r = await runFullReindex(ctx, aliasLabel);
-            const total = await countCodeChunks().catch(() => r.chunksWritten);
-            await upsertRegistryEntry(identity.id, {
-                alias: identity.alias,
-                rootPath: identity.rootPath,
-                lastIndexedCommit: await safeHeadCommit(identity.rootPath),
-                lastIndexedAt: Date.now(),
-                chunksCount: total,
-            });
-            await appendLine(ctx, '');
-            await appendLine(ctx, `indexed ${r.filesScanned} files in ${(r.elapsedMs / 1000).toFixed(1)}s`);
-            await appendLine(ctx, `${r.chunksWritten} chunks written`);
-            await appendLine(ctx, `registry updated for '${identity.alias}' (${total} total chunks)`);
-            summary = 'Done.';
-        } else {
-            const r = await runCatchup(ctx, aliasLabel, plan.changes);
-            const total = await countCodeChunks().catch(() => existing.chunksCount + r.chunksWritten);
-            await upsertRegistryEntry(identity.id, {
-                alias: identity.alias,
-                rootPath: identity.rootPath,
-                lastIndexedCommit: plan.headCommit ?? existing.lastIndexedCommit,
-                lastIndexedAt: Date.now(),
-                chunksCount: total,
-            });
-            await appendLine(ctx, '');
-            await appendLine(ctx, `catch-up: reindexed ${r.filesScanned} files in ${(r.elapsedMs / 1000).toFixed(1)}s`);
-            await appendLine(ctx, `${r.chunksWritten} chunks written`);
-            await appendLine(ctx, `registry updated for '${identity.alias}' (${total} total chunks)`);
-            summary = 'Done.';
+    // Confirm with the user before kicking off any work. Single Yes/No covers
+    // every selected repo — each repo's contribution to the workload is shown
+    // in the question so the user knows what they're authorising.
+    if (totalFiles > 0) {
+        const planSummary = plans
+            .map((p) => `• ${p.aliasLabel}: ${planTotalFiles(p)} ${p.mode === 'fresh' ? 'files (full reindex)' : 'changed files (catch-up)'}`)
+            .join('\n');
+        const question = `Index the following repos now?\n\n${planSummary}`;
+        const { answer } = await handleAgentUserInput(nvimClient, question, ['Yes', 'No'], false);
+        if (answer.trim().toLowerCase() !== 'yes') {
+            return { semanticSearchEnabled: true };
         }
     }
 
-    await markDone(ctx, summary);
+    await showProgressModal(ctx, aliasHeader, totalFiles, mode);
+
+    let aggregatedDone = 0;
+    const noopPlans = plans.filter((p) => planTotalFiles(p) === 0);
+    for (const p of noopPlans) {
+        await appendProgress(ctx, `[${p.aliasLabel}] — nothing to index, up to date`, aggregatedDone, totalFiles);
+    }
+
+    const workPlans = plans.filter((p) => planTotalFiles(p) > 0);
+    const results = await Promise.all(
+        workPlans.map((plan) =>
+            executeRepoPlan(plan, settings, (line) => {
+                aggregatedDone += 1;
+                void appendProgress(
+                    ctx,
+                    formatProgressLine(aggregatedDone, totalFiles, `[${plan.aliasLabel}] ${line}`),
+                    aggregatedDone,
+                    totalFiles,
+                );
+            }),
+        ),
+    );
+
+    // Persist registry entries for every repo (including noop ones, so first-time
+    // selection of a clean repo gets recorded).
+    await Promise.all(
+        plans.map(async (plan) => {
+            const result = results.find((r) => r.plan === plan);
+            const fallbackChunks = (plan.existing?.chunksCount ?? 0) + (result?.chunksWritten ?? 0);
+            const total = await countCodeChunks(plan.repoKey).catch(() => fallbackChunks);
+            const lastIndexedCommit =
+                plan.mode === 'fresh' || !plan.headCommit
+                    ? await safeHeadCommit(plan.identity.rootPath)
+                    : plan.headCommit;
+
+            await upsertRegistryEntry(plan.identity.id, {
+                alias: plan.identity.alias,
+                rootPath: plan.identity.rootPath,
+                lastIndexedCommit,
+                lastIndexedAt: Date.now(),
+                chunksCount: total,
+            });
+        }),
+    );
+
+    await appendLine(ctx, '');
+    for (const result of results) {
+        const tag = result.error ? `✗ ${result.error}` : 'done';
+        await appendLine(
+            ctx,
+            `[${result.plan.aliasLabel}] ${result.filesScanned} files, +${result.chunksWritten} chunks in ${(result.elapsedMs / 1000).toFixed(1)}s (${tag})`,
+        );
+    }
+    for (const p of noopPlans) {
+        await appendLine(ctx, `[${p.aliasLabel}] index already current`);
+    }
+
+    await markDone(ctx, plans.length === 1 ? 'Done.' : `Done. Indexed ${plans.length} repos.`);
     await waitForModalDismiss(nvimClient);
 
     return { semanticSearchEnabled: true };
+}
+
+/**
+ * Backwards-compatible single-repo entrypoint. New callers should prefer
+ * `runMultiRepoIndexingFlow` with the full list of selected repos so the
+ * UI can show one combined progress modal.
+ */
+export async function runStartupIndexingFlow(
+    nvimClient: neovim.NeovimClient,
+    cwd: string,
+): Promise<StartupIndexingResult> {
+    return runMultiRepoIndexingFlow(nvimClient, [cwd]);
 }

@@ -42,7 +42,7 @@ describe('agentHistory', () => {
         const filePath = path.join(tmpDir, 'hello.txt');
         await fs.writeFile(filePath, 'original content', 'utf8');
 
-        const history = createAgentHistory(tmpDir);
+        const history = createAgentHistory([tmpDir]);
         history.recordMutation({
             path: filePath,
             beforeContent: 'original content',
@@ -64,7 +64,7 @@ describe('agentHistory', () => {
         const filePath = path.join(tmpDir, 'new-file.txt');
         await fs.writeFile(filePath, 'agent created this', 'utf8');
 
-        const history = createAgentHistory(tmpDir);
+        const history = createAgentHistory([tmpDir]);
         history.recordMutation({
             path: filePath,
             beforeContent: null, // did not exist originally
@@ -83,7 +83,7 @@ describe('agentHistory', () => {
         const originalContent = 'I was deleted';
         await fs.writeFile(filePath, originalContent, 'utf8');
 
-        const history = createAgentHistory(tmpDir);
+        const history = createAgentHistory([tmpDir]);
         history.recordMutation({
             path: filePath,
             beforeContent: originalContent,
@@ -108,7 +108,7 @@ describe('agentHistory', () => {
         await execCommand(`git -C '${tmpDir}' add tracked.txt`);
         await execCommand(`git -C '${tmpDir}' commit -m 'add tracked'`);
 
-        const history = createAgentHistory(tmpDir);
+        const history = createAgentHistory([tmpDir]);
 
         const before = await history.bashSnapshotBefore();
 
@@ -139,7 +139,7 @@ describe('agentHistory', () => {
         await execCommand(`git -C '${tmpDir}' add binary.bin`);
         await execCommand(`git -C '${tmpDir}' commit -m 'add binary'`);
 
-        const history = createAgentHistory(tmpDir);
+        const history = createAgentHistory([tmpDir]);
         const before = await history.bashSnapshotBefore();
 
         // Modify the binary file post-snapshot

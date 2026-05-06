@@ -39,6 +39,11 @@ interface IProject {
     compilerOptions: ts.CompilerOptions;
     rootFiles: Set<string>;
     fileVersions: Map<string, number>;
+    // Last-seen mtime per file. Used to detect on-disk changes so we can
+    // bump fileVersions and force the TS LanguageService to re-parse files
+    // we did not directly edit (otherwise its internal AST cache, keyed by
+    // (path, version), serves stale diagnostics for cross-file dependents).
+    fileMtimes: Map<string, number>;
     fileSnapshots: Map<string, string>;
     service: ts.LanguageService;
     // -1 means "never measured"; used for the net-change footer so the agent
@@ -75,6 +80,7 @@ function loadProject(filePath: string): IProject | undefined {
         rootFiles,
         fileVersions: new Map(),
         fileSnapshots: new Map(),
+        fileMtimes: new Map(),
         // Set after host construction below.
         service: null as unknown as ts.LanguageService,
         lastErrorCount: -1,
@@ -174,10 +180,43 @@ export function getDiagnosticsForProject(editedFilePath: string): string | undef
         project.fileVersions.set(editedAbs, v);
         project.fileSnapshots.set(editedAbs, content);
         project.rootFiles.add(editedAbs);
+        try {
+            project.fileMtimes.set(editedAbs, fs.statSync(editedAbs).mtimeMs);
+        } catch { /* mtime is best-effort */ }
     } catch {
         // File was deleted or is not readable — still useful to report
         // diagnostics for the rest of the project.
         editedExists = false;
+    }
+
+    // Detect out-of-band changes (files modified since the last diagnostics
+    // run that we did NOT edit ourselves). Bump their versions so the TS
+    // LanguageService invalidates its cached AST and re-parses from disk.
+    // Without this, edits to a single file never cause its cross-file
+    // dependents to be re-checked, and we report stale diagnostics for them.
+    for (const rootFile of project.rootFiles) {
+        if (rootFile === editedAbs) continue;
+        let mtime: number;
+        try {
+            mtime = fs.statSync(rootFile).mtimeMs;
+        } catch {
+            continue;
+        }
+        const lastMtime = project.fileMtimes.get(rootFile);
+        if (lastMtime === undefined) {
+            // First time we observe this file — record mtime but don't bump.
+            // The LanguageService will read it from disk on first request.
+            project.fileMtimes.set(rootFile, mtime);
+            continue;
+        }
+        if (mtime !== lastMtime) {
+            project.fileMtimes.set(rootFile, mtime);
+            // Drop any stale in-memory snapshot so getScriptSnapshot falls
+            // through to a fresh disk read.
+            project.fileSnapshots.delete(rootFile);
+            const v = (project.fileVersions.get(rootFile) ?? 0) + 1;
+            project.fileVersions.set(rootFile, v);
+        }
     }
 
     const program = project.service.getProgram();

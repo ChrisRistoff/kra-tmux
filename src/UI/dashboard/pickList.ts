@@ -21,10 +21,16 @@ export interface PickListAction {
     /**
      * Optional in-place handler. When provided, the action runs inside the
      * picker (the picker stays open) instead of exiting. Receives the
-     * currently-highlighted item (or null) and the blessed screen so the
-     * handler can pause the screen and launch external processes.
+     * currently-highlighted item (or null), the blessed screen so the
+     * handler can pause the screen and launch external processes, and a
+     * `ctx` object whose `setItems` lets the handler mutate the visible
+     * list (used for in-place multi-select toggle markers).
      */
-    run?: (item: string | null, screen: import('blessed').Widgets.Screen) => Promise<void> | void;
+    run?: (
+        item: string | null,
+        screen: import('blessed').Widgets.Screen,
+        ctx: { setItems: (items: string[]) => void; finish: (value: string | null, action?: string) => void },
+    ) => Promise<void> | void;
 }
 
 export interface PickListOptions {
@@ -60,6 +66,13 @@ export interface PickListOptions {
     pageSize?: number;
     /** When true, pressing enter in the search box submits the current query. */
     submitSearchQuery?: boolean;
+    /**
+     * Gate Enter / `select` events. When provided and returns false for the
+     * currently-highlighted item, the picker will NOT resolve. Useful for
+     * multi-select-style pickers where regular rows are toggle targets and
+     * only sentinel rows (e.g. "Done" / "Cancel") may finish the picker.
+     */
+    canSubmit?: (value: string, index: number) => boolean;
 }
 
 export interface PickListResult {
@@ -78,7 +91,7 @@ export async function pickList(opts: PickListOptions): Promise<PickListResult> {
     return new Promise<PickListResult>((resolve) => {
         const screen = createDashboardScreen({ title: opts.title });
 
-        const items = opts.items.length ? opts.items : ['<no items>'];
+        const items: string[] = opts.items.length ? opts.items.slice() : ['<no items>'];
         const showDetails = (opts.showDetailsPanel ?? true)
             && Boolean(opts.details ?? opts.secondaryDetails);
 
@@ -222,8 +235,10 @@ export async function pickList(opts: PickListOptions): Promise<PickListResult> {
         };
 
         const submit = (): void => {
-            const v = filtered[listSel()];
+            const idx = listSel();
+            const v = filtered[idx];
             if (!v || v === '<no items>' || v === '<no matches>') return;
+            if (opts.canSubmit && !opts.canSubmit(v, idx)) return;
             finish(v);
         };
 
@@ -309,12 +324,23 @@ export async function pickList(opts: PickListOptions): Promise<PickListResult> {
             cancel: () => finish(null),
         });
 
+        const setItems = (next: string[]): void => {
+            const prevIdx = listSel();
+            items.length = 0;
+            items.push(...(next.length ? next : ['<no items>']));
+            applyFilter(filterQuery);
+            const cap = Math.max(0, displayed().length - 1);
+            list.select(Math.min(prevIdx, cap));
+            refreshDetails();
+            screen.render();
+        };
+
         for (const action of opts.actions ?? []) {
             list.key(action.keys, () => {
                 const v = filtered[listSel()];
                 const cur = (v && v !== '<no items>' && v !== '<no matches>') ? v : null;
                 if (action.run) {
-                    void Promise.resolve(action.run(cur, screen)).then(() => {
+                    void Promise.resolve(action.run(cur, screen, { setItems, finish })).then(() => {
                         try { ring.focusAt(0); refreshDetails(); screen.render(); } catch { /* ignore */ }
                     });
 

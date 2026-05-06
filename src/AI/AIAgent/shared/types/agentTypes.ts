@@ -273,6 +273,12 @@ export interface AgentConversationState {
      */
     activeSubAgentSession?: AgentSession | undefined;
     /**
+     * Chokidar watcher reindexing every selected repo on file save. Owned by
+     * `converseAgent` (started after multi-repo selection so we know the full
+     * set of roots) and closed during `cleanup()`.
+     */
+    watcher?: import('@/AI/AIAgent/shared/memory/watcher').WatcherHandle | null;
+    /**
      * Chronological log of the orchestrator's user messages, assistant
      * reasoning, and tool calls. Sliced and handed to the executor sub-agent
      * so it inherits the orchestrator's prior file reads and findings without

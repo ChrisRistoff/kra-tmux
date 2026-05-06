@@ -8,14 +8,17 @@
  * scoped per agent workspace.
  */
 
+import * as path from 'path';
 import { runStdioMcpServer } from '../../mcp/stdioServer';
 import 'module-alias/register';
-import { editMemory, recall, remember, updateMemory } from '../memory/notes';
+import { editMemory, recall, recallMulti, remember, updateMemory } from '../memory/notes';
 import { semanticSearch } from '../memory/search';
 import { docsSearch } from '../docs/search';
 import { MEMORY_KINDS, MEMORY_LOOKUP_KINDS, MEMORY_STATUSES } from '../memory/types';
 import { loadSettings } from '@/utils/common';
 import type { DocsSource } from '@/types/settingsTypes';
+import { computeRepoKey } from '../memory/repoKey';
+import { getRepoIdentity } from '../memory/registry';
 
 const REMEMBER_TOOL = {
     name: 'remember',
@@ -29,6 +32,7 @@ const REMEMBER_TOOL = {
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for filtering.' },
             paths: { type: 'array', items: { type: 'string' }, description: 'Related file paths.' },
             branch: { type: 'string', description: 'Optional branch name this entry pertains to.' },
+            repo: { type: 'string', description: 'Optional target repo (alias from the selected repo set, or absolute root path). Defaults to the primary repo.' },
         },
         required: ['kind', 'title', 'body'],
     },
@@ -46,6 +50,7 @@ const RECALL_TOOL = {
             selectedIds: { type: 'array', items: { type: 'string' }, description: 'Optional pre-approved memory ids to limit the result set.' },
             tagsAny: { type: 'array', items: { type: 'string' }, description: 'Match if entry has any of these tags.' },
             status: { type: 'string', enum: [...MEMORY_STATUSES], description: 'Filter by status (typically "open" for revisit listings).' },
+            repo: { type: 'string', description: 'Optional repo to scope the lookup (alias from the selected repo set, or absolute root path). Omit to fan out across every selected repo and merge by score.' },
         },
         required: ['kind'],
     },
@@ -60,6 +65,7 @@ const UPDATE_MEMORY_TOOL = {
             id: { type: 'string', description: 'Memory entry id (returned by remember / recall).' },
             status: { type: 'string', enum: ['resolved', 'dismissed'], description: '"resolved" if we acted on it, "dismissed" if abandoned.' },
             resolution: { type: 'string', description: 'Optional notes on how it was resolved or why it was dismissed.' },
+            repo: { type: 'string', description: 'Optional repo containing the entry (alias or absolute root path). Omit to search every selected repo for the id.' },
         },
         required: ['id', 'status'],
     },
@@ -99,6 +105,7 @@ const EDIT_MEMORY_TOOL = {
             tags: { type: 'array', items: { type: 'string' }, description: 'Replacement tag list.' },
             paths: { type: 'array', items: { type: 'string' }, description: 'Replacement paths list.' },
             branch: { type: 'string', description: 'Replacement branch (use empty string to clear).' },
+            repo: { type: 'string', description: 'Optional repo containing the entry (alias or absolute root path). Omit to search every selected repo for the id.' },
         },
         required: ['id'],
     },
@@ -113,9 +120,22 @@ const DOCS_SEARCH_TOOL_BASE = {
     ].join(' '),
 };
 
-export function buildDocsSearchTool(sources: DocsSource[]) {
+interface DocsSearchTool {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: Record<string, { type: string; description: string; enum?: string[] }>;
+        required: string[];
+    };
+}
+
+export function buildDocsSearchTool(sources: DocsSource[]): DocsSearchTool {
     const aliasLines = sources
         .map((s) => {
+            // Fall back to URL when description is missing OR empty/whitespace-only,
+            // hence `||` rather than `??` (the empty string after trim must be discarded).
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
             const blurb = s.description?.trim() || s.url;
 
             return `  - ${s.alias} \u2014 ${blurb}`;
@@ -172,20 +192,85 @@ export async function buildToolList(): Promise<Array<{ name: string }>> {
 
 type ToolName = 'remember' | 'recall' | 'update_memory' | 'edit_memory' | 'semantic_search' | 'docs_search';
 
+function parseSelectedRepoRoots(): Array<{ alias: string; root: string }> {
+    const env = process.env['KRA_SELECTED_REPO_ROOTS'];
+    if (typeof env !== 'string' || env.trim().length === 0) return [];
+    const out: Array<{ alias: string; root: string }> = [];
+    for (const line of env.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const tabIdx = trimmed.indexOf('\t');
+        if (tabIdx === -1) continue;
+        const alias = trimmed.slice(0, tabIdx).trim();
+        const root = trimmed.slice(tabIdx + 1).trim();
+        if (alias && root) out.push({ alias, root });
+    }
+
+    return out;
+}
+
+async function resolveRepoArg(arg: unknown): Promise<string | undefined> {
+    if (typeof arg !== 'string' || arg.trim().length === 0) return undefined;
+    const value = arg.trim();
+    const selected = parseSelectedRepoRoots();
+    let root: string | undefined;
+    const aliasHit = selected.find((r) => r.alias === value);
+    if (aliasHit) {
+        root = aliasHit.root;
+    } else if (path.isAbsolute(value)) {
+        const pathHit = selected.find((r) => r.root === value);
+        root = pathHit?.root ?? value;
+    } else {
+        throw new Error(`repo: '${value}' is not a known alias and not an absolute path`);
+    }
+    const ident = await getRepoIdentity(root);
+
+    return computeRepoKey(ident.id);
+}
+
+function stripRepoArg(args: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args)) {
+        if (k !== 'repo') out[k] = v;
+    }
+
+    return out;
+}
+
 async function dispatchTool(name: ToolName, args: Record<string, unknown>): Promise<unknown> {
     switch (name) {
-        case 'remember':
-            return remember(args as unknown as Parameters<typeof remember>[0]);
+        case 'remember': {
+            const repoKey = await resolveRepoArg(args['repo']);
+            const rest = stripRepoArg(args);
+            const input = (repoKey ? { ...rest, repoKey } : rest) as unknown as Parameters<typeof remember>[0];
 
-        case 'recall':
-            return recall(args as unknown as Parameters<typeof recall>[0]);
+            return remember(input);
+        }
+        case 'recall': {
+            const rest = stripRepoArg(args);
+            if (typeof args['repo'] === 'string' && args['repo'].trim().length > 0) {
+                const repoKey = await resolveRepoArg(args['repo']);
+                const input = { ...rest, repoKey } as unknown as Parameters<typeof recall>[0];
 
-        case 'update_memory':
-            return updateMemory(args as unknown as Parameters<typeof updateMemory>[0]);
+                return recall(input);
+            }
 
-        case 'edit_memory':
-            return editMemory(args as unknown as Parameters<typeof editMemory>[0]);
+            return recallMulti(rest as unknown as Parameters<typeof recall>[0]);
+        }
+        case 'update_memory': {
+            const repoKey = await resolveRepoArg(args['repo']);
+            const rest = stripRepoArg(args);
+            const input = (repoKey ? { ...rest, repoKey } : rest) as unknown as Parameters<typeof updateMemory>[0];
 
+            return updateMemory(input);
+        }
+        case 'edit_memory': {
+            const repoKey = await resolveRepoArg(args['repo']);
+            const rest = stripRepoArg(args);
+            const input = (repoKey ? { ...rest, repoKey } : rest) as unknown as Parameters<typeof editMemory>[0];
+
+            return editMemory(input);
+        }
         case 'semantic_search':
             return semanticSearch(args as unknown as Parameters<typeof semanticSearch>[0]);
 

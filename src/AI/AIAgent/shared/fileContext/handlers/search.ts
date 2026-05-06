@@ -20,7 +20,7 @@ export async function handleSearch(args: Record<string, unknown>): Promise<ToolR
         return errorContent('Provide name_pattern, content_pattern, or both. At least one is required.');
     }
 
-    const rootPath = typeof args.path === 'string' && args.path.length > 0 ? args.path : process.cwd();
+    const rootPath = typeof args.path === 'string' && args.path.length > 0 ? args.path : (process.env['WORKING_DIR'] ?? process.cwd());
     const type = typeof args.type === 'string' && args.type.length > 0 ? args.type : undefined;
     const caseInsensitive = args.case_insensitive === true;
     const contextRaw = coerceNumber(args.context);

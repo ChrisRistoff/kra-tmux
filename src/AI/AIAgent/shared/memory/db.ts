@@ -28,8 +28,8 @@ const MEMORY_REVISITS_TABLE = 'memory_revisits';
 // connections / tables for several repos simultaneously (multi-repo search).
 const dbCache: Map<string, Connection> = new Map();
 let docsDbCache: Connection | null = null;
-let memoryFindingsTableCache: Table | null = null;
-let memoryRevisitsTableCache: Table | null = null;
+const memoryFindingsTableCache: Map<string, Table> = new Map();
+const memoryRevisitsTableCache: Map<string, Table> = new Map();
 const codeChunksTableCache: Map<string, Table> = new Map();
 const codeFtsEnsuredKeys: Set<string> = new Set();
 const docFtsEnsuredKeys: Set<string> = new Set();
@@ -104,27 +104,28 @@ export interface GetMemoryTableResult {
 
 async function getOrCreateMemoryTable(
     tableName: string,
-    cacheGet: () => Table | null,
-    cacheSet: (t: Table) => void,
+    cache: Map<string, Table>,
     seedRow: MemoryRow | null,
+    repoKey?: string,
 ): Promise<GetMemoryTableResult> {
-    const cached = cacheGet();
+    const key = await resolveRepoKey(repoKey);
+    const cached = cache.get(key);
     if (cached) {
         return { table: cached, justCreated: false };
     }
 
     const next = mutex.then(async (): Promise<GetMemoryTableResult> => {
-        const c = cacheGet();
+        const c = cache.get(key);
         if (c) {
             return { table: c, justCreated: false };
         }
 
-        const db = await getDb();
+        const db = await getDb(key);
         const tableNames = await db.tableNames();
 
         if (tableNames.includes(tableName)) {
             const t = await db.openTable(tableName);
-            cacheSet(t);
+            cache.set(key, t);
 
             return { table: t, justCreated: false };
         }
@@ -134,7 +135,7 @@ async function getOrCreateMemoryTable(
         }
 
         const t = await db.createTable(tableName, [seedRow as unknown as Record<string, unknown>]);
-        cacheSet(t);
+        cache.set(key, t);
 
         return { table: t, justCreated: true };
     });
@@ -144,21 +145,21 @@ async function getOrCreateMemoryTable(
     return next;
 }
 
-export async function getFindingsTable(seedRow: MemoryRow | null): Promise<GetMemoryTableResult> {
+export async function getFindingsTable(seedRow: MemoryRow | null, repoKey?: string): Promise<GetMemoryTableResult> {
     return getOrCreateMemoryTable(
         MEMORY_FINDINGS_TABLE,
-        () => memoryFindingsTableCache,
-        (t) => { memoryFindingsTableCache = t; },
+        memoryFindingsTableCache,
         seedRow,
+        repoKey,
     );
 }
 
-export async function getRevisitsTable(seedRow: MemoryRow | null): Promise<GetMemoryTableResult> {
+export async function getRevisitsTable(seedRow: MemoryRow | null, repoKey?: string): Promise<GetMemoryTableResult> {
     return getOrCreateMemoryTable(
         MEMORY_REVISITS_TABLE,
-        () => memoryRevisitsTableCache,
-        (t) => { memoryRevisitsTableCache = t; },
+        memoryRevisitsTableCache,
         seedRow,
+        repoKey,
     );
 }
 
@@ -168,8 +169,8 @@ export async function getRevisitsTable(seedRow: MemoryRow | null): Promise<GetMe
 export function _resetCachesForTest(): void {
     dbCache.clear();
     docsDbCache = null;
-    memoryFindingsTableCache = null;
-    memoryRevisitsTableCache = null;
+    memoryFindingsTableCache.clear();
+    memoryRevisitsTableCache.clear();
     codeChunksTableCache.clear();
     codeFtsEnsuredKeys.clear();
     docFtsEnsuredKeys.clear();
@@ -255,8 +256,8 @@ void ensureContentFtsIndex(t, key, codeFtsEnsuredKeys);
  * Total number of code chunks currently stored. Returns 0 if the table has
  * never been created.
  */
-export async function countCodeChunks(): Promise<number> {
-    const { table } = await getCodeChunksTable(null);
+export async function countCodeChunks(repoKey?: string): Promise<number> {
+    const { table } = await getCodeChunksTable(null, repoKey);
 
     if (!table) return 0;
 

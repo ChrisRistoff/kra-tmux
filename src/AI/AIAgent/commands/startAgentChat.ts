@@ -17,8 +17,6 @@
 
 import * as conversation from '@/AI/AIAgent/shared/main/agentConversation';
 import { buildByokExtraMcpServers } from '@/AI/AIAgent/mcp/serverConfig';
-import { loadMemorySettings } from '@/AI/AIAgent/shared/memory/settings';
-import { startWatcher, type WatcherHandle } from '@/AI/AIAgent/shared/memory/watcher';
 import { loadSubAgentSettings } from '@/AI/AIAgent/shared/subAgents/settings';
 import { pickAgentRuntime } from '@/AI/AIAgent/commands/subAgentProviderPicker';
 import type { AgentClient } from '@/AI/AIAgent/shared/types/agentTypes';
@@ -28,17 +26,6 @@ import type {
 } from '@/AI/AIAgent/shared/subAgents/types';
 
 export async function startAgentChat(): Promise<void> {
-    const memorySettings = await loadMemorySettings();
-    let watcher: WatcherHandle | null = null;
-
-    if (memorySettings.enabled && memorySettings.indexCodeOnSave) {
-        try {
-            watcher = await startWatcher();
-        } catch (err) {
-            console.warn(`kra-memory: watcher failed to start: ${err instanceof Error ? err.message : String(err)}`);
-        }
-    }
-
     const subAgentSettings = await loadSubAgentSettings();
     const allClients: AgentClient[] = [];
     let orchestrator: Awaited<ReturnType<typeof pickAgentRuntime>> | null = null;
@@ -103,7 +90,6 @@ export async function startAgentChat(): Promise<void> {
             await c.forceStop?.().catch(() => { /* best effort */ });
         }
         throw error;
-    } finally {
-        if (watcher) await watcher.close();
     }
 }
+

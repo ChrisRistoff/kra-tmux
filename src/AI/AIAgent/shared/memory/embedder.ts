@@ -18,6 +18,11 @@ export const VECTOR_DIM = 384;
 let cachedModel: FlagEmbedding | null = null;
 let pendingLoad: Promise<FlagEmbedding> | null = null;
 
+// Serialize embed calls. fastembed/ONNX is not guaranteed to be reentrant
+// from concurrent JS callers — multi-repo parallel indexing would otherwise
+// dispatch overlapping embed batches into the same model instance.
+let embedQueue: Promise<unknown> = Promise.resolve();
+
 function defaultCacheDir(): string {
     const override = process.env['KRA_MEMORY_MODEL_CACHE'];
 
@@ -78,18 +83,23 @@ export async function embedMany(texts: string[]): Promise<number[][]> {
         return [];
     }
 
-    const model = await loadModel();
-    const out: number[][] = [];
+    const next = embedQueue.then(async () => {
+        const model = await loadModel();
+        const out: number[][] = [];
 
-    for await (const batch of model.embed(texts, Math.min(32, texts.length))) {
-        for (const vec of batch) {
-            out.push(Array.from(vec));
+        for await (const batch of model.embed(texts, Math.min(32, texts.length))) {
+            for (const vec of batch) {
+                out.push(Array.from(vec));
+            }
         }
-    }
 
-    if (out.length !== texts.length) {
-        throw new Error(`embedMany: expected ${texts.length} vectors, got ${out.length}`);
-    }
+        if (out.length !== texts.length) {
+            throw new Error(`embedMany: expected ${texts.length} vectors, got ${out.length}`);
+        }
 
-    return out;
+        return out;
+    });
+    embedQueue = next.catch(() => undefined);
+
+    return next;
 }
