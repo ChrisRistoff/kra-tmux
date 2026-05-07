@@ -1,4 +1,6 @@
 export { escTag, sanitizeForBlessed } from './escTag';
+export { highlightCode, languageForPath } from './highlight';
+export { theme, type ThemeKey } from './theme';
 export {
     createDashboardScreen,
     awaitScreenDestroy,

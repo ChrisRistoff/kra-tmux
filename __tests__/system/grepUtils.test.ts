@@ -183,7 +183,7 @@ describe('grepUtils', () => {
         it('returns error message when exec rejects', async () => {
             mockExecCommand.mockRejectedValueOnce(new Error('read error'));
             const result = await grepUtils.loadPreview(makeFile('./a.ts'), 'files');
-            expect(result).toBe('(could not read file)');
+            expect(result).toBe('{red-fg}(could not read file){/red-fg}');
         });
     });
 

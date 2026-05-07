@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { escTag, sanitizeForBlessed } from '@/UI/dashboard';
+import { escTag, highlightCode, sanitizeForBlessed, theme } from '@/UI/dashboard';
 import { execCommand } from '@/utils/bashHelper';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -256,18 +256,23 @@ export async function loadContentPreviewWithMatches(
         let firstMatchLine = -1;
         let matchCount = 0;
 
+        // blessed's fullUnicode: true tracks double-width cells via \x03
+        // markers; on scroll those markers desync and duplicate glyphs at
+        // wrong positions. Sanitize wide / non-printable chars BEFORE
+        // syntax-highlight + tag-escape so the preview renders at exactly
+        // one cell per char. Highlight the whole buffer for cross-line context
+        // (template strings, multi-line comments) then split back into lines.
+        const safeLines = shown.map((l) => sanitizeForBlessed(l));
+        const highlightedAll = highlightCode(safeLines.join('\n'), absPath);
+        const hlLines = highlightedAll.split('\n');
+
         const out = shown.map((line, i) => {
             const lineNo = i + 1;
-            // blessed's fullUnicode: true tracks double-width cells via \x03
-            // markers; on scroll those markers desync and duplicate glyphs at
-            // wrong positions. Sanitize wide / non-printable chars BEFORE
-            // tag-escape so the preview renders at exactly one cell per char.
-            const safe = sanitizeForBlessed(line);
-            const escaped = escTag(safe);
+            const hlLine = hlLines[i] ?? safeLines[i] ?? '';
+            const escaped = escTag(hlLine);
             const hasMatch = escQuery !== '' && line.includes(query);
             if (hasMatch) {
                 if (firstMatchLine === -1) firstMatchLine = lineNo;
-                // count occurrences in this line (literal substring count)
                 let from = 0;
                 let idx = line.indexOf(query, from);
                 while (idx !== -1) {
@@ -327,10 +332,12 @@ export async function loadPreview(
             }
         }
         const { stdout } = await execCommand(`head -n 120 ${JSON.stringify(result.absPath)} 2>/dev/null`);
+        if (!stdout) return '(binary or empty file)';
+        const safe = sanitizeForBlessed(stdout);
 
-        return sanitizeForBlessed(stdout) || '(binary or empty file)';
+        return escTag(highlightCode(safe, result.absPath));
     } catch {
-        return '(could not read file)';
+        return theme.err('(could not read file)');
     }
 }
 
@@ -345,32 +352,34 @@ export async function loadMeta(result: GrepResult): Promise<string> {
         if (result.type === 'file') {
             const { stdout: wcOut } = await execCommand(`wc -l ${JSON.stringify(result.absPath)} 2>/dev/null`).catch(() => ({ stdout: '?' }));
             const lineCount = wcOut.trim().split(/\s+/)[0] || '?';
-            extra = `\n{cyan-fg}lines  {/cyan-fg}${lineCount}`;
+            extra = `\n${theme.label('lines  ')}${theme.count(lineCount)}`;
             if (result.matchCount > 0) {
-                extra += `\n{cyan-fg}matches{/cyan-fg} {yellow-fg}${result.matchCount}{/yellow-fg}`;
+                extra += `\n${theme.label('matches')} ${theme.count(result.matchCount)}`;
             }
         }
 
         return (
-            `{cyan-fg}path   {/cyan-fg}${escTag(abs)}\n` +
-            `{cyan-fg}dir    {/cyan-fg}${escTag(dir)}\n` +
-            `{cyan-fg}size   {/cyan-fg}${size}` +
+            `${theme.label('path   ')}${theme.path(escTag(abs))}\n` +
+            `${theme.label('dir    ')}${theme.path(escTag(dir))}\n` +
+            `${theme.label('size   ')}${theme.size(size)}` +
             extra +
-            `\n\n{white-fg}${escTag(lsOut.trim())}{/white-fg}`
+            `\n\n${theme.dim(escTag(lsOut.trim()))}`
         );
     } catch {
-        return `{cyan-fg}path{/cyan-fg}  ${escTag(result.absPath)}`;
+        return `${theme.label('path')}  ${theme.path(escTag(result.absPath))}`;
     }
 }
 
 // ─── Row renderer ─────────────────────────────────────────────────────────────
 
 export function renderRow(r: GrepResult, mode: SearchMode): string {
-    const sel = r.selected ? '{yellow-fg}[x]{/yellow-fg} ' : '    ';
+    const sel = r.selected ? `${theme.selected('[x]')} ` : '    ';
     const icon = r.type === 'dir' ? '📁' : '📄';
-    const disp = escTag(r.displayPath.replace(/^\.\//u, ''));
+    const disp = r.type === 'dir'
+        ? theme.dir(escTag(r.displayPath.replace(/^\.\//u, '')))
+        : theme.path(escTag(r.displayPath.replace(/^\.\//u, '')));
     const countTag = mode === 'content' && r.matchCount > 0
-        ? `  {yellow-fg}(${r.matchCount}){/yellow-fg}`
+        ? `  ${theme.count(`(${r.matchCount})`)}`
         : '';
 
     return `${sel}${icon} ${disp}${countTag}`;

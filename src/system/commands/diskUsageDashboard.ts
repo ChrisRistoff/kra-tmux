@@ -7,7 +7,9 @@ import {
     createListDetailDashboard,
     modalConfirm,
     modalText,
+    highlightCode,
     sanitizeForBlessed,
+    theme,
 } from '@/UI/dashboard';
 import { runInherit } from '@/UI/dashboard/screen';
 
@@ -242,14 +244,14 @@ export async function openDiskUsageDashboard(): Promise<void> {
 
     function headerContent(): string {
         const sizeText = rootSize === null
-            ? '{gray-fg}scanning\u2026{/gray-fg}'
-            : `{yellow-fg}${formatBytes(rootSize)}{/yellow-fg}`;
+            ? theme.dim('scanning\u2026')
+            : theme.size(formatBytes(rootSize));
         const selCount = selected.size > 0
-            ? `   {magenta-fg}selected:{/magenta-fg} ${selected.size}`
+            ? `   ${theme.label('selected:')} ${theme.count(selected.size)}`
             : '';
-        return ` {magenta-fg}{bold}\u25c6 disk-usage{/bold}{/magenta-fg}   ` +
-            `{gray-fg}root:{/gray-fg} ${escapeTag(truncate(root, 80))}   ` +
-            `${sizeText}   {gray-fg}sort:{/gray-fg} ${sortLabel()}` +
+        return ` ${theme.title('\u25c6 disk-usage')}   ` +
+            `${theme.label('root:')} ${theme.path(escapeTag(truncate(root, 80)))}   ` +
+            `${sizeText}   ${theme.label('sort:')} ${theme.value(sortLabel())}` +
             `${selCount}`;
     }
 
@@ -339,17 +341,18 @@ rebuildAndPush(api?.selectedRow()?.id);
     function formatRow(r: Row): string {
         const indent = '  '.repeat(r.depth);
         const expandMarker = r.expandable
-            ? (r.isOpen ? '{cyan-fg}\u25be{/cyan-fg} ' : '{cyan-fg}\u25b8{/cyan-fg} ')
+            ? (r.isOpen ? `${theme.key('\u25be')} ` : `${theme.key('\u25b8')} `)
             : '  ';
-        const select = selected.has(r.id) ? '{magenta-fg}\u2713{/magenta-fg} ' : '  ';
+        const select = selected.has(r.id) ? `${theme.accent('\u2713')} ` : '  ';
         const sizeStr = r.entry.sizeBytes === null
-            ? '{gray-fg}     \u2026{/gray-fg}'
-            : `{yellow-fg}${formatBytes(r.entry.sizeBytes).padStart(10)}{/yellow-fg}`;
+            ? theme.dim('     \u2026')
+            : theme.size(formatBytes(r.entry.sizeBytes).padStart(10));
         const pctStr = r.parentTotal !== null && r.entry.sizeBytes !== null
-            ? `{gray-fg}${formatPct(r.entry.sizeBytes, r.parentTotal)}{/gray-fg}`
-            : '{gray-fg}     -{/gray-fg}';
+            ? theme.dim(formatPct(r.entry.sizeBytes, r.parentTotal))
+            : theme.dim('     -');
         const icon = r.entry.isSymlink ? '\ud83d\udd17' : (r.entry.isDir ? '\ud83d\udcc1' : '\ud83d\udcc4');
-        const name = escapeTag(r.entry.name) + (r.entry.isDir ? '/' : '');
+        const rawName = escapeTag(r.entry.name) + (r.entry.isDir ? '/' : '');
+        const name = r.entry.isDir ? theme.dir(rawName) : theme.value(rawName);
         return `${select}${sizeStr} ${pctStr}  ${indent}${expandMarker}${icon} ${name}`;
     }
 
@@ -362,14 +365,14 @@ rebuildAndPush(api?.selectedRow()?.id);
         const itemsText = e.itemCount === null ? '\u2026' : `${e.itemCount}`;
         const typeText = e.isSymlink ? 'symlink' : (e.isDir ? 'directory' : 'file');
         const errLine = e.sizeError
-            ? `\n {red-fg}scan error:{/red-fg} ${escapeTag(e.sizeError)}`
+            ? `\n ${theme.err('scan error:')} ${escapeTag(e.sizeError)}`
             : '';
-        return ` {cyan-fg}path:{/cyan-fg}    ${escapeTag(e.absPath)}\n` +
-            ` {cyan-fg}type:{/cyan-fg}    ${typeText}\n` +
-            ` {cyan-fg}size:{/cyan-fg}    {yellow-fg}${sizeText}{/yellow-fg}   {gray-fg}({/gray-fg}${pctText}{gray-fg} of parent){/gray-fg}\n` +
-            ` {cyan-fg}items:{/cyan-fg}   ${itemsText}\n` +
-            ` {cyan-fg}mode:{/cyan-fg}    ${formatMode(e.mode)}\n` +
-            ` {cyan-fg}mtime:{/cyan-fg}   ${formatMtime(e.mtimeMs)}` +
+        return ` ${theme.label('path:')}    ${theme.path(escapeTag(e.absPath))}\n` +
+            ` ${theme.label('type:')}    ${theme.value(typeText)}\n` +
+            ` ${theme.label('size:')}    ${theme.size(sizeText)}   ${theme.dim(`(${pctText} of parent)`)}\n` +
+            ` ${theme.label('items:')}   ${theme.count(itemsText)}\n` +
+            ` ${theme.label('mode:')}    ${theme.value(formatMode(e.mode))}\n` +
+            ` ${theme.label('mtime:')}   ${theme.date(formatMtime(e.mtimeMs))}` +
             errLine;
     }
 
@@ -387,25 +390,27 @@ rebuildAndPush(api?.selectedRow()?.id);
         // fullUnicode and duplicate glyphs on scroll).
         const lines = sorted.map((c) => {
             const sz = c.sizeBytes === null
-                ? '{gray-fg}     \u2026{/gray-fg}'
-                : `{yellow-fg}${formatBytes(c.sizeBytes).padStart(10)}{/yellow-fg}`;
+                ? theme.dim('     \u2026')
+                : theme.size(formatBytes(c.sizeBytes).padStart(10));
+            const rawName = escapeTag(sanitizeForBlessed(c.name)) + (c.isDir ? '/' : '');
             const icon = c.isSymlink
-                ? '{magenta-fg}L{/magenta-fg}'
-                : (c.isDir ? '{blue-fg}D{/blue-fg}' : '{green-fg}F{/green-fg}');
-            return ` ${sz}  ${icon} ${escapeTag(sanitizeForBlessed(c.name))}${c.isDir ? '/' : ''}`;
+                ? theme.link('L')
+                : (c.isDir ? theme.dir('D') : theme.file('F'));
+            const name = c.isSymlink ? theme.link(rawName) : (c.isDir ? theme.dir(rawName) : theme.value(rawName));
+            return ` ${sz}  ${icon} ${name}`;
         });
         const more = entries.length > sorted.length
-            ? `\n {gray-fg}\u2026and ${entries.length - sorted.length} more{/gray-fg}`
+            ? `\n ${theme.dim(`\u2026and ${entries.length - sorted.length} more`)}`
             : '';
-        return ` {gray-fg}children of{/gray-fg} ${escapeTag(sanitizeForBlessed(e.name))}/  {gray-fg}(${entries.length}){/gray-fg}\n\n` +
-            (lines.join('\n') || ' {gray-fg}empty{/gray-fg}') +
+        return ` ${theme.dim('children of')} ${theme.dir(escapeTag(sanitizeForBlessed(e.name)) + '/')}  ${theme.dim(`(${entries.length})`)}\n\n` +
+            (lines.join('\n') || ` ${theme.dim('empty')}`) +
             more;
     }
 
     async function paintFilePreviewContent(e: Entry): Promise<string> {
         const cap = 4096;
         if (e.sizeBytes !== null && e.sizeBytes > 200 * 1024) {
-            return ` {gray-fg}file too large to preview ({/gray-fg}${formatBytes(e.sizeBytes)}{gray-fg}){/gray-fg}`;
+            return ` ${theme.dim(`file too large to preview (${formatBytes(e.sizeBytes)})`)}`;
         }
         try {
             const fh = await fs.open(e.absPath, 'r');
@@ -413,15 +418,15 @@ rebuildAndPush(api?.selectedRow()?.id);
                 const buf = Buffer.alloc(cap);
                 const { bytesRead } = await fh.read(buf, 0, cap, 0);
                 let text = buf.subarray(0, bytesRead).toString('utf8');
-                if (/\u0000/.test(text)) return ' {gray-fg}binary file (no preview){/gray-fg}';
+                if (/\u0000/.test(text)) return ` ${theme.dim('binary file (no preview)')}`;
                 text = sanitizeForBlessed(text);
                 if (bytesRead === cap) text += '\n\u2026';
-                return escapeTag(text);
+                return escapeTag(highlightCode(text, e.absPath));
             } finally {
                 await fh.close();
             }
         } catch (err) {
-            return ` {red-fg}preview error:{/red-fg} ${escapeTag((err as Error).message)}`;
+            return ` ${theme.err('preview error:')} ${escapeTag((err as Error).message)}`;
         }
     }
 
@@ -430,18 +435,20 @@ rebuildAndPush(api?.selectedRow()?.id);
         const ranked = sortEntries(top, 'size-desc').slice(0, 10);
         const lines = ranked.map((e, i) => {
             const sz = e.sizeBytes === null
-                ? '{gray-fg}     \u2026{/gray-fg}'
-                : `{yellow-fg}${formatBytes(e.sizeBytes).padStart(10)}{/yellow-fg}`;
+                ? theme.dim('     \u2026')
+                : theme.size(formatBytes(e.sizeBytes).padStart(10));
+            const rawName = escapeTag(sanitizeForBlessed(e.name));
             const icon = e.isSymlink
-                ? '{magenta-fg}L{/magenta-fg}'
-                : (e.isDir ? '{blue-fg}D{/blue-fg}' : '{green-fg}F{/green-fg}');
-            return ` ${(`${i + 1}`).padStart(2)}. ${sz}  ${icon} ${escapeTag(sanitizeForBlessed(e.name))}`;
+                ? theme.link('L')
+                : (e.isDir ? theme.dir('D') : theme.file('F'));
+            const name = e.isSymlink ? theme.link(rawName) : (e.isDir ? theme.dir(rawName) : theme.value(rawName));
+            return ` ${theme.dim((`${i + 1}`).padStart(2) + '.')} ${sz}  ${icon} ${name}`;
         });
         const flightLine = scanInFlight > 0
-            ? `\n {gray-fg}scanning ${scanInFlight} dirs\u2026{/gray-fg}`
+            ? `\n ${theme.dim(`scanning ${scanInFlight} dirs\u2026`)}`
             : '';
-        return ` {gray-fg}top 10 in current root{/gray-fg}\n\n` +
-            (lines.join('\n') || ' {gray-fg}empty{/gray-fg}') +
+        return ` ${theme.section('top 10 in current root')}\n\n` +
+            (lines.join('\n') || ` ${theme.dim('empty')}`) +
             flightLine;
     }
 
@@ -514,9 +521,9 @@ rebuildAndPush(api?.selectedRow()?.id);
         await loadDir(root);
         rebuildAndPush();
         if (failed.length > 0) {
-            a.flashHeader(` {red-fg}deleted ${okCount}, failed ${failed.length}: ${escapeTag(failed[0])}{/red-fg}`);
+            a.flashHeader(` ${theme.err(`deleted ${okCount}, failed ${failed.length}: ${escapeTag(failed[0])}`)}`);
         } else {
-            a.flashHeader(` {green-fg}\u2713 deleted ${okCount} item(s) ({/green-fg}${formatBytes(totalBytes)}{green-fg}){/green-fg}`);
+            a.flashHeader(` ${theme.success(`\u2713 deleted ${okCount} item(s) (${formatBytes(totalBytes)})`)}`);
         }
     }
 
@@ -527,7 +534,7 @@ rebuildAndPush(api?.selectedRow()?.id);
         if (r.entry.isDir) {
             const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
             spawn(cmd, [target], { stdio: 'ignore', detached: true }).unref();
-            a.flashHeader(` {green-fg}\u2713 opened{/green-fg} ${escapeTag(target)}`);
+            a.flashHeader(` ${theme.success('\u2713 opened')} ${theme.path(escapeTag(target))}`);
         } else {
             await runInherit('nvim', [target], a.screen);
         }
@@ -544,12 +551,12 @@ rebuildAndPush(api?.selectedRow()?.id);
         try {
             const st = await fs.stat(expandedPath);
             if (!st.isDirectory()) {
-                a.flashHeader(` {red-fg}not a directory{/red-fg}`);
+                a.flashHeader(` ${theme.err('not a directory')}`);
                 return;
             }
             await setRoot(expandedPath);
         } catch (err) {
-            a.flashHeader(` {red-fg}${escapeTag((err as Error).message)}{/red-fg}`);
+            a.flashHeader(` ${theme.err(escapeTag((err as Error).message))}`);
         }
     }
 
@@ -564,13 +571,13 @@ rebuildAndPush(api?.selectedRow()?.id);
         listWidth: '50%',
         listTags: true,
         keymapText:
-            `{cyan-fg}j/k{/cyan-fg} nav  {cyan-fg}enter{/cyan-fg} descend  ` +
-            `{cyan-fg}-{/cyan-fg} up  {cyan-fg}e/l{/cyan-fg} expand  ` +
-            `{cyan-fg}space{/cyan-fg} select  {cyan-fg}X{/cyan-fg} delete  ` +
-            `{cyan-fg}o{/cyan-fg} open  {cyan-fg}s{/cyan-fg} sort  ` +
-            `{cyan-fg}/{/cyan-fg} filter  {cyan-fg}r{/cyan-fg} refresh  ` +
-            `{cyan-fg}R{/cyan-fg} new root  {cyan-fg}H{/cyan-fg} home  ` +
-            `{cyan-fg}y{/cyan-fg} yank  {cyan-fg}Tab{/cyan-fg} focus  {cyan-fg}q{/cyan-fg} quit`,
+            `${theme.key('j/k')} nav  ${theme.key('enter')} descend  ` +
+            `${theme.key('-')} up  ${theme.key('e/l')} expand  ` +
+            `${theme.key('space')} select  ${theme.key('X')} delete  ` +
+            `${theme.key('o')} open  ${theme.key('s')} sort  ` +
+            `${theme.key('/')} filter  ${theme.key('r')} refresh  ` +
+            `${theme.key('R')} new root  ${theme.key('H')} home  ` +
+            `${theme.key('y')} yank  ${theme.key('Tab')} focus  ${theme.key('q')} quit`,
         initialRows: rows,
         rowKey: (r) => r.id,
         renderListItem: (r) => formatRow(r),
@@ -640,7 +647,7 @@ rebuildAndPush(api?.selectedRow()?.id);
                 handler: (r, a) => {
                     if (r === undefined) return;
                     copyToClipboard(r.entry.absPath);
-                    a.flashHeader(` {green-fg}\u2713 copied{/green-fg} ${escapeTag(r.entry.absPath)}`);
+                    a.flashHeader(` ${theme.success('\u2713 copied')} ${theme.path(escapeTag(r.entry.absPath))}`);
                 },
             },
         ],

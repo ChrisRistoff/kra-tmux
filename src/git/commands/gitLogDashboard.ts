@@ -10,6 +10,7 @@ import {
     createListDetailDashboard,
     modalConfirm,
     pickList,
+    theme,
 } from '@/UI/dashboard';
 import { browseFiles, runInherit } from '@/UI/dashboard/screen';
 import { interactiveCherryPick } from '@/git/commands/cherryPickFlow';
@@ -205,11 +206,11 @@ async function loadCommitFiles(hash: string): Promise<string[]> {
 }
 
 function formatCommitRow(c: Commit, width: number): string {
-    const hash = `{yellow-fg}${c.shortHash}{/yellow-fg}`;
-    const refs = c.refs ? ` {green-fg}(${truncate(c.refs, 24)}){/green-fg}` : '';
-    const date = `{cyan-fg}${pad(c.relDate, 14)}{/cyan-fg}`;
+    const hash = theme.warn(c.shortHash);
+    const refs = c.refs ? ` ${theme.success(`(${truncate(c.refs, 24)})`)}` : '';
+    const date = theme.date(pad(c.relDate, 14));
     const subjMax = Math.max(10, width - 8 - 14 - (c.refs ? 26 : 0) - 4);
-    const subject = `{white-fg}${escape(truncate(c.subject, subjMax))}{/white-fg}`;
+    const subject = theme.value(escape(truncate(c.subject, subjMax)));
 
     return `${hash} ${date} ${subject}${refs}`;
 }
@@ -230,15 +231,34 @@ function escape(s: string): string {
     return s.replace(/[{}]/g, (m) => (m === '{' ? '{open}' : '{close}'));
 }
 
+function colorizeStat(s: string): string {
+    return s.split('\n').map((line) => {
+        const summary = line.match(/^(\s*)(\d+ files? changed)(.*)$/);
+        if (summary) {
+            const rest = summary[3]
+                .replace(/(\d+) insertions?\(\+\)/g, (_m, n) => `${theme.success(n + ' insertions(+)')}`)
+                .replace(/(\d+) deletions?\(-\)/g, (_m, n) => `${theme.err(n + ' deletions(-)')}`);
+            return `${summary[1]}${theme.label(summary[2])}${rest}`;
+        }
+        const fileLine = line.match(/^(\s*)(\S.*?)(\s*\|\s*)(\d+|Bin[^+\-]*)(\s*)([+\-]*)\s*$/);
+        if (fileLine) {
+            const [, lead, file, sep, count, gap, bar] = fileLine;
+            const coloredBar = bar.replace(/[+\-]/g, (c) => c === '+' ? theme.success('+') : theme.err('-'));
+            return `${lead}${theme.path(file)}${theme.dim(sep)}${theme.count(count)}${gap}${coloredBar}`;
+        }
+        return line;
+    }).join('\n');
+}
+
 function renderDetails(c: Commit): string {
-    const refs = c.refs ? `{green-fg}${escape(c.refs)}{/green-fg}` : '{gray-fg}(no refs){/gray-fg}';
+    const refs = c.refs ? theme.success(escape(c.refs)) : theme.dim('(no refs)');
     const lines = [
-        `{yellow-fg}{bold}commit{/bold}{/yellow-fg} ${c.hash}`,
-        `{cyan-fg}author{/cyan-fg}  ${escape(c.author)} {gray-fg}<${escape(c.email)}>{/gray-fg}`,
-        `{cyan-fg}date{/cyan-fg}    ${escape(c.isoDate)}  {gray-fg}(${escape(c.relDate)}){/gray-fg}`,
-        `{cyan-fg}refs{/cyan-fg}    ${refs}`,
+        `${theme.warn('{bold}commit{/bold}')} ${theme.warn(c.hash)}`,
+        `${theme.label('author')}  ${theme.success(escape(c.author))} ${theme.dim(`<${escape(c.email)}>`)}`,
+        `${theme.label('date')}    ${theme.date(escape(c.isoDate))}  ${theme.dim(`(${escape(c.relDate)})`)}`,
+        `${theme.label('refs')}    ${refs}`,
         '',
-        `{white-fg}{bold}${escape(c.subject)}{/bold}{/white-fg}`,
+        `{bold}${theme.value(escape(c.subject))}{/bold}`,
     ];
     if (c.body) {
         lines.push('');
@@ -249,7 +269,7 @@ function renderDetails(c: Commit): string {
 }
 
 function renderGraph(raw: string, currentShort: string): { content: string; matchLine: number } {
-    if (!raw.trim()) return { content: '{gray-fg}(empty graph){/gray-fg}', matchLine: -1 };
+    if (!raw.trim()) return { content: theme.dim('(empty graph)'), matchLine: -1 };
     const railSwap = (s: string): string =>
         s
             .replace(/\*/g, '\u0001')
@@ -294,13 +314,13 @@ function renderGraph(raw: string, currentShort: string): { content: string; matc
             const age = fields[3] ?? '';
 
             const railsOut = colorRails(railSwap(rails));
-            const hashOut = `{yellow-fg}{bold}${escape(hash)}{/bold}{/yellow-fg}`;
+            const hashOut = theme.warn(`{bold}${escape(hash)}{/bold}`);
             const refsOut = refsRaw
-                ? ` {green-fg}${escape(refsRaw)}{/green-fg}`
+                ? ` ${theme.success(escape(refsRaw))}`
                 : '';
-            const subjOut = ` {white-fg}${escape(truncate(subject, 80))}{/white-fg}`;
+            const subjOut = ` ${theme.value(escape(truncate(subject, 80)))}`;
             const metaOut = author
-                ? ` {gray-fg}· ${escape(author)}, ${escape(age)}{/gray-fg}`
+                ? ` ${theme.dim(`· ${escape(author)}, ${escape(age)}`)}`
                 : '';
             const content = `${hashOut}${refsOut}${subjOut}${metaOut}`;
 
@@ -308,7 +328,7 @@ function renderGraph(raw: string, currentShort: string): { content: string; matc
                 if (matchLine < 0) matchLine = idx;
                 const stripped = `${hash}${refsRaw ? ' ' + refsRaw : ''} ${truncate(subject, 80)}${author ? ' · ' + author + ', ' + age : ''}`;
 
-                return `${railsOut}{yellow-bg}{black-fg}${escape(stripped)}{/black-fg}{/yellow-bg}`;
+                return `${railsOut}${theme.hl(escape(stripped))}`;
             }
 
             return `${railsOut}${content}`;
@@ -388,15 +408,15 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
     function headerContent(): string {
         const head: Commit | undefined = commits.length > 0 ? commits[0] : undefined;
         const headPart = head
-            ? `   {cyan-fg}HEAD{/cyan-fg} {yellow-fg}${head.shortHash}{/yellow-fg} {gray-fg}${escape(truncate(head.subject, 40))}{/gray-fg}`
+            ? `   ${theme.label('HEAD')} ${theme.warn(head.shortHash)} ${theme.dim(escape(truncate(head.subject, 40)))}`
             : '';
         const loadingPart = loading
-            ? `   {yellow-fg}\u25dc loading\u2026{/yellow-fg}`
+            ? `   ${theme.warn('\u25dc loading\u2026')}`
             : '';
-        return ` {magenta-fg}{bold}\u25c6 git log{/bold}{/magenta-fg}` +
-            `   {cyan-fg}branch{/cyan-fg} {yellow-fg}${escape(branch)}{/yellow-fg}` +
-            `   {cyan-fg}repo{/cyan-fg} {white-fg}${escape(topLevel)}{/white-fg}` +
-            `   {cyan-fg}commits{/cyan-fg} {yellow-fg}${commits.length}{/yellow-fg}` +
+        return ` ${theme.title('\u25c6 git log')}` +
+            `   ${theme.label('branch')} ${theme.warn(escape(branch))}` +
+            `   ${theme.label('repo')} ${theme.path(escape(topLevel))}` +
+            `   ${theme.label('commits')} ${theme.count(commits.length)}` +
             headPart +
             loadingPart;
     }
@@ -415,7 +435,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             return out;
         }).catch((e: Error) => {
             graphPending.delete(short);
-            return { content: `{red-fg}Failed to load graph:{/red-fg} ${escape(e.message)}`, matchLine: -1 };
+            return { content: `${theme.err('Failed to load graph:')} ${escape(e.message)}`, matchLine: -1 };
         });
         graphPending.set(short, p);
         return p;
@@ -437,13 +457,13 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         const existing = statPending.get(hash);
         if (existing) return existing;
         const p = loadStat(hash).then((out) => {
-            const formatted = escape(out);
+            const formatted = colorizeStat(escape(out));
             statCache.set(hash, formatted);
             statPending.delete(hash);
             return formatted;
         }).catch((e: Error) => {
             statPending.delete(hash);
-            return `{red-fg}Failed:{/red-fg} ${escape(e.message)}`;
+            return `${theme.err('Failed:')} ${escape(e.message)}`;
         });
         statPending.set(hash, p);
         return p;
@@ -476,7 +496,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
     async function browseCommitFiles(c: Commit, screen: blessed.Widgets.Screen, a: ListDetailDashboardApi<Commit>): Promise<void> {
         const files = await loadCommitFiles(c.hash);
         if (files.length === 0) {
-            a.flashHeader(' {green-fg}no files in commit{/green-fg}');
+            a.flashHeader(` ${theme.success('no files in commit')}`);
             return;
         }
         await browseFiles(screen, {
@@ -499,16 +519,16 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
 
     async function abortCherryPick(a: ListDetailDashboardApi<Commit>): Promise<void> {
         if (!(await isCherryPickInProgress())) {
-            a.flashHeader(' {green-fg}no cherry-pick in progress{/green-fg}');
+            a.flashHeader(` ${theme.success('no cherry-pick in progress')}`);
             return;
         }
         const ok = await modalConfirm(a.screen, 'Abort cherry-pick', 'Abort the in-progress cherry-pick and restore HEAD?');
         if (!ok) return;
         try {
             await bash.execCommand('git cherry-pick --abort');
-            a.flashHeader(' {green-fg}\u2713 cherry-pick aborted{/green-fg}');
+            a.flashHeader(` ${theme.success('\u2713 cherry-pick aborted')}`);
         } catch (e) {
-            a.flashHeader(` {red-fg}\u2717 abort failed: ${(e as Error).message.split('\n')[0]}{/red-fg}`);
+            a.flashHeader(` ${theme.err(`\u2717 abort failed: ${(e as Error).message.split('\n')[0]}`)}`);
         }
     }
 
@@ -544,7 +564,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         loading = false;
         if (api) {
             api.refreshHeader();
-            api.flashHeader(` {red-fg}Failed to load commits: ${escape(e.message)}{/red-fg}`, 4000);
+            api.flashHeader(` ${theme.err(`Failed to load commits: ${escape(e.message)}`)}`, 4000);
         }
     });
 
@@ -556,15 +576,15 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         listWidth: '40%',
         listTags: true,
         keymapText: () =>
-            `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}[ ]{/cyan-fg} \u00b110   {cyan-fg}{ }{/cyan-fg} \u00b1100   ` +
-            `{cyan-fg}enter{/cyan-fg} files in commit   ` +
-            `{cyan-fg}d{/cyan-fg} full diff   ` +
-            `{cyan-fg}c{/cyan-fg} cherry-pick   ` +
-            `{cyan-fg}A{/cyan-fg} abort cherry-pick   ` +
-            `{cyan-fg}B{/cyan-fg} scope branch   ` +
-            `{cyan-fg}s{/cyan-fg} / {cyan-fg}/{/cyan-fg} search   ` +
-            `{cyan-fg}y{/cyan-fg} yank hash   ` +
-            `{cyan-fg}q{/cyan-fg} quit`,
+            `${theme.key('j/k')} nav   ${theme.key('[ ]')} \u00b110   ${theme.key('{ }')} \u00b1100   ` +
+            `${theme.key('enter')} files in commit   ` +
+            `${theme.key('d')} full diff   ` +
+            `${theme.key('c')} cherry-pick   ` +
+            `${theme.key('A')} abort cherry-pick   ` +
+            `${theme.key('B')} scope branch   ` +
+            `${theme.key('s')} / ${theme.key('/')} search   ` +
+            `${theme.key('y')} yank hash   ` +
+            `${theme.key('q')} quit`,
         initialRows: [],
         rowKey: (c) => c.hash,
         renderListItem: (c, _i, _sel) => {
@@ -592,7 +612,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             {
                 label: 'files changed (this commit)',
                 focusName: 'files',
-                initialContent: '{gray-fg}Loading\u2026{/gray-fg}',
+                initialContent: theme.dim('Loading\u2026'),
                 paint: (c, ctx) => {
                     const cached = statCache.get(c.hash);
                     if (cached !== undefined) return cached;
@@ -600,7 +620,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                         if (ctx.isStale()) return;
                         ctx.api.repaintDetails();
                     });
-                    return '{gray-fg}Loading\u2026{/gray-fg}';
+                    return theme.dim('Loading\u2026');
                 },
             },
             {
@@ -620,7 +640,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                         if (ctx.isStale()) return;
                         ctx.api.repaintDetails();
                     });
-                    return '{gray-fg}Loading graph\u2026{/gray-fg}';
+                    return theme.dim('Loading graph\u2026');
                 },
             },
         ],
@@ -637,7 +657,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                 handler: (c, a) => {
                     if (c === undefined) return;
                     copyHash(c);
-                    a.flashHeader(` {green-fg}\u2713 copied ${c.shortHash}{/green-fg}`);
+                    a.flashHeader(` ${theme.success(`\u2713 copied ${c.shortHash}`)}`);
                 },
             },
             {
@@ -700,8 +720,8 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             items,
             itemsUseTags: true,
             renderItem: (item) => item === ALL
-                ? '{magenta-fg}<all branches>{/magenta-fg}'
-                : `{cyan-fg}${item}{/cyan-fg}`,
+                ? theme.accent('<all branches>')
+                : theme.label(item),
             showDetailsPanel: false,
         });
         if (result.value !== null) {
