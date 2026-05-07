@@ -412,8 +412,7 @@ kra sys
 ### 🛠️ **Available Commands**
 | Command            | Description                                                                           |
 | ------------------ | ------------------------------------------------------------------------------------- |
-| **grep-file-remove** 🗑️ | **Smart file deletion** with grep-based search and confirmation prompts.                                     |
-| **grep-dir-remove** 📁  | **Directory cleanup** with intelligent search and recursive removal options.                                        |
+| **grep** 🔍             | **Unified search dashboard** — find files/dirs by name or grep content, preview, open in Neovim, batch-delete.     |
 | **scripts** 🧪          | **Custom script execution** system (experimental) - Run user-defined automation scripts.                                |
 | **process-manager** 📊  | **Live ps dashboard** - search, sort by CPU/MEM/PID, view per-process details, send SIGTERM/SIGKILL.                    |
 
@@ -421,15 +420,11 @@ kra sys
 
 ### **Demo Previews** - *Click to expand*
 <details>
-<summary>🗑️ <strong>kra sys grep-file-remove</strong> - Intelligent file cleanup</summary>
+<summary>🔍 <strong>kra sys grep</strong> - Unified search dashboard</summary>
 
-![grep file remove](docs-assets/sys/sys-grep-file-remove.gif)
-</details>
+Three search modes: `f` (files by name), `d` (directories by name), `c` (content grep inside files). Results appear in a navigable list with instant preview and metadata panels.
 
-<details>
-<summary>📁 <strong>kra sys grep-dir-remove</strong> - Smart directory management</summary>
-
-![grep dir remove](docs-assets/sys/sys-grep-dir-remove.gif)
+Keybindings: `f`/`d`/`c` switch mode · `enter` search (in search box) or open in Neovim (on a result) · `x` delete with confirmation · `space` toggle batch-select · `X` delete all selected · `y` copy path · `s`/`/` focus search · `Tab` cycle panels · `q` quit.
 </details>
 
 <details>

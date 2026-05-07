@@ -16,9 +16,7 @@ export const sysAscii = `
         +--------------------+----------------------------------------------------------------------------------------------------------------------+
         | Command            | Description                                                                                                          |
         +--------------------+----------------------------------------------------------------------------------------------------------------------+
-        | grep-file-remove   | 🗑️  Search for matching files, review the results, and delete only the ones you choose.                             |
-        |--------------------|----------------------------------------------------------------------------------------------------------------------|
-        | grep-dir-remove    | 📁  Search for matching directories and remove selected folders interactively.                                       |
+        | grep               | 🔍  Dashboard: find files/dirs by name or grep content, preview, open in Neovim, batch-delete.                      |
         |--------------------|----------------------------------------------------------------------------------------------------------------------|
         | scripts            | 🧪  Browse repo automation scripts and run the selected script from the shared picker flow.                          |
         |--------------------|----------------------------------------------------------------------------------------------------------------------|
