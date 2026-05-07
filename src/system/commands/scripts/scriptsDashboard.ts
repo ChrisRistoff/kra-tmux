@@ -7,8 +7,11 @@ import { filterGitKeep } from '@/utils/common';
 import {
     createListDetailDashboard,
     escTag,
+    highlightCode,
     modalConfirm,
     modalText,
+    sanitizeForBlessed,
+    theme,
 } from '@/UI/dashboard';
 import { runInherit } from '@/UI/dashboard/screen';
 import { makeExecutableIfNoPermissions } from '@/system/utils/fileUtils';
@@ -34,10 +37,10 @@ async function loadScripts(): Promise<ScriptEntry[]> {
 async function loadPreview(absPath: string): Promise<string> {
     try {
         const { stdout } = await execCommand(`head -n 100 ${JSON.stringify(absPath)} 2>/dev/null`);
-        if (!stdout.trim()) return '{gray-fg}(empty script){/gray-fg}';
-        return escTag(stdout);
+        if (!stdout.trim()) return theme.dim('(empty script)');
+        return escTag(highlightCode(sanitizeForBlessed(stdout), absPath));
     } catch {
-        return '{red-fg}(could not read script){/red-fg}';
+        return theme.err('(could not read script)');
     }
 }
 
@@ -51,21 +54,21 @@ async function loadMeta(entry: ScriptEntry): Promise<string> {
         const modified = lsOut.split(/\s+/).slice(5, 8).join(' ') || '?';
         const size = lsOut.split(/\s+/)[4] ?? '?';
         return (
-            `{cyan-fg}name    {/cyan-fg}${escTag(entry.name)}\n` +
-            `{cyan-fg}path    {/cyan-fg}${escTag(entry.absPath)}\n` +
-            `{cyan-fg}size    {/cyan-fg}${size} bytes\n` +
-            `{cyan-fg}lines   {/cyan-fg}${lineCount}\n` +
-            `{cyan-fg}modified{/cyan-fg}${modified}\n\n` +
-            `{white-fg}${escTag(lsOut)}{/white-fg}`
+            `${theme.label('name    ')}${theme.value(escTag(entry.name))}\n` +
+            `${theme.label('path    ')}${theme.path(escTag(entry.absPath))}\n` +
+            `${theme.label('size    ')}${theme.size(`${size} bytes`)}\n` +
+            `${theme.label('lines   ')}${theme.count(lineCount)}\n` +
+            `${theme.label('modified')} ${theme.date(modified)}\n\n` +
+            `${theme.dim(escTag(lsOut))}`
         );
     } catch {
-        return `{cyan-fg}name{/cyan-fg}  ${escTag(entry.name)}`;
+        return `${theme.label('name')}  ${theme.value(escTag(entry.name))}`;
     }
 }
 
 function renderRow(entry: ScriptEntry, isSelected: boolean): string {
-    const marker = isSelected ? '{yellow-fg}▶{/yellow-fg} ' : '  ';
-    return `${marker}{green-fg}📜{/green-fg} ${escTag(entry.name)}`;
+    const marker = isSelected ? `${theme.selected('▶')} ` : '  ';
+    return `${marker}${theme.success('📜')} ${theme.value(escTag(entry.name))}`;
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -83,10 +86,7 @@ export async function openScriptsDashboard(): Promise<void> {
         listLabel: 'scripts',
         listFocusName: 'scripts',
         listWidth: '42%',
-        headerContent: () => {
-            const countTag = `{cyan-fg}scripts{/cyan-fg} {yellow-fg}${scripts.length}{/yellow-fg}`;
-            return ` ${countTag}`;
-        },
+        headerContent: () => ` ${theme.label('scripts')} ${theme.count(scripts.length)}`,
         filter: {
             label: 'filter',
             mode: 'live',
@@ -118,18 +118,18 @@ export async function openScriptsDashboard(): Promise<void> {
             {
                 label: 'output',
                 focusName: 'output',
-                initialContent: '{gray-fg}(no run yet — press enter to run){/gray-fg}',
+                initialContent: theme.dim('(no run yet — press enter to run)'),
                 // selection changes don't regenerate this panel; actions write into it
                 paint: () => null,
             },
         ],
         keymapText: () =>
-            `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}/{/cyan-fg} filter   ` +
-            `{cyan-fg}enter{/cyan-fg} run   {cyan-fg}x{/cyan-fg} interactive   ` +
-            `{cyan-fg}e{/cyan-fg} edit   {cyan-fg}n{/cyan-fg} new   ` +
-            `{cyan-fg}D{/cyan-fg} delete   {cyan-fg}y{/cyan-fg} yank path   ` +
-            `{cyan-fg}r{/cyan-fg} reload   ` +
-            `{cyan-fg}Tab{/cyan-fg} focus   {cyan-fg}q{/cyan-fg} quit`,
+            `${theme.key('j/k')} nav   ${theme.key('/')} filter   ` +
+            `${theme.key('enter')} run   ${theme.key('x')} interactive   ` +
+            `${theme.key('e')} edit   ${theme.key('n')} new   ` +
+            `${theme.key('D')} delete   ${theme.key('y')} yank path   ` +
+            `${theme.key('r')} reload   ` +
+            `${theme.key('Tab')} focus   ${theme.key('q')} quit`,
         actions: [
             {
                 keys: 'enter',
@@ -137,20 +137,20 @@ export async function openScriptsDashboard(): Promise<void> {
                     if (!entry) return;
                     await makeExecutableIfNoPermissions(entry.absPath);
                     const outputPanel = api.shell.detailPanels[2];
-                    outputPanel.setContent(`{gray-fg}Running {/gray-fg}{yellow-fg}${escTag(entry.name)}{/yellow-fg}{gray-fg}…{/gray-fg}`);
+                    outputPanel.setContent(`${theme.dim('Running ')}${theme.warn(escTag(entry.name))}${theme.dim('…')}`);
                     outputPanel.focus();
                     api.screen.render();
                     try {
                         const { stdout, stderr } = await execCommand(`sh ${JSON.stringify(entry.absPath)} 2>&1`);
                         const combined = (stdout + stderr).trim();
                         outputPanel.setContent(
-                            `{cyan-fg}▶ ${escTag(entry.name)}{/cyan-fg}\n\n` +
-                            (combined ? escTag(combined) : '{gray-fg}(no output){/gray-fg}'),
+                            `${theme.title(`▶ ${escTag(entry.name)}`)}\n\n` +
+                            (combined ? escTag(combined) : theme.dim('(no output)')),
                         );
                         outputPanel.setScrollPerc(100);
                     } catch (err) {
                         outputPanel.setContent(
-                            `{red-fg}Error running ${escTag(entry.name)}:{/red-fg}\n\n` +
+                            `${theme.err(`Error running ${escTag(entry.name)}:`)}\n\n` +
                             escTag((err as Error).message),
                         );
                     }
@@ -163,7 +163,7 @@ export async function openScriptsDashboard(): Promise<void> {
                     if (!entry) return;
                     await makeExecutableIfNoPermissions(entry.absPath);
                     const outputPanel = api.shell.detailPanels[2];
-                    outputPanel.setContent('{gray-fg}(interactive run — output not captured){/gray-fg}');
+                    outputPanel.setContent(theme.dim('(interactive run — output not captured)'));
                     await runInherit('sh', [entry.absPath], api.screen);
                     api.screen.render();
                 },

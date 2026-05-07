@@ -11,6 +11,7 @@ import {
     createDashboardScreen,
     createDashboardShell,
     escTag,
+    theme,
 } from '@/UI/dashboard';
 import { browseFiles, runInherit } from '@/UI/dashboard/screen';
 import type * as blessed from 'blessed';
@@ -146,42 +147,42 @@ function trunc(s: string, n: number): string {
 }
 
 function renderRepoRow(r: RepoInfo): string {
-    const icon = r.isDirty ? '{yellow-fg}◉{/yellow-fg}' : '{green-fg}●{/green-fg}';
-    const name = `{bold}${escTag(trunc(r.name, 24))}{/bold}`;
-    const branch = `{gray-fg}${escTag(trunc(r.branch, 22))}{/gray-fg}`;
+    const icon = r.isDirty ? theme.warn('◉') : theme.success('●');
+    const name = `{bold}${theme.value(escTag(trunc(r.name, 24)))}{/bold}`;
+    const branch = theme.dim(escTag(trunc(r.branch, 22)));
     const dirty = r.isDirty
-        ? ` {yellow-fg}[${r.modifiedCount}M ${r.untrackedCount}U]{/yellow-fg}`
-        : ' {green-fg}✓{/green-fg}';
+        ? ` ${theme.warn(`[${r.modifiedCount}M ${r.untrackedCount}U]`)}`
+        : ` ${theme.success('✓')}`;
     const sync = r.ahead > 0 || r.behind > 0
-        ? ` {cyan-fg}↑${r.ahead}↓${r.behind}{/cyan-fg}`
+        ? ` ${theme.label(`↑${r.ahead}↓${r.behind}`)}`
         : '';
-    const stash = r.stashCount > 0 ? ` {magenta-fg}⚑${r.stashCount}{/magenta-fg}` : '';
+    const stash = r.stashCount > 0 ? ` ${theme.accent(`⚑${r.stashCount}`)}` : '';
     return `${icon} ${name} ${branch}${dirty}${sync}${stash}`;
 }
 
 function renderRepoDetails(r: RepoInfo): string {
     const syncLine = r.ahead > 0 || r.behind > 0
-        ? `  remote:     {cyan-fg}↑${r.ahead}{/cyan-fg} ahead  {cyan-fg}↓${r.behind}{/cyan-fg} behind`
-        : '  remote:     {gray-fg}up to date{/gray-fg}';
+        ? `  ${theme.label('remote:    ')} ${theme.accent(`↑${r.ahead}`)} ahead  ${theme.accent(`↓${r.behind}`)} behind`
+        : `  ${theme.label('remote:    ')} ${theme.dim('up to date')}`;
     const stashLine = r.stashCount > 0
-        ? `  stashes:    {magenta-fg}${r.stashCount}{/magenta-fg}`
+        ? `  ${theme.label('stashes:   ')} ${theme.accent(String(r.stashCount))}`
         : '';
 
     return [
-        `{cyan-fg}name{/cyan-fg}       {bold}${escTag(r.name)}{/bold}`,
-        `{cyan-fg}path{/cyan-fg}       {white-fg}${escTag(r.fullPath)}{/white-fg}`,
-        `{cyan-fg}branch{/cyan-fg}     {white-fg}${escTag(r.branch)}{/white-fg}`,
+        `${theme.label('name      ')} {bold}${theme.value(escTag(r.name))}{/bold}`,
+        `${theme.label('path      ')} ${theme.path(escTag(r.fullPath))}`,
+        `${theme.label('branch    ')} ${theme.value(escTag(r.branch))}`,
         '',
-        `{cyan-fg}status{/cyan-fg}`,
-        `  workspace:  ${r.isDirty ? '{yellow-fg}dirty{/yellow-fg}' : '{green-fg}clean{/green-fg}'}`,
-        `  modified:   {yellow-fg}${r.modifiedCount}{/yellow-fg}`,
-        `  untracked:  {magenta-fg}${r.untrackedCount}{/magenta-fg}`,
+        theme.section('status'),
+        `  ${theme.label('workspace: ')} ${r.isDirty ? theme.warn('dirty') : theme.success('clean')}`,
+        `  ${theme.label('modified:  ')} ${theme.count(r.modifiedCount)}`,
+        `  ${theme.label('untracked: ')} ${theme.count(r.untrackedCount)}`,
         syncLine,
         ...(stashLine ? [stashLine] : []),
         '',
-        `{cyan-fg}last commit{/cyan-fg}`,
-        `  {yellow-fg}${escTag(r.lastCommitHash || '—')}{/yellow-fg}  {gray-fg}${escTag(r.lastCommitDate || '')}{/gray-fg}`,
-        `  ${escTag(r.lastCommitSubject || '(no commits)')}`,
+        theme.section('last commit'),
+        `  ${theme.warn(escTag(r.lastCommitHash || '—'))}  ${theme.date(escTag(r.lastCommitDate || ''))}`,
+        `  ${theme.value(escTag(r.lastCommitSubject || '(no commits)'))}`,
     ].join('\n');
 }
 
@@ -190,14 +191,14 @@ async function loadRecentLog(r: RepoInfo): Promise<string> {
         const { stdout } = await bash.execCommand(
             `git -C ${JSON.stringify(r.fullPath)} log --oneline --decorate -20`,
         );
-        if (!stdout.trim()) return '{gray-fg}(no commits){/gray-fg}';
+        if (!stdout.trim()) return theme.dim('(no commits)');
         return stdout.trim().split('\n').map((line) => {
             const m = line.match(/^([a-f0-9]+)\s+(.*)$/);
             if (!m) return escTag(line);
-            return `{yellow-fg}${m[1]}{/yellow-fg} ${escTag(m[2] ?? '')}`;
+            return `${theme.warn(m[1])} ${theme.value(escTag(m[2] ?? ''))}`;
         }).join('\n');
     } catch (e) {
-        return `{red-fg}Error:{/red-fg} ${escTag((e as Error).message)}`;
+        return `${theme.err('Error:')} ${escTag((e as Error).message)}`;
     }
 }
 
@@ -206,9 +207,9 @@ async function loadGitStatus(r: RepoInfo): Promise<string> {
         const { stdout } = await bash.execCommand(
             `git -C ${JSON.stringify(r.fullPath)} status`,
         );
-        return escTag(stdout.trim()) || '{gray-fg}(clean){/gray-fg}';
+        return escTag(stdout.trim()) || theme.success('(clean)');
     } catch (e) {
-        return `{red-fg}Error:{/red-fg} ${escTag((e as Error).message)}`;
+        return `${theme.err('Error:')} ${escTag((e as Error).message)}`;
     }
 }
 
@@ -285,17 +286,17 @@ export async function scout(): Promise<void> {
             { label: 'git status', focusName: 'status' },
         ],
         keymapText: () =>
-            `{cyan-fg}j/k{/cyan-fg} nav   ` +
-            `{cyan-fg}enter{/cyan-fg} nvim   ` +
-            `{cyan-fg}l{/cyan-fg} git log   ` +
-            `{cyan-fg}d{/cyan-fg} diff files   ` +
-            `{cyan-fg}f{/cyan-fg} fetch   ` +
-            `{cyan-fg}p{/cyan-fg} pull   ` +
-            `{cyan-fg}D{/cyan-fg} dirty filter   ` +
-            `{cyan-fg}r{/cyan-fg} refresh   ` +
-            `{cyan-fg}s{/cyan-fg}/{cyan-fg}/{/cyan-fg} search   ` +
-            `{cyan-fg}y{/cyan-fg} copy path   ` +
-            `{cyan-fg}q{/cyan-fg} quit`,
+            `${theme.key('j/k')} nav   ` +
+            `${theme.key('enter')} nvim   ` +
+            `${theme.key('l')} git log   ` +
+            `${theme.key('d')} diff files   ` +
+            `${theme.key('f')} fetch   ` +
+            `${theme.key('p')} pull   ` +
+            `${theme.key('D')} dirty filter   ` +
+            `${theme.key('r')} refresh   ` +
+            `${theme.key('s')}/${theme.key('/')} search   ` +
+            `${theme.key('y')} copy path   ` +
+            `${theme.key('q')} quit`,
     });
 
     const { header, list, ring } = shell;
@@ -307,13 +308,13 @@ export async function scout(): Promise<void> {
     function setHeader(): void {
         const dirtyCount = allRepos.filter((r) => r.isDirty).length;
         const syncCount = allRepos.filter((r) => r.ahead > 0 || r.behind > 0).length;
-        const filterTag = showDirtyOnly ? '  {yellow-fg}[dirty only]{/yellow-fg}' : '';
+        const filterTag = showDirtyOnly ? `  ${theme.warn('[dirty only]')}` : '';
         header.setContent(
-            ` {magenta-fg}{bold}◆ git scout{/bold}{/magenta-fg}` +
-            `   {cyan-fg}root{/cyan-fg} {white-fg}${escTag(root)}{/white-fg}` +
-            `   {cyan-fg}repos{/cyan-fg} {yellow-fg}${allRepos.length}{/yellow-fg}` +
-            `   {cyan-fg}dirty{/cyan-fg} {yellow-fg}${dirtyCount}{/yellow-fg}` +
-            `   {cyan-fg}out of sync{/cyan-fg} {cyan-fg}${syncCount}{/cyan-fg}` +
+            ` ${theme.title('◆ git scout')}` +
+            `   ${theme.label('root')} ${theme.path(escTag(root))}` +
+            `   ${theme.label('repos')} ${theme.count(allRepos.length)}` +
+            `   ${theme.label('dirty')} ${theme.count(dirtyCount)}` +
+            `   ${theme.label('out of sync')} ${theme.accent(String(syncCount))}` +
             filterTag,
         );
     }
@@ -339,7 +340,7 @@ export async function scout(): Promise<void> {
             list.select(0);
             void selectIndex(0);
         } else {
-            details.setContent('{gray-fg}no matches{/gray-fg}');
+            details.setContent(theme.dim('no matches'));
             logPanel.setContent('');
             statusPanel.setContent('');
         }
@@ -372,7 +373,7 @@ export async function scout(): Promise<void> {
             logPanel.setContent(cachedLog);
             logPanel.setScrollPerc(0);
         } else {
-            logPanel.setContent('{gray-fg}Loading…{/gray-fg}');
+            logPanel.setContent(theme.dim('Loading…'));
         }
 
         // Load status panel
@@ -381,7 +382,7 @@ export async function scout(): Promise<void> {
             statusPanel.setContent(cachedStatus);
             statusPanel.setScrollPerc(0);
         } else {
-            statusPanel.setContent('{gray-fg}Loading…{/gray-fg}');
+            statusPanel.setContent(theme.dim('Loading…'));
         }
 
         screen.render();

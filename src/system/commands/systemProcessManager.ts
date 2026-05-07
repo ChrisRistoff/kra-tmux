@@ -6,6 +6,7 @@ import {
     createDashboardScreen,
     createDashboardShell,
     modalConfirm,
+    theme,
 } from '@/UI/dashboard';
 
 interface ProcessInfo {
@@ -120,7 +121,9 @@ function renderBar(percent: number, width = 30): string {
     const num = Math.min(100, Math.max(0, percent));
     const filled = Math.round((num / 100) * width);
 
-    return `[${'█'.repeat(filled)}${'░'.repeat(width - filled)}]`;
+    const color = num >= 90 ? 'red-fg' : num >= 70 ? 'yellow-fg' : 'green-fg';
+
+    return `[{${color}}${'█'.repeat(filled)}{/${color}}{gray-fg}${'░'.repeat(width - filled)}{/gray-fg}]`;
 }
 
 
@@ -185,12 +188,12 @@ export async function openProcessManager(): Promise<void> {
         function renderListItems(): void {
             const items = displayed.map((p) => {
                 return (
-                    `{cyan-fg}${p.pid.toString().padStart(6)}{/cyan-fg} ` +
-                    `{gray-fg}${p.user.padEnd(10)}{/gray-fg} ` +
-                    `{yellow-fg}${p.cpu.padStart(5)}{/yellow-fg} ` +
-                    `{yellow-fg}${p.mem.padStart(5)}{/yellow-fg} ` +
-                    `{gray-fg}${p.started.padEnd(8)} ${p.time.padEnd(10)}{/gray-fg} ` +
-                    `${truncate(p.command, 60)}`
+                    `${theme.count(p.pid.toString().padStart(6))} ` +
+                    `${theme.dim(p.user.padEnd(10))} ` +
+                    `${theme.warn(p.cpu.padStart(5))} ` +
+                    `${theme.warn(p.mem.padStart(5))} ` +
+                    `${theme.date(p.started.padEnd(8) + ' ' + p.time.padEnd(10))} ` +
+                    `${theme.path(escapeTag(truncate(p.command, 60)))}`
                 );
             });
             list.setItems(items);
@@ -261,23 +264,24 @@ export async function openProcessManager(): Promise<void> {
             if (currentIdx !== i) return;
             const p = displayed[i];
             if (p === undefined) return;
+            const lab = (s: string): string => theme.label(s);
             const detailText =
-                `PID:            ${p.pid}\n` +
-                `Parent PID:     ${p.ppid}\n` +
-                `Process Group:  ${p.pgid}   (terminal fg pgid: ${p.tpgid})\n` +
-                `Session:        ${p.sess}\n` +
-                `User:           ${p.user} (uid ${p.uid}, gid ${p.gid})\n` +
-                `State:          ${p.state}\n` +
-                `TTY:            ${p.tty}\n` +
-                `Priority:       ${p.pri} (nice ${p.nice})\n` +
-                `CPU:            ${p.cpu}%\n` +
-                `Memory:         ${p.mem}%   RSS ${kbFmt(p.rss)}   VSZ ${kbFmt(p.vsz)}\n` +
-                `Started:        ${p.lstart}\n` +
-                `Elapsed Time:   ${p.etime}\n` +
-                `CPU Time:       ${p.time}\n` +
+                `${lab('PID:')}            ${theme.count(p.pid)}\n` +
+                `${lab('Parent PID:')}     ${theme.count(p.ppid)}\n` +
+                `${lab('Process Group:')}  ${theme.count(p.pgid)}   ${theme.dim('(terminal fg pgid: ' + p.tpgid + ')')}\n` +
+                `${lab('Session:')}        ${theme.count(p.sess)}\n` +
+                `${lab('User:')}           ${theme.value(p.user)} ${theme.dim('(uid ' + p.uid + ', gid ' + p.gid + ')')}\n` +
+                `${lab('State:')}          ${theme.value(p.state)}\n` +
+                `${lab('TTY:')}            ${theme.value(p.tty)}\n` +
+                `${lab('Priority:')}       ${theme.value(p.pri)} ${theme.dim('(nice ' + p.nice + ')')}\n` +
+                `${lab('CPU:')}            ${theme.warn(p.cpu + '%')}\n` +
+                `${lab('Memory:')}         ${theme.warn(p.mem + '%')}   ${theme.dim('RSS')} ${theme.size(kbFmt(p.rss))}   ${theme.dim('VSZ')} ${theme.size(kbFmt(p.vsz))}\n` +
+                `${lab('Started:')}        ${theme.date(escapeTag(p.lstart))}\n` +
+                `${lab('Elapsed Time:')}   ${theme.date(p.etime)}\n` +
+                `${lab('CPU Time:')}       ${theme.date(p.time)}\n` +
                 `\n` +
-                `Command:\n${p.command}`;
-            details.setContent(escapeTag(detailText));
+                `${lab('Command:')}\n${theme.path(escapeTag(p.command))}`;
+            details.setContent(detailText);
             details.setScrollPerc(0);
 
             const totalCpu = filtered.reduce((acc, x) => acc + (parseFloat(x.cpu) || 0), 0);
@@ -289,15 +293,15 @@ export async function openProcessManager(): Promise<void> {
             const memPct = parseFloat(p.mem) || 0;
             const sysMemPct = (used / total) * 100;
             const statsText =
-                `{cyan-fg}Process{/cyan-fg}\n` +
-                `CPU   ${renderBar(cpuPct)} ${cpuPct.toFixed(1)}%\n` +
-                `Mem   ${renderBar(memPct)} ${memPct.toFixed(1)}%\n` +
+                `${theme.section('Process')}\n` +
+                `${theme.label('CPU')}   ${renderBar(cpuPct)} ${theme.warn(cpuPct.toFixed(1) + '%')}\n` +
+                `${theme.label('Mem')}   ${renderBar(memPct)} ${theme.warn(memPct.toFixed(1) + '%')}\n` +
                 `\n` +
-                `{cyan-fg}System{/cyan-fg}\n` +
-                `Load avg:    ${load[0].toFixed(2)}  ${load[1].toFixed(2)}  ${load[2].toFixed(2)}   (${cores} cores)\n` +
-                `Memory   ${renderBar(sysMemPct)} ${formatBytes(used)} / ${formatBytes(total)} (${sysMemPct.toFixed(1)}%)\n` +
-                `Uptime:      ${formatUptime(os.uptime())}\n` +
-                `Processes:   ${filtered.length} shown / ${processes.length} total   sum CPU ${totalCpu.toFixed(1)}%   sum Mem ${totalMem.toFixed(1)}%`;
+                `${theme.section('System')}\n` +
+                `${theme.label('Load avg:')}    ${theme.count(load[0].toFixed(2))}  ${theme.count(load[1].toFixed(2))}  ${theme.count(load[2].toFixed(2))}   ${theme.dim('(' + cores + ' cores)')}\n` +
+                `${theme.label('Memory')}   ${renderBar(sysMemPct)} ${theme.size(formatBytes(used))} ${theme.dim('/')} ${theme.size(formatBytes(total))} ${theme.dim('(' + sysMemPct.toFixed(1) + '%)')}\n` +
+                `${theme.label('Uptime:')}      ${theme.date(formatUptime(os.uptime()))}\n` +
+                `${theme.label('Processes:')}   ${theme.count(filtered.length)} ${theme.dim('shown /')} ${theme.count(processes.length)} ${theme.dim('total')}   ${theme.dim('sum CPU')} ${theme.warn(totalCpu.toFixed(1) + '%')}   ${theme.dim('sum Mem')} ${theme.warn(totalMem.toFixed(1) + '%')}`;
             stats.setContent(statsText);
             stats.setScrollPerc(0);
             screen.render();

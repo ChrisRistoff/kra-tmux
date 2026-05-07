@@ -53,6 +53,7 @@
         "chalk-animation": "^2.0.3",
         "cheerio": "^1.2.0",
         "chokidar": "^5.0.0",
+        "cli-highlight": "^2.1.11",
         "dotenv": "^16.4.7",
         "events": "^3.3.0",
         "fastembed": "^2.1.0",

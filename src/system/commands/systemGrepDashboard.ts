@@ -6,6 +6,7 @@ import {
     createListDetailDashboard,
     escTag,
     modalConfirm,
+    theme,
 } from '@/UI/dashboard';
 import { runInherit } from '@/UI/dashboard/screen';
 import {
@@ -24,14 +25,14 @@ import {
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 const MODE_LABEL: Record<SearchMode, string> = {
-    files: '{green-fg}FILES{/green-fg}',
-    dirs: '{blue-fg}DIRS{/blue-fg}',
-    content: '{yellow-fg}CONTENT{/yellow-fg}',
+    files: theme.file('FILES'),
+    dirs: theme.dir('DIRS'),
+    content: theme.warn('CONTENT'),
 };
 
 function renderStatsContent(allResults: GrepResult[], isSearching: boolean): string {
     if (allResults.length === 0) {
-        return isSearching ? '{gray-fg}searching…{/gray-fg}' : '{gray-fg}no results{/gray-fg}';
+        return isSearching ? theme.warn('searching…') : theme.dim('no results');
     }
     const byExt = new Map<string, number>();
     const byDir = new Map<string, number>();
@@ -54,16 +55,16 @@ function renderStatsContent(allResults: GrepResult[], isSearching: boolean): str
     const extPad = topExt.reduce((m, [e]) => Math.max(m, e.length), 0);
     const dirPad = Math.min(topDirs.reduce((m, [d]) => Math.max(m, d.length), 0), 24);
 
-    let out = `{cyan-fg}total{/cyan-fg}    {yellow-fg}${allResults.length}{/yellow-fg}` +
-        `  {gray-fg}(${files} files, ${dirs} dirs){/gray-fg}`;
-    if (selected > 0) out += `\n{cyan-fg}selected{/cyan-fg} {yellow-fg}${selected}{/yellow-fg}`;
-    out += `\n\n{cyan-fg}by extension{/cyan-fg}\n`;
+    let out = `${theme.label('total   ')} ${theme.count(allResults.length)}` +
+        `  ${theme.dim(`(${files} files, ${dirs} dirs)`)}`;
+    if (selected > 0) out += `\n${theme.label('selected')} ${theme.count(selected)}`;
+    out += `\n\n${theme.section('by extension')}\n`;
     out += topExt
-        .map(([e, n]) => `  {green-fg}${escTag(e).padEnd(extPad)}{/green-fg}  ${n}`)
+        .map(([e, n]) => `  ${theme.file(escTag(e).padEnd(extPad))}  ${theme.count(n)}`)
         .join('\n');
-    out += `\n\n{cyan-fg}by top dir{/cyan-fg}\n`;
+    out += `\n\n${theme.section('by top dir')}\n`;
     out += topDirs
-        .map(([d, n]) => `  {magenta-fg}${escTag(d.slice(0, dirPad)).padEnd(dirPad)}{/magenta-fg}  ${n}`)
+        .map(([d, n]) => `  ${theme.path(escTag(d.slice(0, dirPad)).padEnd(dirPad))}  ${theme.count(n)}`)
         .join('\n');
 
     return out;
@@ -83,13 +84,13 @@ export async function openGrepDashboard(): Promise<void> {
     let activeSearch: StreamSearchHandle | null = null;
 
     function headerText(): string {
-        const q = lastQuery ? `  {cyan-fg}query{/cyan-fg} {white-fg}${escTag(lastQuery)}{/white-fg}` : '';
-        const count = allResults.length > 0 ? `  {cyan-fg}results{/cyan-fg} {yellow-fg}${displayed.length}{/yellow-fg}` : '';
-        const status = isSearching ? '  {yellow-fg}searching…{/yellow-fg}' : '';
+        const q = lastQuery ? `  ${theme.label('query')} ${theme.value(escTag(lastQuery))}` : '';
+        const count = allResults.length > 0 ? `  ${theme.label('results')} ${theme.count(displayed.length)}` : '';
+        const status = isSearching ? `  ${theme.warn('searching…')}` : '';
         const selCount = allResults.filter((r) => r.selected).length;
-        const selTag = selCount > 0 ? `  {yellow-fg}[${selCount} selected]{/yellow-fg}` : '';
-        return ` {magenta-fg}{bold}◆ grep{/bold}{/magenta-fg}` +
-            `  mode ${MODE_LABEL[mode]}` +
+        const selTag = selCount > 0 ? `  ${theme.selected(`[${selCount} selected]`)}` : '';
+        return ` ${theme.title('◆ grep')}` +
+            `  ${theme.dim('mode')} ${MODE_LABEL[mode]}` +
             q + count + selTag + status;
     }
 
@@ -180,7 +181,7 @@ export async function openGrepDashboard(): Promise<void> {
                         previewScroll.set(r.absPath, scrollPerc);
                         ctx.api.repaintDetails();
                     });
-                    return '{gray-fg}loading…{/gray-fg}';
+                    return theme.dim('loading…');
                 },
                 scrollPerc: (r) => previewScroll.get(r.absPath) ?? 0,
             },
@@ -195,27 +196,27 @@ export async function openGrepDashboard(): Promise<void> {
                         metaCache.set(r.absPath, v);
                         ctx.api.repaintDetails();
                     });
-                    return '{gray-fg}loading…{/gray-fg}';
+                    return theme.dim('loading…');
                 },
             },
             {
                 label: 'stats',
                 focusName: 'stats',
-                initialContent: '{gray-fg}no results{/gray-fg}',
+                initialContent: theme.dim('no results'),
                 paint: () => renderStatsContent(allResults, isSearching),
             },
         ],
         keymapText: () =>
-            `{cyan-fg}enter{/cyan-fg} search/nvim   ` +
-            `{cyan-fg}f{/cyan-fg} files   ` +
-            `{cyan-fg}d{/cyan-fg} dirs   ` +
-            `{cyan-fg}c{/cyan-fg} content   ` +
-            `{cyan-fg}x{/cyan-fg} delete   ` +
-            `{cyan-fg}space{/cyan-fg} select   ` +
-            `{cyan-fg}X{/cyan-fg} del selected   ` +
-            `{cyan-fg}y{/cyan-fg} copy path   ` +
-            `{cyan-fg}s{/cyan-fg}/{cyan-fg}/{/cyan-fg} search   ` +
-            `{cyan-fg}q{/cyan-fg} quit`,
+            `${theme.key('enter')} search/nvim   ` +
+            `${theme.key('f')} files   ` +
+            `${theme.key('d')} dirs   ` +
+            `${theme.key('c')} content   ` +
+            `${theme.key('x')} delete   ` +
+            `${theme.key('space')} select   ` +
+            `${theme.key('X')} del selected   ` +
+            `${theme.key('y')} copy path   ` +
+            `${theme.key('s')}/${theme.key('/')} search   ` +
+            `${theme.key('q')} quit`,
         actions: [
             {
                 keys: 'f',

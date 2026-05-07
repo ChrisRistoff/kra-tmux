@@ -14,6 +14,7 @@ import {
     createDashboardShell,
     attachVerticalNavigation,
     createListDetailDashboard,
+    theme,
 } from '@/UI/dashboard';
 
 interface FileEntry {
@@ -85,22 +86,22 @@ function summarize(sessions: TmuxSessions): { sessions: number; windows: number;
 
 
 function renderSummary(entry: FileEntry | undefined): string {
-    if (!entry) return '{gray-fg}(no save selected){/gray-fg}';
-    if (entry.parseError) return `{red-fg}parse error:{/red-fg}\n${escTag(entry.parseError)}`;
-    if (!entry.sessions) return '{gray-fg}(loading...){/gray-fg}';
+    if (!entry) return theme.dim('(no save selected)');
+    if (entry.parseError) return `${theme.err('parse error:')}\n${escTag(entry.parseError)}`;
+    if (!entry.sessions) return theme.dim('(loading...)');
     const s = summarize(entry.sessions);
     const lines: string[] = [];
-    lines.push(`{bold}${escTag(entry.name)}{/bold}`);
+    lines.push(`{bold}${theme.value(escTag(entry.name))}{/bold}`);
     lines.push('');
-    lines.push(`{cyan-fg}sessions:{/cyan-fg} ${s.sessions}   {cyan-fg}windows:{/cyan-fg} ${s.windows}   {cyan-fg}panes:{/cyan-fg} ${s.panes}`);
-    lines.push(`{cyan-fg}size:{/cyan-fg} ${fmtSize(entry.sizeBytes)}   {cyan-fg}saved:{/cyan-fg} ${fmtAge(entry.mtimeMs)} ago`);
+    lines.push(`${theme.label('sessions:')} ${theme.count(s.sessions)}   ${theme.label('windows:')} ${theme.count(s.windows)}   ${theme.label('panes:')} ${theme.count(s.panes)}`);
+    lines.push(`${theme.label('size:')} ${theme.size(fmtSize(entry.sizeBytes))}   ${theme.label('saved:')} ${theme.date(fmtAge(entry.mtimeMs) + ' ago')}`);
     lines.push('');
     for (const sessName of Object.keys(entry.sessions)) {
         const sess = entry.sessions[sessName];
         const path = sess.windows[0]?.currentPath ?? '';
         let panes = 0;
         for (const w of sess.windows) panes += w.panes.length;
-        lines.push(`  {magenta-fg}${escTag(sessName)}{/magenta-fg}  {gray-fg}w${sess.windows.length} p${panes}{/gray-fg}  ${escTag(path)}`);
+        lines.push(`  ${theme.accent(escTag(sessName))}  ${theme.dim(`w${sess.windows.length} p${panes}`)}  ${theme.path(escTag(path))}`);
     }
 
     return lines.join('\n');
@@ -111,12 +112,12 @@ function renderDetails(entry: FileEntry | undefined): string {
     const lines: string[] = [];
     for (const sessName of Object.keys(entry.sessions)) {
         const sess = entry.sessions[sessName];
-        lines.push(`{bold}{magenta-fg}${escTag(sessName)}{/magenta-fg}{/bold}`);
+        lines.push(`{bold}${theme.accent(escTag(sessName))}{/bold}`);
         for (const [i, w] of sess.windows.entries()) {
-            lines.push(`  {yellow-fg}#${i} ${escTag(w.windowName || '')}{/yellow-fg}  {gray-fg}${escTag(w.currentCommand || '')}{/gray-fg}`);
-            lines.push(`    {gray-fg}${escTag(w.currentPath)}{/gray-fg}`);
+            lines.push(`  ${theme.warn(`#${i} ${escTag(w.windowName || '')}`)}  ${theme.dim(escTag(w.currentCommand || ''))}`);
+            lines.push(`    ${theme.path(escTag(w.currentPath))}`);
             for (const [j, p] of w.panes.entries()) {
-                lines.push(`      {green-fg}pane ${j}{/green-fg}  ${escTag(p.currentCommand || '')}  {gray-fg}${escTag(p.currentPath)}{/gray-fg}`);
+                lines.push(`      ${theme.success(`pane ${j}`)}  ${theme.value(escTag(p.currentCommand || ''))}  ${theme.path(escTag(p.currentPath))}`);
             }
         }
         lines.push('');
@@ -137,21 +138,21 @@ function renderTreeRows(sessions: TmuxSessions): BuilderRow[] {
     const rows: BuilderRow[] = [];
     const names = Object.keys(sessions);
     if (names.length === 0) {
-        return [{ level: 'session', sessionName: '', label: '{gray-fg}(empty — press s to add a session){/gray-fg}' }];
+        return [{ level: 'session', sessionName: '', label: theme.dim('(empty — press s to add a session)') }];
     }
     for (const sname of names) {
         const sess = sessions[sname];
         rows.push({
             level: 'session',
             sessionName: sname,
-            label: `{bold}{magenta-fg}◆ ${escTag(sname)}{/magenta-fg}{/bold}  {gray-fg}(${sess.windows.length}w){/gray-fg}`,
+            label: `{bold}${theme.accent(`◆ ${escTag(sname)}`)}{/bold}  ${theme.dim(`(${sess.windows.length}w)`)}`,
         });
         for (const [wi, w] of sess.windows.entries()) {
             rows.push({
                 level: 'window',
                 sessionName: sname,
                 windowIdx: wi,
-                label: `  {yellow-fg}▸ #${wi} ${escTag(w.windowName || '(unnamed)')}{/yellow-fg}  {gray-fg}${escTag(w.currentPath)}{/gray-fg}`,
+                label: `  ${theme.warn(`▸ #${wi} ${escTag(w.windowName || '(unnamed)')}`)}  ${theme.path(escTag(w.currentPath))}`,
             });
             for (const [pi, p] of w.panes.entries()) {
                 rows.push({
@@ -159,7 +160,7 @@ function renderTreeRows(sessions: TmuxSessions): BuilderRow[] {
                     sessionName: sname,
                     windowIdx: wi,
                     paneIdx: pi,
-                    label: `      {green-fg}· pane ${pi}{/green-fg}  ${escTag(p.currentCommand || '(shell)')}  {gray-fg}${escTag(p.currentPath)}{/gray-fg}`,
+                    label: `      ${theme.success(`· pane ${pi}`)}  ${theme.value(escTag(p.currentCommand || '(shell)'))}  ${theme.path(escTag(p.currentPath))}`,
                 });
             }
         }
@@ -170,33 +171,33 @@ function renderTreeRows(sessions: TmuxSessions): BuilderRow[] {
 
 function renderNodeDetails(sessions: TmuxSessions, row: BuilderRow | undefined): string {
     if (!row?.sessionName) {
-        return '{gray-fg}Press {/gray-fg}{cyan-fg}s{/cyan-fg}{gray-fg} to add a new session.{/gray-fg}';
+        return `${theme.dim('Press ')}${theme.key('s')}${theme.dim(' to add a new session.')}`;
     }
     const sess = sessions[row.sessionName];
     if (!sess) return '';
     const lines: string[] = [];
     if (row.level === 'session') {
-        lines.push(`{bold}Session:{/bold} {magenta-fg}${escTag(row.sessionName)}{/magenta-fg}`);
-        lines.push(`{cyan-fg}windows:{/cyan-fg} ${sess.windows.length}`);
+        lines.push(`{bold}Session:{/bold} ${theme.accent(escTag(row.sessionName))}`);
+        lines.push(`${theme.label('windows:')} ${theme.count(sess.windows.length)}`);
         lines.push('');
-        lines.push('{cyan-fg}w{/cyan-fg} add window   {cyan-fg}e{/cyan-fg} rename   {cyan-fg}D{/cyan-fg} delete session');
+        lines.push(`${theme.key('w')} add window   ${theme.key('e')} rename   ${theme.key('D')} delete session`);
     } else if (row.level === 'window' && row.windowIdx !== undefined) {
         const w = sess.windows[row.windowIdx];
         if (!w) return '';
-        lines.push(`{bold}Window:{/bold} {yellow-fg}#${row.windowIdx} ${escTag(w.windowName || '(unnamed)')}{/yellow-fg}`);
-        lines.push(`{cyan-fg}cwd:{/cyan-fg} ${escTag(w.currentPath)}`);
-        lines.push(`{cyan-fg}cmd:{/cyan-fg} ${escTag(w.currentCommand || '(shell)')}`);
-        lines.push(`{cyan-fg}panes:{/cyan-fg} ${w.panes.length}`);
+        lines.push(`{bold}Window:{/bold} ${theme.warn(`#${row.windowIdx} ${escTag(w.windowName || '(unnamed)')}`)}`);
+        lines.push(`${theme.label('cwd:')} ${theme.path(escTag(w.currentPath))}`);
+        lines.push(`${theme.label('cmd:')} ${theme.value(escTag(w.currentCommand || '(shell)'))}`);
+        lines.push(`${theme.label('panes:')} ${theme.count(w.panes.length)}`);
         lines.push('');
-        lines.push('{cyan-fg}p{/cyan-fg} add pane   {cyan-fg}e{/cyan-fg} edit fields   {cyan-fg}D{/cyan-fg} delete window');
+        lines.push(`${theme.key('p')} add pane   ${theme.key('e')} edit fields   ${theme.key('D')} delete window`);
     } else if (row.level === 'pane' && row.windowIdx !== undefined && row.paneIdx !== undefined) {
         const p = sess.windows[row.windowIdx]?.panes[row.paneIdx];
         if (!p) return '';
-        lines.push(`{bold}Pane:{/bold} {green-fg}${row.paneIdx}{/green-fg} of window #${row.windowIdx}`);
-        lines.push(`{cyan-fg}cwd:{/cyan-fg} ${escTag(p.currentPath)}`);
-        lines.push(`{cyan-fg}cmd:{/cyan-fg} ${escTag(p.currentCommand || '(shell)')}`);
+        lines.push(`{bold}Pane:{/bold} ${theme.success(String(row.paneIdx))} of window #${row.windowIdx}`);
+        lines.push(`${theme.label('cwd:')} ${theme.path(escTag(p.currentPath))}`);
+        lines.push(`${theme.label('cmd:')} ${theme.value(escTag(p.currentCommand || '(shell)'))}`);
         lines.push('');
-        lines.push('{cyan-fg}e{/cyan-fg} edit fields   {cyan-fg}D{/cyan-fg} delete pane');
+        lines.push(`${theme.key('e')} edit fields   ${theme.key('D')} delete pane`);
     }
 
     return lines.join('\n');
@@ -230,10 +231,10 @@ async function buildNewSaveFlow(parentScreen: blessed.Widgets.Screen): Promise<T
                 { label: 'selected', focusName: 'selected', bottom: 3 },
             ],
             keymapText: () =>
-                `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}[ ]{/cyan-fg} ±10   ` +
-                `{cyan-fg}s{/cyan-fg} +session   {cyan-fg}w{/cyan-fg} +window   {cyan-fg}p{/cyan-fg} +pane   ` +
-                `{cyan-fg}e{/cyan-fg} edit   {cyan-fg}D{/cyan-fg} delete   ` +
-                `{cyan-fg}enter{/cyan-fg} done   {cyan-fg}esc/q{/cyan-fg} cancel`,
+                `${theme.key('j/k')} nav   ${theme.key('[ ]')} ±10   ` +
+                `${theme.key('s')} +session   ${theme.key('w')} +window   ${theme.key('p')} +pane   ` +
+                `${theme.key('e')} edit   ${theme.key('D')} delete   ` +
+                `${theme.key('enter')} done   ${theme.key('esc/q')} cancel`,
         });
         const { header } = shell;
         const tree = shell.list;
@@ -256,8 +257,8 @@ async function buildNewSaveFlow(parentScreen: blessed.Widgets.Screen): Promise<T
                 return { s: Object.keys(sessions).length, w, p };
             })();
             header.setContent(
-                `{bold}{magenta-fg}building save{/magenta-fg}{/bold}  {gray-fg}|{/gray-fg}  ` +
-                `{cyan-fg}sessions:{/cyan-fg} ${totals.s}   {cyan-fg}windows:{/cyan-fg} ${totals.w}   {cyan-fg}panes:{/cyan-fg} ${totals.p}`,
+                `${theme.title('building save')}  ${theme.dim('|')}  ` +
+                `${theme.label('sessions:')} ${theme.count(totals.s)}   ${theme.label('windows:')} ${theme.count(totals.w)}   ${theme.label('panes:')} ${theme.count(totals.p)}`,
             );
             detail.setContent(renderNodeDetails(sessions, rows[selectedIdx]));
             parentScreen.render();
@@ -508,14 +509,14 @@ export async function manageSessions(): Promise<void> {
             const age = fmtAge(e.mtimeMs).padStart(4);
             const size = fmtSize(e.sizeBytes).padStart(6);
 
-            return `{cyan-fg}${age}{/cyan-fg}  {gray-fg}${size}{/gray-fg}  ${escTag(e.name)}`;
+            return `${theme.date(age)}  ${theme.size(size)}  ${theme.value(escTag(e.name))}`;
         },
         listLabel: 'saves',
         listFocusName: 'saves',
         listWidth: '50%',
         headerContent: () => {
             const total = entries.length;
-            return `{bold}{magenta-fg}tmux saves{/magenta-fg}{/bold}  {gray-fg}|{/gray-fg}  ${total} files`;
+            return `${theme.title('tmux saves')}  ${theme.dim('|')}  ${theme.count(total)} files`;
         },
         detailPanels: [
             {
@@ -536,13 +537,13 @@ export async function manageSessions(): Promise<void> {
             },
         ],
         keymapText: () =>
-            `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}[ ]{/cyan-fg} ±10   {cyan-fg}{ }{/cyan-fg} ±100   ` +
-            `{cyan-fg}enter{/cyan-fg} load   ` +
-            `{cyan-fg}n{/cyan-fg} new save   ` +
-            `{cyan-fg}d{/cyan-fg} delete   ` +
-            `{cyan-fg}r{/cyan-fg} rename   ` +
-            `{cyan-fg}R{/cyan-fg} reload   ` +
-            `{cyan-fg}q{/cyan-fg} quit`,
+            `${theme.key('j/k')} nav   ${theme.key('[ ]')} ±10   ${theme.key('{ }')} ±100   ` +
+            `${theme.key('enter')} load   ` +
+            `${theme.key('n')} new save   ` +
+            `${theme.key('d')} delete   ` +
+            `${theme.key('r')} rename   ` +
+            `${theme.key('R')} reload   ` +
+            `${theme.key('q')} quit`,
         actions: [
             {
                 keys: 'enter',
