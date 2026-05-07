@@ -6,11 +6,8 @@ import * as path from 'path';
 import * as bash from '@/utils/bashHelper';
 import { GIT_COMMANDS } from '@/git/config/gitConstants';
 import {
-    attachFocusCycleKeys,
-    attachVerticalNavigation,
-    awaitScreenDestroy,
-    createDashboardScreen,
-    createDashboardShell,
+    type ListDetailDashboardApi,
+    createListDetailDashboard,
     modalConfirm,
     pickList,
 } from '@/UI/dashboard';
@@ -376,131 +373,32 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
     ]);
 
     const commits: Commit[] = [];
-
-    const screen = createDashboardScreen({ title: opts.title ?? `git log · ${branch}` });
-
-    const shell = createDashboardShell({
-        screen,
-        listLabel,
-        listFocusName: listLabel,
-        listWidth: '40%',
-        listItems: [],
-        listTags: true,
-        search: {
-            label: 'search',
-            width: '40%',
-            inputOnFocus: true,
-            keys: false,
-        },
-        detailPanels: [
-            { label: 'commit details', focusName: 'details' },
-            { label: 'files changed (this commit)', focusName: 'files', content: '{gray-fg}Loading…{/gray-fg}' },
-            { label: 'branch graph', focusName: 'graph', wrap: false },
-        ],
-        keymapText: () =>
-            `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}[ ]{/cyan-fg} ±10   {cyan-fg}{ }{/cyan-fg} ±100   ` +
-            `{cyan-fg}enter{/cyan-fg} files in commit   ` +
-            `{cyan-fg}d{/cyan-fg} full diff   ` +
-            `{cyan-fg}c{/cyan-fg} cherry-pick   ` +
-            `{cyan-fg}A{/cyan-fg} abort cherry-pick   ` +
-            `{cyan-fg}B{/cyan-fg} scope branch   ` +
-            `{cyan-fg}s{/cyan-fg} / {cyan-fg}/{/cyan-fg} search   ` +
-            `{cyan-fg}y{/cyan-fg} yank hash   ` +
-            `{cyan-fg}q{/cyan-fg} quit`,
-    });
-    const { header, list, ring } = shell;
-    const searchBox = shell.searchBox;
-    if (searchBox === null) throw new Error('git log dashboard requires a search box');
-    const [details, stat, graph] = shell.detailPanels;
-
     let loading = true;
-    function setHeader(): void {
+    const statCache = new Map<string, string>();
+    const graphCache = new Map<string, { content: string; matchLine: number }>();
+    const graphPending = new Map<string, Promise<{ content: string; matchLine: number }>>();
+    const statPending = new Map<string, Promise<string>>();
+
+    const cherryReq: { value: { hash: string; shortHash: string } | null } = { value: null };
+    const pickFlag = { value: false };
+    let nextScope: { value: string | null } | null = null;
+
+    let api: ListDetailDashboardApi<Commit> | null = null;
+
+    function headerContent(): string {
         const head: Commit | undefined = commits.length > 0 ? commits[0] : undefined;
         const headPart = head
             ? `   {cyan-fg}HEAD{/cyan-fg} {yellow-fg}${head.shortHash}{/yellow-fg} {gray-fg}${escape(truncate(head.subject, 40))}{/gray-fg}`
             : '';
         const loadingPart = loading
-            ? `   {yellow-fg}◜ loading…{/yellow-fg}`
+            ? `   {yellow-fg}\u25dc loading\u2026{/yellow-fg}`
             : '';
-        header.setContent(
-            ` {magenta-fg}{bold}◆ git log{/bold}{/magenta-fg}` +
+        return ` {magenta-fg}{bold}\u25c6 git log{/bold}{/magenta-fg}` +
             `   {cyan-fg}branch{/cyan-fg} {yellow-fg}${escape(branch)}{/yellow-fg}` +
             `   {cyan-fg}repo{/cyan-fg} {white-fg}${escape(topLevel)}{/white-fg}` +
             `   {cyan-fg}commits{/cyan-fg} {yellow-fg}${commits.length}{/yellow-fg}` +
             headPart +
-            loadingPart,
-        );
-    }
-    setHeader();
-    let filterQuery = '';
-    let filtered: Commit[] = commits.slice();
-    let displayed: Commit[] = [];
-    const WINDOW_STEP = 200;
-    let windowEnd = WINDOW_STEP;
-
-    function rebuildDisplayed(): void {
-        displayed = filtered.slice(0, Math.min(windowEnd, filtered.length));
-        renderListItems();
-    }
-
-    function growWindow(): boolean {
-        if (windowEnd >= filtered.length) return false;
-        windowEnd = Math.min(filtered.length, windowEnd + WINDOW_STEP);
-        rebuildDisplayed();
-
-        return true;
-    }
-
-    function ensureWindowAtLeast(n: number): void {
-        if (windowEnd >= n || windowEnd >= filtered.length) return;
-        windowEnd = Math.min(filtered.length, Math.max(n, windowEnd + WINDOW_STEP));
-        rebuildDisplayed();
-    }
-
-    function applyFilter(): void {
-        const q = filterQuery.trim().toLowerCase();
-        if (!q) {
-            filtered = commits.slice();
-        } else {
-            filtered = commits.filter((c) =>
-                c.subject.toLowerCase().includes(q)
-                || c.author.toLowerCase().includes(q)
-                || c.hash.toLowerCase().includes(q)
-                || c.shortHash.toLowerCase().includes(q)
-                || c.relDate.toLowerCase().includes(q),
-            );
-        }
-        windowEnd = WINDOW_STEP;
-        rebuildDisplayed();
-        if (displayed.length > 0) {
-            currentIdx = -1;
-            list.select(0);
-            void selectIndex(0);
-        } else {
-            currentIdx = -1;
-            details.setContent('{gray-fg}no matches{/gray-fg}');
-            stat.setContent('');
-            graph.setContent('');
-        }
-        screen.render();
-    }
-
-    function renderListItems(): void {
-        const w = (list.width as number) - 4;
-        list.setItems(displayed.map((c) => formatCommitRow(c, w)));
-    }
-    renderListItems();
-
-    let currentIdx = -1;
-    let statSeq = 0;
-    const statCache = new Map<string, string>();
-    const graphCache = new Map<string, { content: string; matchLine: number }>();
-
-    const graphSelectionSeq = { value: 0 };
-    const graphPending = new Map<string, Promise<{ content: string; matchLine: number }>>();
-
-    function getCachedGraph(short: string): { content: string; matchLine: number } | undefined {
-        return graphCache.get(short);
+            loadingPart;
     }
 
     async function loadGraphFor(short: string): Promise<{ content: string; matchLine: number }> {
@@ -514,109 +412,42 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                 if (firstKey !== undefined) graphCache.delete(firstKey);
             }
             graphPending.delete(short);
-
             return out;
         }).catch((e: Error) => {
             graphPending.delete(short);
-            const fallback = { content: `{red-fg}Failed to load graph:{/red-fg} ${escape(e.message)}`, matchLine: -1 };
-
-            return fallback;
+            return { content: `{red-fg}Failed to load graph:{/red-fg} ${escape(e.message)}`, matchLine: -1 };
         });
         graphPending.set(short, p);
-
         return p;
     }
 
-    function centerGraphOn(matchLine: number): void {
+    function centerGraphOn(graphPanel: blessed.Widgets.BoxElement, matchLine: number): void {
         if (matchLine < 0) {
-            graph.setScroll(0);
-
+            graphPanel.setScroll(0);
             return;
         }
-        const g = graph as unknown as { _clines?: { ftor?: number[][] }; iheight?: number };
+        const g = graphPanel as unknown as { _clines?: { ftor?: number[][] }; iheight?: number };
         const displayRow = g._clines?.ftor?.[matchLine]?.[0] ?? matchLine;
-        const boxHeight = typeof graph.height === 'number' ? graph.height : 0;
+        const boxHeight = typeof graphPanel.height === 'number' ? graphPanel.height : 0;
         const visible = Math.max(1, boxHeight - (g.iheight ?? 2));
-        graph.setScroll(Math.max(0, displayRow - Math.floor(visible / 2)));
+        graphPanel.setScroll(Math.max(0, displayRow - Math.floor(visible / 2)));
     }
 
-    async function selectIndex(i: number): Promise<void> {
-        if (i < 0 || i >= displayed.length || i === currentIdx) return;
-        currentIdx = i;
-        if (i >= displayed.length - 20) growWindow();
-        const c = displayed[i];
-        details.setContent(renderDetails(c));
-        details.setScrollPerc(0);
-        const cachedG = getCachedGraph(c.shortHash);
-        const seqG = ++graphSelectionSeq.value;
-        if (cachedG !== undefined) {
-            graph.setContent(cachedG.content);
-            centerGraphOn(cachedG.matchLine);
-        } else {
-            graph.setContent('{gray-fg}Loading graph…{/gray-fg}');
-            graph.setScroll(0);
-            void loadGraphFor(c.shortHash).then((out) => {
-                if (seqG !== graphSelectionSeq.value) return;
-                graph.setContent(out.content);
-                centerGraphOn(out.matchLine);
-                screen.render();
-            });
-        }
-
-        const cached = statCache.get(c.hash);
-        if (cached !== undefined) {
-            stat.setContent(cached);
-            stat.setScrollPerc(0);
-            screen.render();
-
-            return;
-        }
-        stat.setContent('{gray-fg}Loading…{/gray-fg}');
-        screen.render();
-
-        const seq = ++statSeq;
-        const out = await loadStat(c.hash);
-        const formatted = escape(out);
-        statCache.set(c.hash, formatted);
-        if (seq !== statSeq) return;
-        stat.setContent(formatted);
-        stat.setScrollPerc(0);
-        screen.render();
-    }
-
-    let selectTimer: NodeJS.Timeout | null = null;
-    list.on('select item', (_item, index) => {
-        if (selectTimer) clearTimeout(selectTimer);
-        selectTimer = setTimeout(() => {
-            selectTimer = null;
-            void selectIndex(index);
-        }, 60);
-    });
-
-    searchBox.on('keypress', () => {
-        setImmediate(() => {
-            const v = searchBox.getValue();
-            if (v !== filterQuery) {
-                filterQuery = v;
-                applyFilter();
-            }
+    async function loadStatFor(hash: string): Promise<string> {
+        const existing = statPending.get(hash);
+        if (existing) return existing;
+        const p = loadStat(hash).then((out) => {
+            const formatted = escape(out);
+            statCache.set(hash, formatted);
+            statPending.delete(hash);
+            return formatted;
+        }).catch((e: Error) => {
+            statPending.delete(hash);
+            return `{red-fg}Failed:{/red-fg} ${escape(e.message)}`;
         });
-    });
-    searchBox.key(['enter'], () => {
-        list.focus();
-    });
-    searchBox.key(['escape'], () => {
-        searchBox.clearValue();
-        if (filterQuery) {
-            filterQuery = '';
-            applyFilter();
-        }
-        list.focus();
-    });
-    list.key(['s', '/'], () => {
-        searchBox.focus();
-        searchBox.readInput();
-    });
+        statPending.set(hash, p);
+        return p;
+    }
 
     function copyHash(c: Commit): void {
         const platform = process.platform;
@@ -638,25 +469,14 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         } catch { /* ignore */ }
     }
 
-    function flashHeader(suffix: string): void {
-        const prev = header.getContent();
-        header.setContent(prev + ` {green-fg}${suffix}{/green-fg}`);
-        screen.render();
-        setTimeout(() => {
-            header.setContent(prev);
-            screen.render();
-        }, 1200).unref();
-    }
-
-    async function showFullDiff(c: Commit): Promise<void> {
+    async function showFullDiff(c: Commit, screen: blessed.Widgets.Screen): Promise<void> {
         await runInherit('sh', ['-c', `git show --color=always ${c.hash} | less -R`], screen);
     }
 
-    async function browseCommitFiles(c: Commit): Promise<void> {
+    async function browseCommitFiles(c: Commit, screen: blessed.Widgets.Screen, a: ListDetailDashboardApi<Commit>): Promise<void> {
         const files = await loadCommitFiles(c.hash);
         if (files.length === 0) {
-            flashHeader('no files in commit');
-
+            a.flashHeader(' {green-fg}no files in commit{/green-fg}');
             return;
         }
         await browseFiles(screen, {
@@ -666,141 +486,44 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         });
     }
 
-    function jump(delta: number): void {
-        if (displayed.length === 0) return;
-        const cur = (list as unknown as { selected: number }).selected || 0;
-        let target = cur + delta;
-        if (Math.abs(delta) === 1) {
-            if (target < 0) {
-                ensureWindowAtLeast(filtered.length);
-                target = filtered.length - 1;
-            } else if (target >= filtered.length) {
-                target = 0;
-            }
-        } else {
-            if (target < 0) target = 0;
-            if (target >= filtered.length) target = filtered.length - 1;
-        }
-        ensureWindowAtLeast(target + 21);
-        target = Math.min(target, displayed.length - 1);
-        list.select(target);
-        screen.render();
-    }
-
-    attachVerticalNavigation(list, {
-        moveBy: jump,
-        top: () => {
-            if (displayed.length === 0) return;
-            list.select(0);
-            screen.render();
-        },
-        bottom: () => {
-            if (filtered.length === 0) return;
-            ensureWindowAtLeast(filtered.length);
-            list.select(displayed.length - 1);
-            screen.render();
-        },
-        submit: () => {
-            if (displayed.length === 0) return;
-            const c = displayed[currentIdx >= 0 ? currentIdx : 0];
-            void browseCommitFiles(c);
-        },
-        cancel: () => {
-            try { screen.destroy(); } catch { /* noop */ }
-        },
-    });
-
-    list.key(['y'], () => {
-        if (displayed.length === 0) return;
-        const c = displayed[currentIdx >= 0 ? currentIdx : 0];
-        copyHash(c);
-        flashHeader(`✓ copied ${c.shortHash}`);
-    });
-
-    list.key(['d'], () => {
-        if (displayed.length === 0) return;
-        const c = displayed[currentIdx >= 0 ? currentIdx : 0];
-        void showFullDiff(c);
-    });
-
     async function isCherryPickInProgress(): Promise<boolean> {
         try {
             const { stdout } = await bash.execCommand('git rev-parse --git-dir');
             const gitDir = stdout.trim();
             const { stdout: head } = await bash.execCommand(`test -f ${gitDir}/CHERRY_PICK_HEAD && echo yes || echo no`);
-
             return head.trim() === 'yes';
         } catch {
             return false;
         }
     }
 
-    function requestCherryPick(): void {
-        if (displayed.length === 0) return;
-        const c = displayed[currentIdx >= 0 ? currentIdx : 0];
-        cherryReq.value = { hash: c.hash, shortHash: c.shortHash };
-        try { screen.destroy(); } catch { /* noop */ }
-    }
-
-    async function abortCherryPick(): Promise<void> {
+    async function abortCherryPick(a: ListDetailDashboardApi<Commit>): Promise<void> {
         if (!(await isCherryPickInProgress())) {
-            flashHeader('no cherry-pick in progress');
-
+            a.flashHeader(' {green-fg}no cherry-pick in progress{/green-fg}');
             return;
         }
-        const ok = await modalConfirm(screen, 'Abort cherry-pick', 'Abort the in-progress cherry-pick and restore HEAD?');
+        const ok = await modalConfirm(a.screen, 'Abort cherry-pick', 'Abort the in-progress cherry-pick and restore HEAD?');
         if (!ok) return;
         try {
             await bash.execCommand('git cherry-pick --abort');
-            flashHeader('✓ cherry-pick aborted');
-            scheduleRefresh();
+            a.flashHeader(' {green-fg}\u2713 cherry-pick aborted{/green-fg}');
         } catch (e) {
-            flashHeader(`✗ abort failed: ${(e as Error).message.split('\n')[0]}`);
+            a.flashHeader(` {red-fg}\u2717 abort failed: ${(e as Error).message.split('\n')[0]}{/red-fg}`);
         }
     }
 
-    list.key(['c'], () => { requestCherryPick(); });
-    list.key(['A', 'S-a'], () => { void abortCherryPick(); });
-
-    let nextScope: { value: string | null } | null = null;
-    const cherryReq: { value: { hash: string; shortHash: string } | null } = { value: null };
-    const pickFlag = { value: false };
-    list.key(['B', 'S-b'], () => {
-        pickFlag.value = true;
-        try { screen.destroy(); } catch { /* noop */ }
-    });
-
-    attachFocusCycleKeys(screen, ring);
-
-    screen.on('resize', () => {
-        rebuildDisplayed();
-        screen.render();
-    });
-
-    ring.focusAt(0);
-    screen.render();
-
     let pendingRefresh: NodeJS.Timeout | null = null;
     function scheduleRefresh(): void {
-        if (pendingRefresh) return;
+        if (!api || pendingRefresh) return;
         pendingRefresh = setTimeout(() => {
             pendingRefresh = null;
-            setHeader();
-            const wasEmpty = filtered.length === 0;
-            if (!filterQuery) {
-                filtered = commits.slice();
-                if (displayed.length < Math.min(windowEnd, filtered.length)) {
-                    rebuildDisplayed();
-                }
-            } else {
-                applyFilter();
-            }
-            if (wasEmpty && currentIdx < 0 && displayed.length > 0) {
-                list.select(0);
-                void selectIndex(0);
-            }
-            screen.render();
+            const a = api;
+            if (!a) return;
+            const cur = a.selectedRow();
+            a.setRows(commits.slice(), { preserveKey: cur ? cur.hash : null });
+            a.refreshHeader();
         }, 200);
+        pendingRefresh.unref?.();
     }
 
     void streamCommits(logArgs, fmt, (added, _total) => {
@@ -812,39 +535,158 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             clearTimeout(pendingRefresh);
             pendingRefresh = null;
         }
-        setHeader();
-        if (!filterQuery) {
-            filtered = commits.slice();
-            rebuildDisplayed();
-        } else {
-            applyFilter();
+        if (api) {
+            const cur = api.selectedRow();
+            api.setRows(commits.slice(), { preserveKey: cur ? cur.hash : null });
+            api.refreshHeader();
         }
-        if (currentIdx < 0 && displayed.length > 0) {
-            list.select(0);
-            void selectIndex(0);
-        }
-        screen.render();
     }).catch((e: Error) => {
         loading = false;
-        setHeader();
-        details.setContent(`{red-fg}Failed to load commits:{/red-fg} ${escape(e.message)}`);
-        screen.render();
+        if (api) {
+            api.refreshHeader();
+            api.flashHeader(` {red-fg}Failed to load commits: ${escape(e.message)}{/red-fg}`, 4000);
+        }
     });
 
-    await awaitScreenDestroy(screen);
+    await createListDetailDashboard<Commit>({
+        title: opts.title ?? `git log \u00b7 ${branch}`,
+        headerContent,
+        listLabel,
+        listFocusName: listLabel,
+        listWidth: '40%',
+        listTags: true,
+        keymapText: () =>
+            `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}[ ]{/cyan-fg} \u00b110   {cyan-fg}{ }{/cyan-fg} \u00b1100   ` +
+            `{cyan-fg}enter{/cyan-fg} files in commit   ` +
+            `{cyan-fg}d{/cyan-fg} full diff   ` +
+            `{cyan-fg}c{/cyan-fg} cherry-pick   ` +
+            `{cyan-fg}A{/cyan-fg} abort cherry-pick   ` +
+            `{cyan-fg}B{/cyan-fg} scope branch   ` +
+            `{cyan-fg}s{/cyan-fg} / {cyan-fg}/{/cyan-fg} search   ` +
+            `{cyan-fg}y{/cyan-fg} yank hash   ` +
+            `{cyan-fg}q{/cyan-fg} quit`,
+        initialRows: [],
+        rowKey: (c) => c.hash,
+        renderListItem: (c, _i, _sel) => {
+            const w = (api?.shell.list.width as number | undefined) ?? 40;
+            return formatCommitRow(c, w - 4);
+        },
+        filter: {
+            label: 'search',
+            mode: 'live',
+            match: (c, q) => {
+                const lq = q.toLowerCase();
+                return c.subject.toLowerCase().includes(lq)
+                    || c.author.toLowerCase().includes(lq)
+                    || c.hash.toLowerCase().includes(lq)
+                    || c.shortHash.toLowerCase().includes(lq)
+                    || c.relDate.toLowerCase().includes(lq);
+            },
+        },
+        detailPanels: [
+            {
+                label: 'commit details',
+                focusName: 'details',
+                paint: (c) => renderDetails(c),
+            },
+            {
+                label: 'files changed (this commit)',
+                focusName: 'files',
+                initialContent: '{gray-fg}Loading\u2026{/gray-fg}',
+                paint: (c, ctx) => {
+                    const cached = statCache.get(c.hash);
+                    if (cached !== undefined) return cached;
+                    void loadStatFor(c.hash).then(() => {
+                        if (ctx.isStale()) return;
+                        ctx.api.repaintDetails();
+                    });
+                    return '{gray-fg}Loading\u2026{/gray-fg}';
+                },
+            },
+            {
+                label: 'branch graph',
+                focusName: 'graph',
+                wrap: false,
+                paint: (c, ctx) => {
+                    const cached = graphCache.get(c.shortHash);
+                    if (cached !== undefined) {
+                        setImmediate(() => {
+                            const panel = ctx.api.shell.detailPanels[2];
+                            if (panel) centerGraphOn(panel, cached.matchLine);
+                        });
+                        return cached.content;
+                    }
+                    void loadGraphFor(c.shortHash).then(() => {
+                        if (ctx.isStale()) return;
+                        ctx.api.repaintDetails();
+                    });
+                    return '{gray-fg}Loading graph\u2026{/gray-fg}';
+                },
+            },
+        ],
+        actions: [
+            {
+                keys: 'enter',
+                handler: (c, a) => {
+                    if (c === undefined) return;
+                    void browseCommitFiles(c, a.screen, a);
+                },
+            },
+            {
+                keys: 'y',
+                handler: (c, a) => {
+                    if (c === undefined) return;
+                    copyHash(c);
+                    a.flashHeader(` {green-fg}\u2713 copied ${c.shortHash}{/green-fg}`);
+                },
+            },
+            {
+                keys: 'd',
+                handler: (c, a) => {
+                    if (c === undefined) return;
+                    void showFullDiff(c, a.screen);
+                },
+            },
+            {
+                keys: 'c',
+                handler: (c, a) => {
+                    if (c === undefined) return;
+                    cherryReq.value = { hash: c.hash, shortHash: c.shortHash };
+                    a.destroy();
+                },
+            },
+            {
+                keys: ['A', 'S-a'],
+                handler: (_c, a) => { void abortCherryPick(a); },
+            },
+            {
+                keys: ['B', 'S-b'],
+                handler: (_c, a) => {
+                    pickFlag.value = true;
+                    a.destroy();
+                },
+            },
+        ],
+        onReady: (a) => { api = a; a.refreshHeader(); },
+    });
+
+    if (pendingRefresh) {
+        clearTimeout(pendingRefresh);
+        pendingRefresh = null;
+    }
+    api = null;
 
     const baseLog = opts.logArgs ?? ['log'];
     const baseGraph = opts.graphArgs ?? ['log', '--all'];
-    const baseTitle = opts.title ?? `git log · ${branch}`;
+    const baseTitle = opts.title ?? `git log \u00b7 ${branch}`;
 
     if (cherryReq.value !== null) {
         const req = cherryReq.value;
         const result = await interactiveCherryPick(req.hash, req.shortHash, branch);
         if (result.outcome !== 'applied') {
-            console.log(`cherry-pick ${req.shortHash}: ${result.outcome} — ${result.message}`);
+            console.log(`cherry-pick ${req.shortHash}: ${result.outcome} \u2014 ${result.message}`);
         }
         await gitLogDashboard({ ...opts });
-
         return;
     }
 
@@ -854,7 +696,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         const items = [ALL, ...branches];
         const result = await pickList({
             title: 'Scope log to branch',
-            header: `Pick a branch to scope ${listLabel} · ${branches.length} branch(es)`,
+            header: `Pick a branch to scope ${listLabel} \u00b7 ${branches.length} branch(es)`,
             items,
             itemsUseTags: true,
             renderItem: (item) => item === ALL
@@ -866,7 +708,6 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             nextScope = { value: result.value === ALL ? null : result.value };
         } else {
             await gitLogDashboard({ ...opts });
-
             return;
         }
     }
@@ -878,7 +719,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             ...opts,
             logArgs: scopeArgs(baseLog, scope),
             graphArgs: scopeGraphArgs(baseGraph, scope),
-            title: scope === null ? baseTitle : `${baseTitle} — ${scope}`,
+            title: scope === null ? baseTitle : `${baseTitle} \u2014 ${scope}`,
         });
     }
 }

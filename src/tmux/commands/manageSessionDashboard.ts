@@ -11,11 +11,9 @@ import {
     escTag,
     modalText,
     modalConfirm,
-    createDashboardScreen,
-    awaitScreenDestroy,
     createDashboardShell,
-    attachFocusCycleKeys,
     attachVerticalNavigation,
+    createListDetailDashboard,
 } from '@/UI/dashboard';
 
 interface FileEntry {
@@ -85,16 +83,6 @@ function summarize(sessions: TmuxSessions): { sessions: number; windows: number;
     return { sessions: Object.keys(sessions).length, windows: w, panes: p };
 }
 
-function renderFileList(entries: FileEntry[]): string[] {
-    if (entries.length === 0) return ['{gray-fg}(no saved sessions){/gray-fg}'];
-
-    return entries.map((e) => {
-        const age = fmtAge(e.mtimeMs).padStart(4);
-        const size = fmtSize(e.sizeBytes).padStart(6);
-
-        return `{cyan-fg}${age}{/cyan-fg}  {gray-fg}${size}{/gray-fg}  ${escTag(e.name)}`;
-    });
-}
 
 function renderSummary(entry: FileEntry | undefined): string {
     if (!entry) return '{gray-fg}(no save selected){/gray-fg}';
@@ -511,21 +499,41 @@ async function buildNewSaveFlow(parentScreen: blessed.Widgets.Screen): Promise<T
 
 export async function manageSessions(): Promise<void> {
     let entries = await loadFileEntries();
-    let selectedIdx = 0;
 
-    const screen = createDashboardScreen({ title: 'tmux · manage saves' });
+    await createListDetailDashboard<FileEntry>({
+        title: 'tmux · manage saves',
+        initialRows: entries,
+        rowKey: (e) => e.name,
+        renderListItem: (e) => {
+            const age = fmtAge(e.mtimeMs).padStart(4);
+            const size = fmtSize(e.sizeBytes).padStart(6);
 
-    const shell = createDashboardShell({
-        screen,
+            return `{cyan-fg}${age}{/cyan-fg}  {gray-fg}${size}{/gray-fg}  ${escTag(e.name)}`;
+        },
         listLabel: 'saves',
         listFocusName: 'saves',
         listWidth: '50%',
-        listItems: renderFileList(entries),
-        listTags: true,
-        search: false,
+        headerContent: () => {
+            const total = entries.length;
+            return `{bold}{magenta-fg}tmux saves{/magenta-fg}{/bold}  {gray-fg}|{/gray-fg}  ${total} files`;
+        },
         detailPanels: [
-            { label: 'summary', focusName: 'summary' },
-            { label: 'details', focusName: 'details' },
+            {
+                label: 'summary',
+                focusName: 'summary',
+                paint: async (entry) => {
+                    await ensureSessions(entry);
+                    return renderSummary(entry);
+                },
+            },
+            {
+                label: 'details',
+                focusName: 'details',
+                paint: async (entry) => {
+                    await ensureSessions(entry);
+                    return renderDetails(entry);
+                },
+            },
         ],
         keymapText: () =>
             `{cyan-fg}j/k{/cyan-fg} nav   {cyan-fg}[ ]{/cyan-fg} ±10   {cyan-fg}{ }{/cyan-fg} ±100   ` +
@@ -535,135 +543,82 @@ export async function manageSessions(): Promise<void> {
             `{cyan-fg}r{/cyan-fg} rename   ` +
             `{cyan-fg}R{/cyan-fg} reload   ` +
             `{cyan-fg}q{/cyan-fg} quit`,
+        actions: [
+            {
+                keys: 'enter',
+                handler: async (cur, api) => {
+                    if (!cur) return;
+                    const ok = await modalConfirm(api.screen, 'Load save', `Load save "${escTag(cur.name)}"? This will run the load flow.`);
+                    if (!ok) return;
+                    api.destroy();
+                    const { loadSession, handleSessionsIfServerIsRunning } = await import('@/tmux/commands/loadSession');
+                    await handleSessionsIfServerIsRunning();
+                    await loadSession(cur.name);
+                },
+            },
+            {
+                keys: 'd',
+                handler: async (cur, api) => {
+                    if (!cur) return;
+                    const ok = await modalConfirm(api.screen, 'Delete save', `Delete save "${escTag(cur.name)}"? This cannot be undone.`);
+                    if (!ok) return;
+                    try {
+                        await fs.rm(cur.path);
+                        entries = await loadFileEntries();
+                        api.setRows(entries);
+                        api.refreshHeader();
+                    } catch (e) {
+                        await modalConfirm(api.screen, 'Error', `Delete failed: ${escTag(e instanceof Error ? e.message : String(e))}`);
+                    }
+                },
+            },
+            {
+                keys: 'r',
+                handler: async (cur, api) => {
+                    if (!cur) return;
+                    const next = await modalText(api.screen, 'New file name', cur.name);
+                    if (!next.value?.trim()) return;
+                    const trimmed = next.value.trim();
+                    if (trimmed === cur.name) return;
+                    const newPath = `${sessionFilesFolder}/${trimmed}`;
+                    try {
+                        await fs.rename(cur.path, newPath);
+                        entries = await loadFileEntries();
+                        api.setRows(entries, { preserveKey: trimmed });
+                        api.refreshHeader();
+                    } catch (e) {
+                        await modalConfirm(api.screen, 'Error', `Rename failed: ${escTag(e instanceof Error ? e.message : String(e))}`);
+                    }
+                },
+            },
+            {
+                keys: 'R',
+                handler: async (_cur, api) => {
+                    entries = await loadFileEntries();
+                    api.setRows(entries);
+                    api.refreshHeader();
+                },
+            },
+            {
+                keys: 'n',
+                handler: async (_cur, api) => {
+                    const built = await buildNewSaveFlow(api.screen);
+                    if (!built) return;
+                    const defaultName = `manual-${getDateString()}`;
+                    const name = await modalText(api.screen, 'Save as file name', defaultName);
+                    if (!name.value?.trim()) return;
+                    const fname = name.value.trim();
+                    const newPath = `${sessionFilesFolder}/${fname}`;
+                    try {
+                        await fs.writeFile(newPath, JSON.stringify(built, null, 2), 'utf-8');
+                        entries = await loadFileEntries();
+                        api.setRows(entries, { preserveKey: fname });
+                        api.refreshHeader();
+                    } catch (e) {
+                        await modalConfirm(api.screen, 'Error', `Save failed: ${escTag(e instanceof Error ? e.message : String(e))}`);
+                    }
+                },
+            },
+        ],
     });
-    const { header, ring } = shell;
-    const list = shell.list;
-    const [summary, details] = shell.detailPanels;
-
-    function renderHeader(): void {
-        const total = entries.length;
-        const cur = entries[selectedIdx];
-        const right = cur ? `selected: ${escTag(cur.name)}` : 'no selection';
-        header.setContent(`{bold}{magenta-fg}tmux saves{/magenta-fg}{/bold}  {gray-fg}|{/gray-fg}  ${total} files  {gray-fg}|{/gray-fg}  ${right}`);
-    }
-
-    async function refreshDetailPanels(): Promise<void> {
-        const cur = entries[selectedIdx];
-        if (cur) await ensureSessions(cur);
-        summary.setContent(renderSummary(cur));
-        details.setContent(renderDetails(cur));
-        renderHeader();
-        screen.render();
-    }
-
-    function rebuildList(): void {
-        list.setItems(renderFileList(entries));
-        if (selectedIdx >= entries.length) selectedIdx = Math.max(0, entries.length - 1);
-        list.select(selectedIdx);
-    }
-
-    list.on('select item', (_item, idx) => {
-        selectedIdx = idx;
-        void refreshDetailPanels();
-    });
-
-    list.key(['enter'], async () => {
-        const cur = entries[selectedIdx];
-        if (!cur) return;
-        const ok = await modalConfirm(screen, 'Load save', `Load save "${escTag(cur.name)}"? This will run the load flow.`);
-        if (!ok) return;
-        screen.destroy();
-        const { loadSession, handleSessionsIfServerIsRunning } = await import('@/tmux/commands/loadSession');
-        await handleSessionsIfServerIsRunning();
-        await loadSession(cur.name);
-    });
-
-    list.key(['d'], async () => {
-        const cur = entries[selectedIdx];
-        if (!cur) return;
-        const ok = await modalConfirm(screen, 'Delete save', `Delete save "${escTag(cur.name)}"? This cannot be undone.`);
-        if (!ok) return;
-        try {
-            await fs.rm(cur.path);
-            entries = await loadFileEntries();
-            rebuildList();
-            await refreshDetailPanels();
-        } catch (e) {
-            await modalConfirm(screen, 'Error', `Delete failed: ${escTag(e instanceof Error ? e.message : String(e))}`);
-        }
-    });
-
-    list.key(['r'], async () => {
-        const cur = entries[selectedIdx];
-        if (!cur) return;
-        const next = await modalText(screen, 'New file name', cur.name);
-        if (!next.value?.trim()) return;
-        const trimmed = next.value.trim();
-        if (trimmed === cur.name) return;
-        const newPath = `${sessionFilesFolder}/${trimmed}`;
-        try {
-            await fs.rename(cur.path, newPath);
-            entries = await loadFileEntries();
-            const idx = entries.findIndex((e) => e.name === trimmed);
-            if (idx >= 0) selectedIdx = idx;
-            rebuildList();
-            await refreshDetailPanels();
-        } catch (e) {
-            await modalConfirm(screen, 'Error', `Rename failed: ${escTag(e instanceof Error ? e.message : String(e))}`);
-        }
-    });
-
-    list.key(['R'], async () => {
-        entries = await loadFileEntries();
-        rebuildList();
-        await refreshDetailPanels();
-    });
-
-    list.key(['n'], async () => {
-        const built = await buildNewSaveFlow(screen);
-        if (!built) return;
-        const defaultName = `manual-${getDateString()}`;
-        const name = await modalText(screen, 'Save as file name', defaultName);
-
-        if (!name.value?.trim()) return;
-        const fname = name.value.trim();
-        const newPath = `${sessionFilesFolder}/${fname}`;
-        try {
-            await fs.writeFile(newPath, JSON.stringify(built, null, 2), 'utf-8');
-            entries = await loadFileEntries();
-            const idx = entries.findIndex((e) => e.name === fname);
-            if (idx >= 0) selectedIdx = idx;
-            rebuildList();
-            await refreshDetailPanels();
-        } catch (e) {
-            await modalConfirm(screen, 'Error', `Save failed: ${escTag(e instanceof Error ? e.message : String(e))}`);
-        }
-    });
-
-    attachVerticalNavigation(list, {
-        moveBy: (delta) => {
-            if (entries.length === 0) return;
-            const cur = (list as unknown as { selected?: number }).selected ?? 0;
-            const next = Math.abs(delta) === 1
-                ? (cur + delta + entries.length) % entries.length
-                : Math.max(0, Math.min(entries.length - 1, cur + delta));
-            list.select(next);
-        },
-        top: () => {
-            if (entries.length === 0) return;
-            list.select(0);
-        },
-        bottom: () => {
-            if (entries.length === 0) return;
-            list.select(entries.length - 1);
-        },
-    });
-
-    attachFocusCycleKeys(screen, ring);
-
-    ring.focusAt(0);
-    list.select(0);
-    await refreshDetailPanels();
-
-    await awaitScreenDestroy(screen);
 }

@@ -1,4 +1,4 @@
-export { escTag } from './escTag';
+export { escTag, sanitizeForBlessed } from './escTag';
 export {
     createDashboardScreen,
     awaitScreenDestroy,
@@ -42,6 +42,16 @@ export {
     toggleExpandedRow,
     type ExpandableTreeRow,
 } from './tree';
+export {
+    createListDetailDashboard,
+    type CreateListDetailDashboardOptions,
+    type ListDetailDashboardApi,
+    type ListDetailPanelSpec,
+    type ListDetailFilterSpec,
+    type ListDetailActionSpec,
+    type ListDetailTreeSpec,
+    type ListDetailPaintCtx,
+} from './listDetailDashboard';
 export {
     pickList,
     confirmDashboard,
