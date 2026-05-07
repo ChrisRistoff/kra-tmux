@@ -18,7 +18,7 @@ describe('cliHelp', () => {
         expect(getAsciiHelp('git')).toContain('| checkout');
         expect(getAsciiHelp('tmux')).toContain('| manage-server');
         expect(getAsciiHelp('ai')).toContain('| quota-agent');
-        expect(getAsciiHelp('sys')).toContain('| grep-dir-remove');
+        expect(getAsciiHelp('sys')).toContain('| grep');
         expect(getAsciiHelp('settings')).toContain('Use: kra settings');
     });
 });

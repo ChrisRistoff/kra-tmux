@@ -1,37 +1,27 @@
-import * as systemFileManager from "@/system/commands/systemFileManager";
-import * as scripts from "@/system/commands/scripts/executeScripts";
+import * as systemGrepDashboard from "@/system/commands/systemGrepDashboard";
+import * as scripts from "@/system/commands/scripts/scriptsDashboard";
 import * as systemProcessManager from "@/system/commands/systemProcessManager";
 import { SystemCommands } from "@/commandsMaps/types/commandTypes";
 
 export const systemCommands: SystemCommands = {
-    'grep-file-remove': {
-        run: systemFileManager.removeFile,
-        description: 'Search for matching files and delete the ones you pick',
-        details: 'Interactive cleanup flow for files. Search by name, review the matches, and only remove the entries you explicitly confirm.',
+    'grep': {
+        run: systemGrepDashboard.openGrepDashboard,
+        description: 'Search for files, directories, or content and act on results',
+        details: 'Full dashboard: search by file name, directory name, or file content. Navigate results, preview files, open in Neovim, batch-delete, copy paths.',
         highlights: [
-            'Useful for cleaning generated or duplicated files safely.',
-            'Keeps deletion interactive instead of forcing a raw rm command.',
-            'Focused on file-name searching before removal.',
-        ],
-    },
-    'grep-dir-remove': {
-        run: systemFileManager.removeDirectory,
-        description: 'Search for matching directories and delete the ones you pick',
-        details: 'Directory version of the interactive cleanup flow. Search for matching folders, inspect the candidates, and remove only the ones you choose.',
-        highlights: [
-            'Good for cleaning caches, build folders, or abandoned workspaces.',
-            'Mirrors the file-removal flow so both cleanup tools feel the same.',
-            'Keeps recursive deletion behind an explicit picker-based action.',
+            'Three modes: files (f), dirs (d), content grep (c).',
+            'Preview file content or matching lines instantly on selection.',
+            'Batch-select with space and bulk-delete with X.',
         ],
     },
     'scripts': {
-        run: scripts.executeScript,
-        description: 'Browse and run repository automation scripts',
-        details: 'Open the script picker for repo automation tasks and run the selected script through the shared menu flow.',
+        run: scripts.openScriptsDashboard,
+        description: 'Browse, run, edit, and manage repository automation scripts',
+        details: 'Full TUI dashboard for repo automation scripts. Filter by name, preview content, run with sh, open in Neovim, create new .sh scripts (shebang added automatically), delete with confirmation, and yank script paths to clipboard.',
         highlights: [
-            'Central entry point for repo-specific automation helpers.',
-            'Lets you browse available scripts before running them.',
-            'Keeps script execution grouped with the other system utilities.',
+            'Run a script with enter · edit with e · create new with n.',
+            'Press D to delete (with confirmation) or y to copy path.',
+            'Filter scripts by name with s or / and refresh with r.',
         ],
     },
     'process-manager': {

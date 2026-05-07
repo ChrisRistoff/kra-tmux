@@ -347,6 +347,7 @@ export async function scout(): Promise<void> {
     }
 
     function renderListItems(): void {
+        list.clearItems();
         list.setItems(displayed.map((r) => renderRepoRow(r)));
     }
 
@@ -577,7 +578,7 @@ export async function scout(): Promise<void> {
     list.key(['l'], async () => {
         const r = selectedRepo();
         if (!r) return;
-        const binPath = path.resolve(__dirname, '../../../../bin/kra.js');
+        const binPath = path.resolve(__dirname, '../../../bin/kra.js');
         await runInherit(
             'sh',
             ['-c', `cd ${JSON.stringify(r.fullPath)} && node ${JSON.stringify(binPath)} git log`],
@@ -599,6 +600,8 @@ export async function scout(): Promise<void> {
         top: () => { list.select(0); screen.render(); },
         bottom: () => { list.select(displayed.length - 1); screen.render(); },
     });
+
+    screen.on('resize', () => { renderListItems(); screen.render(); });
 
     attachFocusCycleKeys(screen, ring);
     list.key(['q', 'escape'], () => screen.destroy());
