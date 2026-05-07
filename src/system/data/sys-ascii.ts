@@ -21,6 +21,8 @@ export const sysAscii = `
         | scripts            | 🧪  Browse repo automation scripts and run the selected script from the shared picker flow.                          |
         |--------------------|----------------------------------------------------------------------------------------------------------------------|
         | process-manager    | 📊  Live ps dashboard: search, sort by CPU/MEM/PID, view per-process details, send SIGTERM/SIGKILL.                  |
+        |--------------------|----------------------------------------------------------------------------------------------------------------------|
+        | disk-usage         | 💾  du-style explorer: scan sizes, expand dirs inline, batch-delete, sort by size/name/mtime, open in finder.        |
         +--------------------+----------------------------------------------------------------------------------------------------------------------+
 
         Use: kra sys <command>

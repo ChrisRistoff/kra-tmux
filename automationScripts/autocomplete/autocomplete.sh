@@ -18,7 +18,7 @@ _kra_completions() {
     elif [[ "$prev" == "tmux" ]]; then
         COMPREPLY=( $(compgen -W "save-server load-server list-sessions kill manage-server" -- "$cur") )
     elif [[ "$prev" == "sys" ]]; then
-        COMPREPLY=( $(compgen -W "scripts grep process-manager" -- "$cur") )
+        COMPREPLY=( $(compgen -W "scripts grep process-manager disc-usage" -- "$cur") )
     elif [[ "$prev" == "ai" ]]; then
         COMPREPLY=( $(compgen -W "chat load delete agent quota-agent index" -- "$cur") )
     fi

@@ -578,10 +578,9 @@ export async function scout(): Promise<void> {
     list.key(['l'], async () => {
         const r = selectedRepo();
         if (!r) return;
-        const binPath = path.resolve(__dirname, '../../../bin/kra.js');
         await runInherit(
             'sh',
-            ['-c', `cd ${JSON.stringify(r.fullPath)} && node ${JSON.stringify(binPath)} git log`],
+            ['-c', `cd ${JSON.stringify(r.fullPath)} && kra git log`],
             screen,
         );
     });

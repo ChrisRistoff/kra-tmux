@@ -240,7 +240,7 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
             ...(opts.contextWindow !== undefined ? { contextWindow: opts.contextWindow } : {}),
             excludedTools: [
                 'str_replace_editor', 'write_file', 'read_file', 'edit', 'view',
-                'grep', 'glob', 'create', 'apply_patch',
+                'grep', 'glob', 'create', 'apply_patch', 'task',
                 'bash', 'shell', 'run_in_terminal', 'execute', 'report_intent',
             ],
             ...(opts.initialMessages ? { initialMessages: opts.initialMessages } : {}),

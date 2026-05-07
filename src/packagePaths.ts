@@ -66,5 +66,7 @@ export const docsLiveProgressJsPath = assetPath('dest', 'src', 'AI', 'AIAgent', 
 export const docsPythonWorkerPath = path.join(automationScriptsDir, 'python', 'kra_docs_worker.py');
 export const docsPythonRequirementsPath = path.join(automationScriptsDir, 'python', 'requirements-lean.txt');
 
+
 // Default settings template that ships with the package
 export const settingsExamplePath = assetPath('settings.toml.example');
+

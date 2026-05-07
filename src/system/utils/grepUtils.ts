@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { escTag } from '@/UI/dashboard';
+import { escTag, sanitizeForBlessed } from '@/UI/dashboard';
 import { execCommand } from '@/utils/bashHelper';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -237,6 +237,7 @@ async function loadContentMatches(query: string, absPath: string): Promise<strin
     return lines;
 }
 
+
 // ─── Preview helpers ──────────────────────────────────────────────────────────
 
 export async function loadContentPreviewWithMatches(
@@ -257,7 +258,12 @@ export async function loadContentPreviewWithMatches(
 
         const out = shown.map((line, i) => {
             const lineNo = i + 1;
-            const escaped = escTag(line);
+            // blessed's fullUnicode: true tracks double-width cells via \x03
+            // markers; on scroll those markers desync and duplicate glyphs at
+            // wrong positions. Sanitize wide / non-printable chars BEFORE
+            // tag-escape so the preview renders at exactly one cell per char.
+            const safe = sanitizeForBlessed(line);
+            const escaped = escTag(safe);
             const hasMatch = escQuery !== '' && line.includes(query);
             if (hasMatch) {
                 if (firstMatchLine === -1) firstMatchLine = lineNo;
@@ -304,25 +310,25 @@ export async function loadPreview(
         if (result.type === 'dir') {
             const { stdout } = await execCommand(`ls -la ${JSON.stringify(result.absPath)} 2>/dev/null`);
 
-            return stdout || '(empty directory)';
+            return sanitizeForBlessed(stdout) || '(empty directory)';
         }
         if (mode === 'content') {
             if (result.matches.length === 0 && query) {
                 result.matches = await loadContentMatches(query, result.absPath);
             }
-            if (result.matches.length > 0) {
+        if (result.matches.length > 0) {
                 return result.matches
                     .map((line) => {
                         const [lineNo, ...rest] = line.split(':');
 
-                        return `{yellow-fg}${lineNo}{/yellow-fg}  ${escTag(rest.join(':'))}`;
+                        return `{yellow-fg}${lineNo}{/yellow-fg}  ${escTag(sanitizeForBlessed(rest.join(':')))}`;
                     })
                     .join('\n');
             }
         }
         const { stdout } = await execCommand(`head -n 120 ${JSON.stringify(result.absPath)} 2>/dev/null`);
 
-        return stdout || '(binary or empty file)';
+        return sanitizeForBlessed(stdout) || '(binary or empty file)';
     } catch {
         return '(could not read file)';
     }
@@ -361,9 +367,7 @@ export async function loadMeta(result: GrepResult): Promise<string> {
 
 export function renderRow(r: GrepResult, mode: SearchMode): string {
     const sel = r.selected ? '{yellow-fg}[x]{/yellow-fg} ' : '    ';
-    // ASCII-only icons. Multi-byte emoji break blessed's cell-width tracking
-    // and leave "letters all over" trails on re-render.
-    const icon = r.type === 'dir' ? '{blue-fg}D{/blue-fg}' : '{green-fg}F{/green-fg}';
+    const icon = r.type === 'dir' ? '📁' : '📄';
     const disp = escTag(r.displayPath.replace(/^\.\//u, ''));
     const countTag = mode === 'content' && r.matchCount > 0
         ? `  {yellow-fg}(${r.matchCount}){/yellow-fg}`

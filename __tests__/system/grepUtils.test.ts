@@ -242,7 +242,7 @@ describe('grepUtils', () => {
         it('renders a file row without selection marker', () => {
             const r = makeFile('./src/foo.ts');
             const row = grepUtils.renderRow(r, 'files');
-            expect(row).toContain('F');
+            expect(row).toContain('📄');
             expect(row).toContain('src/foo.ts');
             expect(row).not.toContain('[x]');
         });
@@ -250,7 +250,7 @@ describe('grepUtils', () => {
         it('renders a directory row', () => {
             const r = makeDir('./dist');
             const row = grepUtils.renderRow(r, 'dirs');
-            expect(row).toContain('D');
+            expect(row).toContain('📁');
             expect(row).toContain('dist');
         });
 

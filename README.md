@@ -415,6 +415,7 @@ kra sys
 | **grep** 🔍             | **Unified search dashboard** — find files/dirs by name or grep content, preview, open in Neovim, batch-delete.     |
 | **scripts** 🧪          | **Custom script execution** system (experimental) - Run user-defined automation scripts.                                |
 | **process-manager** 📊  | **Live ps dashboard** - search, sort by CPU/MEM/PID, view per-process details, send SIGTERM/SIGKILL.                    |
+| **disk-usage** 💾        | **du-style explorer** — scan sizes, expand directories inline, batch-delete, sort by size/name/mtime, open in finder.   |
 
 *Note: Script management system is in active development. Currently requires manual script addition.*
 
@@ -437,6 +438,14 @@ Keybindings: `f`/`d`/`c` switch mode · `enter` search (in search box) or open i
 <summary>📊 <strong>kra sys process-manager</strong> - Live process dashboard</summary>
 
 Interactive `ps` browser with search, sort modes (CPU / MEM / PID), windowed list rendering, per-process details and signal sending (SIGTERM / SIGKILL).
+</details>
+
+<details>
+<summary>💾 <strong>kra sys disk-usage</strong> - du-style disk usage explorer</summary>
+
+Scan the current directory tree and rank entries by size. Expand directories inline (`e` / `l`), batch-select with `space` and bulk-delete with `X`. Switch sort modes (`s`) between size/name/mtime/count. Change root with `R`, jump home with `H`, open in finder with `o`. Live filter via `/`.
+
+Keybindings: `j`/`k` nav · `enter` descend · `-` up · `e`/`l` expand · `space` select · `X` delete selected · `o` open · `s` sort · `/` filter · `r` refresh · `R` new root · `H` home · `y` yank path · `Tab` cycle panels · `q` quit.
 </details>
 
 ---
