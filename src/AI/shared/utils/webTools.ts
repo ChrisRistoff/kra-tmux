@@ -547,10 +547,187 @@ export async function runWebFetch(args: WebFetchArgs): Promise<WebToolResult> {
     };
 }
 
-interface SearchResult {
+export interface SearchResult {
     title: string;
     url: string;
     snippet: string;
+}
+
+export interface FetchedPage {
+    url: string;
+    title: string;
+    body: string;
+    contentType: string;
+    via: string;
+    fetchedAt: number;
+    status: number;
+}
+
+/**
+ * Lower-level fetch that returns the raw markdown body without the header /
+ * pagination scaffolding `runWebFetch` adds for LLM display. Used by the
+ * `investigate_web` sub-agent's `web_scrape_and_index` tool to feed pages
+ * into the chunker + embedder.
+ *
+ * Reuses the same cache + `fetchAndBuildEntry` pipeline as `runWebFetch` so
+ * concurrent calls share fetched bodies.
+ */
+export async function fetchPageMarkdown(
+    url: string,
+    mode: WebFetchMode = 'auto',
+): Promise<{ page?: FetchedPage; error?: string }> {
+    if (!/^https?:\/\//i.test(url)) {
+        return { error: `Invalid URL (must be http/https): ${url}` };
+    }
+
+    const cacheKey = `${mode}|${url}`;
+    let entry = cacheGet(cacheKey);
+
+    if (!entry) {
+        const fetched = await fetchAndBuildEntry(url, mode);
+        if (fetched.error || !fetched.entry) {
+            return { error: fetched.error ?? 'Unknown fetch error' };
+        }
+        entry = fetched.entry;
+        cacheSet(cacheKey, entry);
+    }
+
+    if (entry.status >= 400) {
+        return { error: `HTTP ${entry.status} ${entry.statusText} for ${url}` };
+    }
+
+    return {
+        page: {
+            url: entry.url,
+            title: extractMarkdownTitle(entry.body) ?? deriveTitleFromUrl(entry.url),
+            body: entry.body,
+            contentType: entry.contentType,
+            via: entry.via,
+            fetchedAt: entry.fetchedAt,
+            status: entry.status,
+        },
+    };
+}
+
+function extractMarkdownTitle(markdown: string): string | undefined {
+    // First non-empty `# ` line, looking only at the first ~40 lines so we don't
+    // misidentify a deep heading as the page title.
+    const lines = markdown.split('\n', 40);
+    for (const line of lines) {
+        const m = /^\s*#\s+(.+?)\s*$/.exec(line);
+        if (m) return m[1];
+    }
+
+    return undefined;
+}
+
+function deriveTitleFromUrl(url: string): string {
+    try {
+        const u = new URL(url);
+
+        return `${u.hostname}${u.pathname}`;
+    } catch {
+        return url;
+    }
+}
+
+/**
+ * Structured search that returns `SearchResult[]` instead of a formatted
+ * string. Tries Jina first if `JINA_API` is set, falls back to DuckDuckGo
+ * lite. Used by the `investigate_web` sub-agent's `web_search` tool so the
+ * model gets a clean JSON list of `{title, url, snippet}` to triage.
+ */
+export async function searchPagesStructured(
+    query: string,
+    limit: number = DEFAULT_MAX_RESULTS,
+): Promise<{ results: SearchResult[]; error?: string }> {
+    const trimmed = query.trim();
+    if (!trimmed) return { results: [], error: 'Missing required argument: query' };
+
+    const cap = Math.min(limit, HARD_MAX_RESULTS);
+
+    if (process.env.JINA_API) {
+        const jina = await searchJinaStructured(trimmed, cap);
+        if (jina.results.length > 0) return jina;
+    }
+
+    return await searchDuckDuckGoLiteStructured(trimmed, cap);
+}
+
+async function searchJinaStructured(
+    query: string,
+    limit: number,
+): Promise<{ results: SearchResult[]; error?: string }> {
+    const apiKey = process.env.JINA_API;
+    if (!apiKey) return { results: [], error: 'JINA_API not set' };
+
+    try {
+        const response = await fetchWithTimeout(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {
+            method: 'GET',
+            redirect: 'follow',
+            headers: {
+                'User-Agent': USER_AGENT,
+                Authorization: `Bearer ${apiKey}`,
+                Accept: 'application/json',
+                'X-Respond-With': 'no-content',
+            },
+        });
+
+        if (!response.ok) {
+            return { results: [], error: `Jina HTTP ${response.status} ${response.statusText}` };
+        }
+
+        const json = await response.json() as JinaSearchResponse;
+        const items = Array.isArray(json.data) ? json.data : [];
+        const results = items.slice(0, limit).map((item) => ({
+            title: (item.title ?? '').trim(),
+            url: (item.url ?? '').trim(),
+            snippet: (item.description ?? item.content ?? '').trim(),
+        })).filter((r) => r.title && r.url);
+
+        return { results };
+    } catch (error) {
+        return {
+            results: [],
+            error: error instanceof Error ? error.message : String(error),
+        };
+    }
+}
+
+async function searchDuckDuckGoLiteStructured(
+    query: string,
+    limit: number,
+): Promise<{ results: SearchResult[]; error?: string }> {
+    try {
+        const body = new URLSearchParams({ q: query, kl: 'wt-wt' }).toString();
+        const response = await fetchWithTimeout('https://lite.duckduckgo.com/lite/', {
+            method: 'POST',
+            redirect: 'follow',
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            body,
+        });
+
+        if (!response.ok) {
+            return { results: [], error: `DuckDuckGo HTTP ${response.status} ${response.statusText}` };
+        }
+
+        const html = await response.text();
+        if (/anomaly|unusual traffic|blocked/i.test(html) && !/result-link/i.test(html)) {
+            return { results: [], error: 'DuckDuckGo rate-limited the request. Retry in a minute.' };
+        }
+
+        return { results: parseDuckDuckGoLiteHtml(html, limit) };
+    } catch (error) {
+        return {
+            results: [],
+            error: error instanceof Error ? error.message : String(error),
+        };
+    }
 }
 
 

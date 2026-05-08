@@ -16,7 +16,7 @@
 import path from 'path';
 import { connect, type Connection, type Table } from '@lancedb/lancedb';
 import { ensureContentFtsIndex } from './hybridSearch';
-import type { CodeChunkRow, MemoryRow } from './types';
+import type { CodeChunkRow, MemoryRow, ResearchChunkRow } from './types';
 import type { DocChunkRow } from '../docs/types';
 import { _resetRepoStorageCacheForTest, resolveRepoStorage, repoStorageDirForKey } from './repoKey';
 import { kraDocsLanceRoot, kraDocsRoot } from '@/filePaths';
@@ -31,6 +31,7 @@ let docsDbCache: Connection | null = null;
 const memoryFindingsTableCache: Map<string, Table> = new Map();
 const memoryRevisitsTableCache: Map<string, Table> = new Map();
 const codeChunksTableCache: Map<string, Table> = new Map();
+const researchChunksTableCache: Map<string, Table> = new Map();
 const codeFtsEnsuredKeys: Set<string> = new Set();
 const docFtsEnsuredKeys: Set<string> = new Set();
 const DOC_FTS_KEY = 'doc_chunks';
@@ -39,6 +40,7 @@ const legacyDropAttemptedKeys: Set<string> = new Set();
 
 const CODE_CHUNKS_TABLE = 'code_chunks';
 const DOC_CHUNKS_TABLE = 'doc_chunks';
+const RESEARCH_CHUNKS_TABLE = 'research_chunks';
 const LEGACY_MEMORY_TABLE = 'memory';
 
 async function memoryRoot(repoKey?: string): Promise<string> {
@@ -172,6 +174,7 @@ export function _resetCachesForTest(): void {
     memoryFindingsTableCache.clear();
     memoryRevisitsTableCache.clear();
     codeChunksTableCache.clear();
+    researchChunksTableCache.clear();
     codeFtsEnsuredKeys.clear();
     docFtsEnsuredKeys.clear();
     docChunksTableCache = null;
@@ -266,6 +269,60 @@ export async function countCodeChunks(repoKey?: string): Promise<number> {
     } catch {
         return 0;
     }
+}
+
+export interface GetResearchChunksTableResult {
+    table: Table | null;
+    justCreated: boolean;
+}
+
+/**
+ * Returns the research_chunks table. Pass a seed row when about to write so the
+ * table can be created on first use; pass `null` for read-only callers and
+ * handle `table === null`. Per-repo, mirroring `getCodeChunksTable`.
+ */
+export async function getResearchChunksTable(
+    seedRow: ResearchChunkRow | null,
+    repoKey?: string,
+): Promise<GetResearchChunksTableResult> {
+    const key = await resolveRepoKey(repoKey);
+    const cached = researchChunksTableCache.get(key);
+    if (cached) {
+        return { table: cached, justCreated: false };
+    }
+
+    const next = mutex.then(async (): Promise<GetResearchChunksTableResult> => {
+        const cachedInner = researchChunksTableCache.get(key);
+        if (cachedInner) {
+            return { table: cachedInner, justCreated: false };
+        }
+
+        const db = await getDb(key);
+        const tableNames = await db.tableNames();
+
+        if (tableNames.includes(RESEARCH_CHUNKS_TABLE)) {
+            const t = await db.openTable(RESEARCH_CHUNKS_TABLE);
+            researchChunksTableCache.set(key, t);
+
+            return { table: t, justCreated: false };
+        }
+
+        if (!seedRow) {
+            return { table: null, justCreated: false };
+        }
+
+        const t = await db.createTable(
+            RESEARCH_CHUNKS_TABLE,
+            [seedRow as unknown as Record<string, unknown>],
+        );
+        researchChunksTableCache.set(key, t);
+
+        return { table: t, justCreated: true };
+    });
+
+    mutex = next.catch(() => undefined);
+
+    return next;
 }
 
 export interface GetDocChunksTableResult {

@@ -97,12 +97,26 @@ export class CopilotClientWrapper implements AgentClient {
 
         const onPermissionRequest = (): { kind: 'approved' } => ({ kind: 'approved' as const });
 
-        // When the caller asked for a positive tool inventory filter, translate
-        // it into Copilot's `excludedTools` knob. Copilot accepts bare MCP tool
-        // names there, so we enumerate the configured MCP servers, drop the
-        // ones our whitelist matches, and merge the rest with whatever
-        // `excludedTools` the caller already supplied.
-        const mergedExcluded = await decideCopilotExcludedTools(options);
+        // For sub-agents, force a strict positive whitelist via the SDK's
+        // `availableTools` knob. Per the SDK docs it "takes precedence over
+        // excludedTools" and means ONLY listed tools are exposed to the
+        // model — hiding ALL built-in Copilot tools (read_bash, write_bash,
+        // stop_bash, list_bash, and any future additions) without us having
+        // to enumerate every name we want to block. Local tools must be
+        // listed by name to remain callable.
+        let availableToolsForSdk: string[] | undefined;
+        let mergedExcluded: string[] = options.excludedTools ?? [];
+
+        if (isSubAgent && options.allowedTools && options.allowedTools.length > 0) {
+            availableToolsForSdk = Array.from(new Set([
+                ...options.allowedTools,
+                ...(options.localTools?.map((t) => t.name) ?? []),
+            ]));
+        } else {
+            // Orchestrator path: keep the existing enumerate-and-exclude
+            // behaviour so any user-supplied excludes are honoured.
+            mergedExcluded = await decideCopilotExcludedTools(options);
+        }
 
         const sdkSession = await this.inner.createSession({
             clientName: 'copilot-cli',
@@ -113,7 +127,8 @@ export class CopilotClientWrapper implements AgentClient {
             enableConfigDiscovery: !isSubAgent,
             ...(isSubAgent ? {} : { skillDirectories: [skillsDir] }),
             mcpServers: options.mcpServers,
-            ...(mergedExcluded.length > 0 ? { excludedTools: mergedExcluded } : {}),
+            ...(availableToolsForSdk ? { availableTools: availableToolsForSdk } : {}),
+            ...(mergedExcluded.length > 0 && !availableToolsForSdk ? { excludedTools: mergedExcluded } : {}),
             ...(options.localTools && options.localTools.length > 0 ? { tools: options.localTools } : {}),
             onPermissionRequest,
             infiniteSessions: {

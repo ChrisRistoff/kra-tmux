@@ -18,7 +18,7 @@ kra ai agent
 |---|---|
 | [`providers.md`](./providers.md) | Provider architecture, Copilot/BYOK behavior, backend add/remove lifecycle, model catalog |
 | [`workflow-and-keymaps.md`](./workflow-and-keymaps.md) | Turn lifecycle, keymaps, tool approval UX, diff editor behavior, session diff history |
-| [`tools-and-mcp.md`](./tools-and-mcp.md) | File-context tools, bash/web tools, MCP configuration, sub-agent tools (`investigate`, `execute`) |
+| [`tools-and-mcp.md`](./tools-and-mcp.md) | File-context tools, bash/web tools, MCP configuration, sub-agent tools (`investigate`, `investigate_web`, `execute`) |
 | [`memory-and-indexing.md`](./memory-and-indexing.md) | `kra-memory` store, tools, picker UX, indexing behavior and settings |
 | [`copilot-operations.md`](./copilot-operations.md) | Copilot-only skills and quota monitoring |
 

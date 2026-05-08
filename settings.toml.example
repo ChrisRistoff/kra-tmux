@@ -50,13 +50,62 @@ maxToolCalls = 60             # hard cap on tool calls before the executor is fo
 #                  "search", "lsp_query", "bash"]
 
 [ai.agent.investigator]
-enabled = false               # master switch; off by default
+# Two independent switches — either or both may be enabled. The runtime picker
+# (BYOK) prompts once and the same provider+model is reused for both.
+code = false                  # `investigate` sub-agent for repo code questions
+web  = false                  # `investigate_web` sub-agent for live web research
 maxEvidenceItems = 8          # cap on evidence array returned to orchestrator
 maxExcerptLines = 20          # cap on lines per excerpt
 validateExcerpts = true       # reject hallucinated snippets at the tool layer
-# Restrict the toolset the investigator is allowed to call (defaults shown):
+# Restrict the toolset the code investigator is allowed to call (defaults shown):
 # toolWhitelist = ["semantic_search", "search", "get_outline", "read_lines",
 #                  "lsp_query", "docs_search", "recall"]
+
+# Tool-result truncation — caps on the number of characters of a tool's output
+# the model gets to see. Anything longer than head + tail gets the middle
+# replaced with an omission marker. Set head/tail to 0 to disable that bucket.
+#
+# Two profiles. The orchestrator profile applies to tool calls the orchestrator
+# itself makes; the sub-agent profile applies to tool calls inside an
+# `investigate` / `investigate_web` / `execute` sub-agent. Sub-agents typically
+# need to digest larger payloads, so their defaults are looser.
+#
+# Tools whose name contains any substring in `neverTruncate` bypass truncation
+# entirely. Defaults cover the structured discovery tools whose middle slice
+# is just as load-bearing as the head/tail — truncating them forces the model
+# to fall back to bash to recover the omitted hits.
+[ai.agent.truncation]
+defaultHead = 4000
+defaultTail = 4000
+bashHead    = 2000
+bashTail    = 6000
+neverTruncate = ["semantic_search", "docs_search", "recall", "get_outline"]
+
+[ai.agent.subAgentTruncation]
+defaultHead = 8000
+defaultTail = 8000
+bashHead    = 4000
+bashTail    = 12000
+neverTruncate = ["semantic_search", "docs_search", "recall", "get_outline"]
+
+# Web Investigator – tuning knobs for `investigate_web`. Turn it on/off via
+# `[ai.agent.investigator].web` above. The sub-agent searches the web, scrapes
+# selected URLs server-side, indexes them into a TTL-evicted vector table, and
+# returns a curated `{summary, evidence, confidence}` synthesis. The LLM never
+# sees raw page bodies — only retrieved excerpts.
+[ai.agent.investigatorWeb]
+useInvestigatorRuntime = true # if true reuse the code investigator's provider+model;
+                              # if false you'll be prompted to pick a separate one on startup
+maxSearches = 5               # hard cap on web_search calls per investigation
+maxScrapes = 5                # hard cap on web_scrape_and_index calls per investigation
+urlsPerScrape = 30            # per-call cap on URLs in one scrape batch
+maxToolCalls = 30             # hard cap on total tool calls before the agent is forced to submit
+maxEvidenceItems = 8          # cap on evidence array returned to orchestrator
+maxExcerptLines = 20          # cap on lines per excerpt
+ttlMinutes = 60               # how long indexed page chunks survive before TTL eviction
+validateExcerpts = true       # reject hallucinated snippets at the tool layer
+# Restrict the toolset the web investigator is allowed to call (defaults shown):
+# toolWhitelist = ["web_search", "web_scrape_and_index", "research_query"]
 
 # ─── Quota dashboard (`kra ai quota-agent`) ──────────────────────────────────
 # Per-provider toggles for which sections the quota dashboard renders, and

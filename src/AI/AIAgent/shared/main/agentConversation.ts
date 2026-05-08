@@ -14,7 +14,28 @@ import type {
     LocalTool,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { createInvestigateTool } from '@/AI/AIAgent/shared/subAgents/investigateTool';
+import { createInvestigateWebTool } from '@/AI/AIAgent/shared/subAgents/investigateWebTool';
 import { createExecuteTool } from '@/AI/AIAgent/shared/subAgents/executeTool';
+import { deleteByResearchIds } from '@/AI/AIAgent/shared/memory/researchChunks';
+import type { AgentTruncationSettings } from '@/AI/AIAgent/shared/subAgents/types';
+
+// Fallback truncation profiles used when callers don't pass settings (e.g. tests).
+// The real defaults live in `subAgents/settings.ts`; these mirror them so the
+// behaviour is identical when settings.toml is absent.
+const ORCHESTRATOR_TRUNCATION_FALLBACK: AgentTruncationSettings = {
+    defaultHead: 4000,
+    defaultTail: 4000,
+    bashHead: 2000,
+    bashTail: 6000,
+    neverTruncate: ['semantic_search', 'docs_search', 'recall', 'get_outline'],
+};
+const SUB_AGENT_TRUNCATION_FALLBACK: AgentTruncationSettings = {
+    defaultHead: 8000,
+    defaultTail: 8000,
+    bashHead: 4000,
+    bashTail: 12000,
+    neverTruncate: ['semantic_search', 'docs_search', 'recall', 'get_outline'],
+};
 import { createOrchestratorTranscript } from '@/AI/AIAgent/shared/main/orchestratorTranscript';
 
 import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
@@ -176,10 +197,30 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         }
     };
 
+    // Truncation caps for tool results. Two profiles — the orchestrator's own
+    // tool results vs. those handed back to a sub-agent (investigator/executor/
+    // investigator_web). Sub-agents typically need to digest larger payloads,
+    // so the sub-agent profile defaults are looser. Both come from settings.toml.
+    const orchestratorTruncation = options.truncation ?? ORCHESTRATOR_TRUNCATION_FALLBACK;
+    const subAgentTruncation = options.subAgentTruncation ?? SUB_AGENT_TRUNCATION_FALLBACK;
+
     const orchestratorOnPostToolUse = async (input: AgentPostToolUseHookInput): Promise<AgentPostToolUseHookOutput> => {
         const isBashLike = ['bash', 'shell', 'execute', 'run_terminal', 'computer'].some(
             (fragment) => input.toolName.toLowerCase().includes(fragment)
         );
+
+        // Sub-agents reach this hook via `bridge.parentOnPostToolUse`, which
+        // tags the input with `agentLabel`. Branch on that to apply the right
+        // profile so each context can have its own caps.
+        const profile = input.agentLabel ? subAgentTruncation : orchestratorTruncation;
+
+        // Structured discovery tools return information-dense JSON whose
+        // middle slice is just as load-bearing as the head/tail. Truncating
+        // it forces the model to fall back to bash to recover the omitted
+        // hits, which defeats the point of having those tools.
+        if (profile.neverTruncate.some((name: string) => input.toolName.toLowerCase().includes(name))) {
+            return {};
+        }
 
         if (isBashLike && stateRef.current?.pendingBashSnapshot) {
             const snapshot = stateRef.current.pendingBashSnapshot;
@@ -188,8 +229,9 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             await stateRef.current.history.bashSnapshotAfter(snapshot).catch(() => { /* non-fatal */ });
         }
 
-        const HEAD_CHARS = isBashLike ? 2000 : 4000;
-        const TAIL_CHARS = isBashLike ? 6000 : 4000;
+        const HEAD_CHARS = isBashLike ? profile.bashHead : profile.defaultHead;
+        const TAIL_CHARS = isBashLike ? profile.bashTail : profile.defaultTail;
+        if (HEAD_CHARS === 0 && TAIL_CHARS === 0) return {};
         const text = input.toolResult.textResultForLlm;
         if (text.length <= HEAD_CHARS + TAIL_CHARS) return {};
         const omitted = text.length - HEAD_CHARS - TAIL_CHARS;
@@ -227,6 +269,49 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
                 parentOnPostToolUse: orchestratorOnPostToolUse,
             },
         }));
+    }
+
+    // Track in-flight `investigate_web` research_ids so SIGINT/exit can purge
+    // their rows from the shared LanceDB table even when TTL hasn't kicked in.
+    const activeResearchIds = new Set<string>();
+
+    if (options.investigatorWeb) {
+        orchestratorLocalTools.push(createInvestigateWebTool({
+            runtime: options.investigatorWeb,
+            mcpServers: mergedMcpServers,
+            workingDirectory: cwd,
+            chatBridge: {
+                getParentState: () => {
+                    if (!stateRef.current) {
+                        throw new Error('Web investigator invoked before orchestrator state was ready');
+                    }
+
+                    return stateRef.current;
+                },
+                agentLabel: 'INVESTIGATOR-WEB',
+                headerEmoji: '🌐',
+                parentOnPreToolUse: orchestratorOnPreToolUse,
+                parentOnPostToolUse: orchestratorOnPostToolUse,
+            },
+            onResearchActive: (researchId, active) => {
+                if (active) activeResearchIds.add(researchId);
+                else activeResearchIds.delete(researchId);
+            },
+        }));
+
+        // Best-effort cleanup on shutdown. SIGINT fires for Ctrl-C; `exit`
+        // covers normal termination. SIGKILL leaves rows for the next
+        // `investigate_web` start (and ultimately the TTL purge) to clean up.
+        const purgeActive = (): void => {
+            if (activeResearchIds.size === 0) return;
+            const ids = Array.from(activeResearchIds);
+            activeResearchIds.clear();
+            // Fire-and-forget; we can't reliably await on `exit`.
+            void deleteByResearchIds(ids).catch(() => undefined);
+        };
+        process.once('SIGINT', purgeActive);
+        process.once('SIGTERM', purgeActive);
+        process.once('exit', purgeActive);
     }
 
     if (options.executor) {
@@ -275,6 +360,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
             content: buildOrchestratorSystemMessage({
                 selectedRepos,
                 investigateEnabled: !!options.investigator,
+                investigateWebEnabled: !!options.investigatorWeb,
                 executeEnabled: !!options.executor,
                 isCopilot: options.provider === 'copilot',
             }),
@@ -414,6 +500,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
 
 interface OrchestratorSystemMessageOpts {
     investigateEnabled: boolean;
+    investigateWebEnabled?: boolean;
     executeEnabled: boolean;
     isCopilot?: boolean;
     selectedRepos?: { root: string; alias: string; repoKey: string }[];
@@ -492,6 +579,13 @@ function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
         lines.push('- `investigate` — LOCATION/FLOW questions only ("where is X?", "how does Y flow?"). NOT for diagnosis, root-cause, bug-hunting, or design judgement — those are YOUR job. Use it to gather information about how a system works; reason about the issue yourself. Pass known context via `hint`.');
     }
 
+    if (opts.investigateWebEnabled === true) {
+        lines.push('- `investigate_web` — web research. For questions whose answer lives outside this repo: library/SDK behaviour, current ecosystem state, vendor docs, RFCs, recent developments. Sub-agent searches, scrapes authoritative pages, and returns curated `{summary, evidence, confidence}` excerpts. NOT for repository code questions — use `investigate` for those. Pass known steering (canonical URLs, version, user context) via `hint`.');
+        lines.push('  - **The `questions` parameter is an array — use it.** List ALL related sub-questions in the same `questions[]` on ONE call. "Related" = same library, vendor, docs source, or topic. The sub-agent answers them all from one round of fetches.');
+        lines.push('  - **Before calling, check yourself:** "Does this call\'s scope overlap with one I already made (or am about to make) this turn?" If yes → STOP, add the new questions to the existing call\'s array (or merge before issuing). Splitting wastes a full search + fetch + index + synthesis cycle and fragments context.');
+        lines.push('  - Separate calls are ONLY appropriate when topics are genuinely unrelated (different library, different vendor, no shared docs source). When in doubt, bundle.');
+    }
+
     if (opts.executeEnabled) {
         const transcriptNote = opts.investigateEnabled
             ? 'a transcript of your prior `investigate` calls, file reads, and reasoning since the last execute'
@@ -506,12 +600,12 @@ function buildDelegationBlock(opts: OrchestratorSystemMessageOpts): string {
     lines.push('');
     lines.push('Do it yourself only for: a single trivial edit, or work needing orchestrator-grade reasoning at every step.');
 
-    if (opts.investigateEnabled && opts.executeEnabled) {
-        lines.push('Only ONE investigate and ONE execute can run at a time.');
-    } else if (opts.investigateEnabled) {
-        lines.push('Only ONE investigate can run at a time.');
-    } else {
-        lines.push('Only ONE execute can run at a time.');
+    const concurrencyParts: string[] = [];
+    if (opts.investigateEnabled) concurrencyParts.push('ONE investigate');
+    if (opts.investigateWebEnabled === true) concurrencyParts.push('ONE investigate_web');
+    if (opts.executeEnabled) concurrencyParts.push('ONE execute');
+    if (concurrencyParts.length > 0) {
+        lines.push(`Only ${concurrencyParts.join(' and ')} can run at a time.`);
     }
 
     lines.push('</delegation>');
@@ -599,6 +693,22 @@ ${discoveryRule}
 - \`edit_memory\` to refine in place (re-embeds on title/body change) instead of creating duplicates.
 </long_term_memory>`;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

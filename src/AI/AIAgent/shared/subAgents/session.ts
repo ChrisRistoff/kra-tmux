@@ -76,6 +76,15 @@ export interface SubAgentRunOptions {
     toolWhitelist: string[];
     /** JSON Schema for the `submit_result` tool's arguments. */
     resultSchema: Record<string, unknown>;
+    /**
+     * Optional extra local tools the sub-agent may call (in addition to the
+     * built-in `submit_result`). Names are merged into `allowedTools`. Use this
+     * for callers that need to expose specialised in-process tools — for
+     * example, the `investigate_web` sub-agent ships its `web_search`,
+     * `web_scrape_and_index` and `research_query` tools as `LocalTool`s tagged
+     * with the current `researchId` so they don't have to be wired through MCP.
+     */
+    additionalLocalTools?: LocalTool[];
     /** Optional event sink for streaming progress to the caller. */
     onEvent?: (e: SubAgentEvent) => void;
     /** Optional context window override for compaction. */
@@ -235,13 +244,18 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
             model: opts.runtime.model,
             workingDirectory: opts.workingDirectory,
             mcpServers: opts.mcpServers,
-            localTools: [submitTool],
+            localTools: [submitTool, ...(opts.additionalLocalTools ?? [])],
             systemMessage: { mode: 'replace', content: opts.systemPrompt },
             ...(opts.contextWindow !== undefined ? { contextWindow: opts.contextWindow } : {}),
             excludedTools: [
                 'str_replace_editor', 'write_file', 'read_file', 'edit', 'view',
                 'grep', 'glob', 'create', 'apply_patch', 'task',
                 'bash', 'shell', 'run_in_terminal', 'execute', 'report_intent',
+                // Sub-agents don't get raw web access. The web investigator
+                // routes everything through `web_scrape_and_index` so pages
+                // are chunked + indexed and the LLM only sees retrieved
+                // excerpts. Other sub-agents have no business fetching pages.
+                'web_fetch',
             ],
             ...(opts.initialMessages ? { initialMessages: opts.initialMessages } : {}),
             allowedTools: [...opts.toolWhitelist, 'submit_result'],
