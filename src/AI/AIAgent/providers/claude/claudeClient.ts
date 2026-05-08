@@ -44,6 +44,7 @@ import { TURN_REMINDER } from '@/AI/AIAgent/shared/main/turnReminder';
 import { createExecutableToolBridge, disconnectPool } from '@/AI/AIAgent/mcp/executableToolBridge';
 import { buildMcpClientPool, type McpClientPool } from '@/AI/AIAgent/providers/byok/mcpClientPool';
 import { ClaudeSessionBridge } from '@/AI/AIAgent/providers/claude/claudeSessionBridge';
+import { matchesSubAgentWhitelist } from '@/AI/AIAgent/shared/subAgents/whitelist';
 
 export interface ClaudeModelInfo {
     id: string;
@@ -97,6 +98,30 @@ export class ClaudeClient implements AgentClient {
 
         const permissionMode = decidePermissionMode(options);
 
+        // For sub-agents on Claude, the SDK's `allowedTools` is just an
+        // auto-approve permission list — it does NOT hide non-listed tools
+        // from the model's context. To actually scope a sub-agent down to
+        // its whitelist we have to enumerate every MCP tool name the SDK
+        // would expose (`mcp__<server>__<tool>`) and add the non-whitelisted
+        // ones to `disallowedTools`, which IS a context-level filter per the
+        // SDK contract ("removed from the model's context and cannot be used").
+        // Built-in tools are already disabled below via `tools: []`. Local
+        // tools live under the synthetic `kra-local` server and are inherently
+        // scoped to whatever the sub-agent factory passed in, so we never
+        // disallow them.
+        let subAgentExtraDisallowed: string[] = [];
+        if (isSubAgent && options.allowedTools && options.allowedTools.length > 0) {
+            subAgentExtraDisallowed = await computeClaudeSubAgentDisallowedTools(
+                options.mcpServers,
+                options.workingDirectory,
+                new Set(options.allowedTools),
+            );
+        }
+        const finalDisallowed = [
+            ...(options.excludedTools ?? []),
+            ...subAgentExtraDisallowed,
+        ];
+
         const sdkOptions: ClaudeSdkOptions = {
             cwd: options.workingDirectory,
             model: options.model,
@@ -108,8 +133,8 @@ export class ClaudeClient implements AgentClient {
             tools: [],
             permissionMode,
             ...(this.executablePath ? { pathToClaudeCodeExecutable: this.executablePath } : {}),
-            ...(options.excludedTools && options.excludedTools.length > 0
-                ? { disallowedTools: options.excludedTools }
+            ...(finalDisallowed.length > 0
+                ? { disallowedTools: finalDisallowed }
                 : {}),
             ...(options.allowedTools && options.allowedTools.length > 0
                 ? { allowedTools: options.allowedTools }
@@ -380,6 +405,52 @@ function buildSystemPrompt(
 
     return { systemPrompt: message.content };
 }
+
+/**
+ * Probes the configured MCP servers and returns the list of fully-qualified
+ * Claude tool names (`mcp__<server>__<tool>`) that are NOT in the sub-agent's
+ * whitelist. Pass the result as part of `disallowedTools` so the model never
+ * sees those tools in its inventory.
+ *
+ * Mirrors the pattern used by `decideCopilotExcludedTools` so the two
+ * providers offer the same scoping guarantee for sub-agents. The probe spins
+ * each MCP server up briefly and tears it down again — the actual session
+ * spawns its own pool, so this overhead is per-sub-agent-invocation only.
+ */
+async function computeClaudeSubAgentDisallowedTools(
+    servers: Record<string, MCPServerConfig>,
+    workingDirectory: string,
+    allowedSet: Set<string>,
+): Promise<string[]> {
+    let probePool: McpClientPool | undefined;
+    const disallowed: string[] = [];
+
+    try {
+        probePool = await buildMcpClientPool({
+            servers,
+            workingDirectory,
+        });
+
+        for (const tool of probePool.tools.values()) {
+            const fqName = `mcp__${tool.server}__${tool.originalName}`;
+            if (!matchesSubAgentWhitelist(tool.namespacedName, allowedSet)) {
+                disallowed.push(fqName);
+            }
+        }
+    } catch {
+        // If we can't enumerate, return what we have so far. The runtime
+        // pre-tool-use hook still gates execution on the whitelist, so
+        // failures here only affect what the model SEES — not what it can
+        // actually run.
+    } finally {
+        if (probePool) {
+            await probePool.disconnect();
+        }
+    }
+
+    return disallowed;
+}
+
 
 function buildLocalToolsMcpServer(
     localTools: LocalTool[] | undefined

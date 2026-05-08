@@ -157,6 +157,25 @@ export interface CodeChunkRow {
     vector: number[];
 }
 
+/**
+ * Row stored in the LanceDB `research_chunks` table.
+ *
+ * One row per chunk of a fetched web page indexed during an `investigate_web`
+ * sub-agent run. Tagged with `researchId` so concurrent investigations don't
+ * cross-contaminate, and with `fetchedAt` for TTL-based eviction.
+ */
+export interface ResearchChunkRow {
+    id: string;
+    researchId: string;
+    url: string;
+    title: string;
+    sectionPath: string;
+    chunkIndex: number;
+    content: string;
+    fetchedAt: number;
+    vector: number[];
+}
+
 export interface SemanticOutlineEntry {
     name: string;
     kind: string;

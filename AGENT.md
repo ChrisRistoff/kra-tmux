@@ -146,7 +146,7 @@ graph TB
 | Documentation index | [`docs/agent/README.md`](docs/agent/README.md) |
 | Providers, model catalog, backend add/remove lifecycle | [`docs/agent/providers.md`](docs/agent/providers.md) |
 | Turn workflow, keymaps, tool-approval UX, diff review | [`docs/agent/workflow-and-keymaps.md`](docs/agent/workflow-and-keymaps.md) |
-| File-context tools, BYOK bash/web tools, MCP config, sub-agents (`investigate`) | [`docs/agent/tools-and-mcp.md`](docs/agent/tools-and-mcp.md) |
+| File-context tools, BYOK bash/web tools, MCP config, sub-agents (`investigate`, `investigate_web`, `execute`) | [`docs/agent/tools-and-mcp.md`](docs/agent/tools-and-mcp.md) |
 | Persistent memory, memory tools, indexing behavior | [`docs/agent/memory-and-indexing.md`](docs/agent/memory-and-indexing.md) |
 | Documentation crawling (`kra memory`) | [`docs/agent/docs-crawling.md`](docs/agent/docs-crawling.md) |
 

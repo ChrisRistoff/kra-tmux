@@ -23,6 +23,7 @@ import type { AgentClient } from '@/AI/AIAgent/shared/types/agentTypes';
 import type {
     ExecutorRuntime,
     InvestigatorRuntime,
+    WebInvestigatorRuntime,
 } from '@/AI/AIAgent/shared/subAgents/types';
 
 export async function startAgentChat(): Promise<void> {
@@ -31,12 +32,13 @@ export async function startAgentChat(): Promise<void> {
     let orchestrator: Awaited<ReturnType<typeof pickAgentRuntime>> | null = null;
     let executor: ExecutorRuntime | undefined;
     let investigator: InvestigatorRuntime | undefined;
+    let investigatorWeb: WebInvestigatorRuntime | undefined;
 
     try {
         orchestrator = await pickAgentRuntime('orchestrator');
         allClients.push(orchestrator.client);
 
-        if (subAgentSettings.investigator.enabled) {
+        if (subAgentSettings.investigator.code) {
             const picked = await pickAgentRuntime('investigator');
             allClients.push(picked.client);
             investigator = {
@@ -45,6 +47,30 @@ export async function startAgentChat(): Promise<void> {
                 ...(picked.contextWindow !== undefined ? { contextWindow: picked.contextWindow } : {}),
                 settings: subAgentSettings.investigator,
             };
+        }
+
+        if (subAgentSettings.investigator.web) {
+            // Web investigator's runtime usually piggy-backs on the code
+            // investigator (same cheap model). When `useInvestigatorRuntime`
+            // is off OR the code investigator is somehow absent, fall through
+            // to a dedicated picker so the user can select a different model.
+            if (subAgentSettings.investigatorWeb.useInvestigatorRuntime && investigator) {
+                investigatorWeb = {
+                    client: investigator.client,
+                    model: investigator.model,
+                    ...(investigator.contextWindow !== undefined ? { contextWindow: investigator.contextWindow } : {}),
+                    settings: subAgentSettings.investigatorWeb,
+                };
+            } else {
+                const picked = await pickAgentRuntime('investigator');
+                allClients.push(picked.client);
+                investigatorWeb = {
+                    client: picked.client,
+                    model: picked.model,
+                    ...(picked.contextWindow !== undefined ? { contextWindow: picked.contextWindow } : {}),
+                    settings: subAgentSettings.investigatorWeb,
+                };
+            }
         }
 
         if (subAgentSettings.executor.enabled) {
@@ -84,6 +110,9 @@ export async function startAgentChat(): Promise<void> {
                 : {}),
             ...(executor ? { executor } : {}),
             ...(investigator ? { investigator } : {}),
+            ...(investigatorWeb ? { investigatorWeb } : {}),
+            truncation: subAgentSettings.truncation,
+            subAgentTruncation: subAgentSettings.subAgentTruncation,
         });
     } catch (error) {
         for (const c of allClients) {

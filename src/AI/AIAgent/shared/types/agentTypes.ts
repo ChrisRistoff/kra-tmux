@@ -264,6 +264,11 @@ export interface AgentConversationOptions {
     dynamicParams?: Record<string, unknown>;
     executor?: import('@/AI/AIAgent/shared/subAgents/types').ExecutorRuntime;
     investigator?: import('@/AI/AIAgent/shared/subAgents/types').InvestigatorRuntime;
+    investigatorWeb?: import('@/AI/AIAgent/shared/subAgents/types').WebInvestigatorRuntime;
+    /** Truncation caps for tool results returned to the orchestrator. */
+    truncation?: import('@/AI/AIAgent/shared/subAgents/types').AgentTruncationSettings;
+    /** Truncation caps for tool results returned to a sub-agent. */
+    subAgentTruncation?: import('@/AI/AIAgent/shared/subAgents/types').AgentTruncationSettings;
 }
 
 export interface AgentUserInputResponse {

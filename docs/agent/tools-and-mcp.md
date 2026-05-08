@@ -50,7 +50,7 @@ Because BYOK has no SDK tools, Kra injects these MCP servers for BYOK sessions:
 
 - Executes command in session working dir
 - 120s timeout, 10MB stdout/stderr cap
-- Long output is head/tail truncated
+- Long output is head/tail truncated (caps configurable per profile in `[ai.agent.truncation]` / `[ai.agent.subAgentTruncation]`)
 - Emits git status before/after for history tracking
 
 ### `kra-web` (`web_fetch`, `web_search`)
@@ -89,14 +89,15 @@ Provider behavior differences:
 ## Sub-agent tools
 
 Opt-in helpers that let a smaller, cheaper model do bulk work while the
-orchestrator focuses on reasoning. Toggle in `settings.toml` (`[ai.agent.executor]`,
-`[ai.agent.investigator]`); when enabled, the start flow prompts for a separate
-provider + model right after the orchestrator picker. Sub-agents work for both
-BYOK and Copilot orchestrators — mix and match freely.
+orchestrator focuses on reasoning. Toggle in `settings.toml`
+(`[ai.agent.executor]`, `[ai.agent.investigator]`, `[ai.agent.investigatorWeb]`);
+when enabled, the start flow prompts for a separate provider + model right after
+the orchestrator picker. Sub-agents work for both BYOK and Copilot
+orchestrators — mix and match freely.
 
 ### `investigate` (investigator sub-agent)
 
-Registered on the orchestrator only when `[ai.agent.investigator].enabled = true`.
+Registered on the orchestrator only when `[ai.agent.investigator].code = true`.
 Delegates a research question to a smaller model that returns a curated,
 evidence-backed synthesis instead of raw file dumps.
 
@@ -186,4 +187,86 @@ When the orchestrator should skip it:
 
 - One-line trivial edits.
 - Tasks that need orchestrator-grade reasoning at every step.
+
+### `investigate_web` (web research sub-agent)
+
+Registered on the orchestrator only when `[ai.agent.investigator].web = true`.
+The `code` and `web` switches are independent; if both are on, the web
+investigator piggy-backs on the code investigator's runtime by default
+(`useInvestigatorRuntime = true` under `[ai.agent.investigatorWeb]`). Delegates a research
+question whose answer lives **outside** this repo (library/SDK behaviour, vendor
+docs, RFCs, current ecosystem state) to a sub-agent that searches, scrapes, and
+returns curated `{summary, evidence, confidence}` excerpts.
+
+| Field | Purpose |
+|---|---|
+| `questions` | Array of related sub-questions for this investigation. **One call per scope** — if multiple questions share the same library, vendor, or docs source, list them ALL in this array so the sub-agent answers them from one round of fetches. Split into separate calls only when topics are genuinely unrelated. |
+| `hint` | Optional steering shared by all questions: known canonical URLs, version, prior findings, user context. |
+
+Returns:
+
+```json
+{
+  "summary": "…",
+  "evidence": [
+    { "url": "https://…", "title": "…", "section": "…", "excerpt": "…", "why_relevant": "…" }
+  ],
+  "confidence": "high|medium|low",
+  "suggested_next": "…",
+  "partial": false,
+  "pages_fetched": 4,
+  "pages_failed": 0,
+  "chunks_indexed": 37,
+  "searches": 2,
+  "scrapes": 1
+}
+```
+
+Sub-agent toolset (4 tools):
+
+- `web_search(query, max_results?)` — pure search; returns `[{title, url, snippet}]`.
+  Quota: `maxSearches`.
+- `web_scrape_and_index({urls, queries, k?})` — fetches the URLs in parallel,
+  chunks them with the markdown chunker, embeds with the local BGE model,
+  inserts rows into a per-investigation LanceDB table, then runs vector search
+  per query and returns merged hits. Quota: `maxScrapes`; URLs capped at
+  `urlsPerScrape`.
+- `research_query({query, k?})` — vector search over the chunks already
+  indexed during this investigation (no new fetching). For drilling into pages
+  the agent already scraped.
+- `submit_result(…)` — finalize.
+
+Behavior notes:
+
+- Runtime sharing: when `useInvestigatorRuntime = true` (default) and the
+  investigator is enabled, the web investigator reuses the code investigator's
+  resolved provider + model. Set it to `false` to be prompted for a separate
+  model on startup.
+- The orchestrator never sees raw page bodies — only retrieved excerpts. URL
+  filtering is coarse (titles / snippets); fine relevance is vector retrieval.
+- Each call mints a fresh `researchId` (UUID); chunks are tagged with it so
+  concurrent investigations never cross-contaminate.
+- TTL eviction (default 60 min, `ttlMinutes`) plus `SIGINT`/`SIGTERM`/`exit`
+  cleanup hooks ensure the LanceDB table doesn't grow unbounded.
+- When `validateExcerpts = true` (default) every excerpt is checked against the
+  indexed chunks before being returned; unverified snippets are flagged in
+  `why_relevant`.
+- Only one `investigate_web` runs at a time; concurrent calls are rejected.
+- `maxEvidenceItems`, `maxExcerptLines`, and `maxToolCalls` cap the size of
+  the returned envelope and the sub-agent loop.
+- Sub-agent output streams into the chat file under a 🌐 `[INVESTIGATOR-WEB]`
+  header.
+
+When the orchestrator should call it:
+
+- Library / SDK behaviour the user is asking about that isn't documented in
+  this repo's `docs_search` corpus.
+- Vendor / RFC / standards questions where authoritative pages live online.
+- Current ecosystem state (API changes, deprecations, recent releases).
+
+When the orchestrator should skip it:
+
+- Anything answerable from this repo's code or its indexed `docs_search`
+  corpus — use `investigate` instead.
+- Single-fact lookups where one `web_fetch` would do.
 

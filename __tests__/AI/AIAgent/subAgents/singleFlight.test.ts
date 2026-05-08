@@ -37,7 +37,8 @@ const investigatorRuntime: InvestigatorRuntime = {
     client: fakeClient,
     model: 'm',
     settings: {
-        enabled: true,
+        code: true,
+        web: false,
         maxEvidenceItems: 8,
         maxExcerptLines: 20,
         validateExcerpts: false,

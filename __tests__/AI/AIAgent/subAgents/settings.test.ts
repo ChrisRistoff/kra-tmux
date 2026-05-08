@@ -1,4 +1,5 @@
-import { mergeExecutor, mergeInvestigator } from '@/AI/AIAgent/shared/subAgents/settings';
+import { mergeExecutor, mergeInvestigator, mergeTruncation } from '@/AI/AIAgent/shared/subAgents/settings';
+import type { AgentTruncationSettings } from '@/AI/AIAgent/shared/subAgents/types';
 
 describe('mergeExecutor', () => {
     it('returns defaults when raw is undefined', () => {
@@ -70,7 +71,8 @@ describe('mergeInvestigator', () => {
     it('returns defaults when raw is undefined', () => {
         const merged = mergeInvestigator(undefined);
 
-        expect(merged.enabled).toBe(false);
+        expect(merged.code).toBe(false);
+        expect(merged.web).toBe(false);
         expect(merged.maxEvidenceItems).toBe(8);
         expect(merged.maxExcerptLines).toBe(20);
         expect(merged.validateExcerpts).toBe(true);
@@ -90,10 +92,67 @@ describe('mergeInvestigator', () => {
     });
 
     it('respects partial overrides', () => {
-        const merged = mergeInvestigator({ enabled: true, validateExcerpts: false });
+        const merged = mergeInvestigator({ code: true, web: true, validateExcerpts: false });
 
-        expect(merged.enabled).toBe(true);
+        expect(merged.code).toBe(true);
+        expect(merged.web).toBe(true);
         expect(merged.validateExcerpts).toBe(false);
         expect(merged.maxEvidenceItems).toBe(8);
+    });
+
+    it('treats `code` and `web` independently', () => {
+        const onlyCode = mergeInvestigator({ code: true });
+        const onlyWeb = mergeInvestigator({ web: true });
+
+        expect(onlyCode.code).toBe(true);
+        expect(onlyCode.web).toBe(false);
+        expect(onlyWeb.code).toBe(false);
+        expect(onlyWeb.web).toBe(true);
+    });
+});
+
+describe('mergeTruncation', () => {
+    const defaults: AgentTruncationSettings = {
+        defaultHead: 4000,
+        defaultTail: 4000,
+        bashHead: 2000,
+        bashTail: 6000,
+        neverTruncate: ['semantic_search'],
+    };
+
+    it('returns a clone of defaults when raw is missing', () => {
+        const merged = mergeTruncation(undefined, defaults);
+        expect(merged).toEqual(defaults);
+        expect(merged.neverTruncate).not.toBe(defaults.neverTruncate);
+    });
+
+    it('overrides only the specified fields', () => {
+        const merged = mergeTruncation({ defaultHead: 1000, bashTail: 9999 }, defaults);
+        expect(merged.defaultHead).toBe(1000);
+        expect(merged.defaultTail).toBe(defaults.defaultTail);
+        expect(merged.bashHead).toBe(defaults.bashHead);
+        expect(merged.bashTail).toBe(9999);
+    });
+
+    it('clamps negative values to 0 and rejects non-numeric values', () => {
+        const merged = mergeTruncation(
+            { defaultHead: -50, defaultTail: 'nope' as unknown as number },
+            defaults,
+        );
+        expect(merged.defaultHead).toBe(0);
+        expect(merged.defaultTail).toBe(defaults.defaultTail);
+    });
+
+    it('replaces neverTruncate when provided and filters non-strings', () => {
+        const merged = mergeTruncation(
+            { neverTruncate: ['recall', '', 42 as unknown as string, 'docs_search'] },
+            defaults,
+        );
+        expect(merged.neverTruncate).toEqual(['recall', 'docs_search']);
+    });
+
+    it('falls back to defaults when neverTruncate is omitted', () => {
+        const merged = mergeTruncation({ defaultHead: 100 }, defaults);
+        expect(merged.neverTruncate).toEqual(defaults.neverTruncate);
     });
 });
