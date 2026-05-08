@@ -195,6 +195,21 @@ async function executeToolCall(
         if (typeof parsed.max_length === 'number') {
             args.max_length = parsed.max_length;
         }
+        if (typeof parsed.start_index === 'number') {
+            args.start_index = parsed.start_index;
+        }
+        if (typeof parsed.query === 'string') {
+            args.query = parsed.query;
+        }
+        if (typeof parsed.context === 'number') {
+            args.context = parsed.context;
+        }
+        if (typeof parsed.force_refresh === 'boolean') {
+            args.force_refresh = parsed.force_refresh;
+        }
+        if (parsed.mode === 'auto' || parsed.mode === 'crawl4ai' || parsed.mode === 'jina' || parsed.mode === 'direct') {
+            args.mode = parsed.mode;
+        }
 
         return runWebFetch(args);
     }

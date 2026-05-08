@@ -15,6 +15,18 @@ Each line on stdout is a single JSON object with a `type` field:
     worker-error     {alias, url?, error, fatal}
     source-done      {alias, summary: {pagesScraped, pagesSkipped, chunksWritten, elapsedMs}}
 
+Server mode (--server):
+    A long-lived single-URL fetch worker used by the agent's web_fetch tool.
+    Reads JSON requests from stdin one per line; emits one fetch-result per
+    request on stdout. Reuses one AsyncWebCrawler context across requests so
+    Chromium stays warm.
+
+    request:  {requestId, url, mode?: auto|http|browser, pageTimeoutMs?: int}
+              {requestId, op: "shutdown"}
+    response: {type: "fetch-result", requestId, ok, markdown?, title?, status?, error?}
+              {type: "server-ready", pid}
+              {type: "server-bye"}
+
 stdin: a single JSON line `{knownPages: {<url>: {etag?, lastModified?, pageHash, lastIndexedAt, chunkCount}}, bypassIncremental: bool}`.
 The coordinator writes that and closes stdin before any output is expected.
 
@@ -667,10 +679,163 @@ def emit_progress(alias: str, done: int, total: int, current_url: str) -> None:
     })
 
 
+async def server_loop(default_mode: str, default_page_timeout_ms: int) -> int:
+    """Long-lived single-URL fetch loop. Reads JSON requests from stdin and
+    writes one fetch-result per request to stdout. Keeps a single
+    AsyncWebCrawler context open across requests so Chromium stays warm.
+
+    Note: we open a fresh crawler context lazily on first http or browser
+    request and remember it; if the caller switches mode (auto-resolved to
+    http vs browser) we close+reopen with the new strategy. This keeps
+    Chromium warm for the common case where every request hits the browser
+    path.
+    """
+    try:
+        from crawl4ai import (
+            AsyncWebCrawler,
+            BrowserConfig,
+            CacheMode,
+            CrawlerRunConfig,
+            HTTPCrawlerConfig,
+        )
+        from crawl4ai.async_crawler_strategy import AsyncHTTPCrawlerStrategy
+        from crawl4ai.content_filter_strategy import PruningContentFilter
+        from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+    except Exception as exc:  # noqa: BLE001
+        emit({
+            "type": "server-error",
+            "error": f"crawl4ai import failed: {exc}",
+            "fatal": True,
+        })
+        return 1
+
+    md_generator = DefaultMarkdownGenerator(content_filter=PruningContentFilter())
+    emit({"type": "server-ready", "pid": os.getpid()})
+
+    current_mode: str | None = None
+    crawler: Any = None
+    crawler_ctx: Any = None
+
+    async def ensure_crawler(mode: str) -> Any:
+        nonlocal current_mode, crawler, crawler_ctx
+        if crawler is not None and current_mode == mode:
+            return crawler
+        if crawler_ctx is not None:
+            try:
+                await crawler_ctx.__aexit__(None, None, None)
+            except Exception:  # noqa: BLE001
+                pass
+            crawler = None
+            crawler_ctx = None
+        crawler_kwargs = build_crawler_kwargs(mode, BrowserConfig, AsyncHTTPCrawlerStrategy, HTTPCrawlerConfig)
+        crawler_ctx = AsyncWebCrawler(**crawler_kwargs)
+        crawler = await crawler_ctx.__aenter__()
+        current_mode = mode
+        return crawler
+
+    loop = asyncio.get_event_loop()
+
+    async def read_line() -> str | None:
+        # readline is blocking; offload so the asyncio loop stays responsive.
+        return await loop.run_in_executor(None, sys.stdin.readline)
+
+    while True:
+        line = await read_line()
+        if not line:
+            break
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError as exc:
+            emit({"type": "fetch-result", "requestId": None, "ok": False, "error": f"bad-json: {exc}"})
+            continue
+
+        if req.get("op") == "shutdown":
+            break
+
+        request_id = req.get("requestId")
+        url = req.get("url")
+        if not url or not isinstance(url, str):
+            emit({"type": "fetch-result", "requestId": request_id, "ok": False, "error": "missing url"})
+            continue
+
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            emit({"type": "fetch-result", "requestId": request_id, "ok": False, "error": f"unsupported scheme: {parsed.scheme!r}"})
+            continue
+
+        mode = req.get("mode") or default_mode
+        if mode == "auto":
+            try:
+                resolved, _reason = await decide_mode_via_probe(url)
+                mode = resolved
+            except Exception:  # noqa: BLE001
+                mode = "browser"
+        if mode not in ("http", "browser"):
+            mode = "browser"
+
+        page_timeout_ms = int(req.get("pageTimeoutMs") or default_page_timeout_ms)
+        run_cfg = CrawlerRunConfig(
+            cache_mode=CacheMode.BYPASS,
+            markdown_generator=md_generator,
+            verbose=False,
+            stream=False,
+            wait_until="domcontentloaded",
+            page_timeout=page_timeout_ms,
+        )
+
+        try:
+            c = await ensure_crawler(mode)
+            arun_ret = await c.arun(url=url, config=run_cfg)
+            # Without deep_crawl_strategy this is a single CrawlResult.
+            result = arun_ret
+            if hasattr(arun_ret, "__aiter__"):
+                async for r in arun_ret:
+                    result = r
+                    break
+            if not getattr(result, "success", False):
+                emit({
+                    "type": "fetch-result",
+                    "requestId": request_id,
+                    "ok": False,
+                    "error": getattr(result, "error_message", "unknown") or "unknown",
+                    "status": getattr(result, "status_code", None),
+                })
+                continue
+            markdown = extract_markdown(result)
+            emit({
+                "type": "fetch-result",
+                "requestId": request_id,
+                "ok": True,
+                "markdown": markdown,
+                "title": extract_title(result),
+                "status": getattr(result, "status_code", None),
+                "mode": mode,
+            })
+        except Exception as exc:  # noqa: BLE001
+            emit({
+                "type": "fetch-result",
+                "requestId": request_id,
+                "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+
+    if crawler_ctx is not None:
+        try:
+            await crawler_ctx.__aexit__(None, None, None)
+        except Exception:  # noqa: BLE001
+            pass
+    emit({"type": "server-bye"})
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Crawl4AI worker for kra memory docs sources")
-    parser.add_argument("--alias", required=True)
-    parser.add_argument("--url", required=True)
+    parser.add_argument("--alias", default="")
+    parser.add_argument("--url", default="")
+    parser.add_argument("--server", action="store_true", help="Long-lived single-URL fetch loop (stdin requests, stdout responses).")
     parser.add_argument("--max-depth", type=int, default=0)
     parser.add_argument("--max-pages", type=int, default=50)
     parser.add_argument("--include", action="append", default=[])
@@ -679,6 +844,16 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=0)
     parser.add_argument("--page-timeout-ms", type=int, default=20000)
     args = parser.parse_args()
+
+    if args.server:
+        try:
+            return asyncio.run(server_loop(args.mode, args.page_timeout_ms))
+        except KeyboardInterrupt:
+            return 130
+
+    if not args.alias or not args.url:
+        print("docs-worker: --alias and --url are required when not in --server mode", file=sys.stderr)
+        return 2
 
     parsed = urlparse(args.url)
     if parsed.scheme not in ("http", "https"):

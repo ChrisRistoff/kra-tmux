@@ -82,6 +82,26 @@ claude = true
 #   - list configured sources (with chunk counts) and crawl/drop them per-source
 #   - crawl all sources (with optional --full bypass of the incremental cache)
 #   - watch live progress (auto-refreshing) and stop the coordinator cleanly
+# ─── Live web fetch (web_fetch tool) ──────────────────────────────────────────
+# Backs the agent's `web_fetch` tool with a long-lived Crawl4AI worker that
+# keeps a Chromium context warm across requests, so JS-rendered/SPA pages
+# resolve in ~1s after the first cold start (~3-5s). Falls back to Jina Reader
+# and then a direct fetch if Crawl4AI is unavailable or fails.
+#
+# The worker is lazy-spawned on first call, recycled after `fetchMaxPagesPerWorker`
+# pages, and shut down after `fetchIdleTimeoutMs` of inactivity. `fetchMode`
+# picks the default rendering strategy when the tool is called without an
+# explicit `mode` arg: 'http' is fast/static, 'browser' executes JS, 'auto'
+# tries http first and escalates to browser on heuristic failure.
+[ai.web]
+fetchEnabled = true
+fetchIdleTimeoutMs = 120000      # shut the worker down after 2 min idle
+fetchMaxPagesPerWorker = 50      # recycle Chromium after this many pages
+fetchPageTimeoutMs = 30000       # per-page navigation/render budget
+fetchMode = "auto"               # "auto" | "http" | "browser"
+fetchMaxConcurrent = 3           # in-flight requests against the single worker
+
+
 [ai.docs]
 enabled = true                  # opt-in; flip to true once Crawl4AI is installed
 maxConcurrentSources = 2        # how many Crawl4AI subprocesses run in parallel

@@ -14,11 +14,15 @@
 import * as cheerio from 'cheerio';
 import { convert as htmlToTextLib } from 'html-to-text';
 
-export const DEFAULT_MAX_LENGTH = 8_000;
-export const HARD_MAX_LENGTH = 50_000;
+export const DEFAULT_MAX_LENGTH = 16_000;
+export const HARD_MAX_LENGTH = 100_000;
 export const DEFAULT_MAX_RESULTS = 5;
 export const HARD_MAX_RESULTS = 15;
 const FETCH_TIMEOUT_MS = 20_000;
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 50;
+const DEFAULT_GREP_CONTEXT = 2;
+const MAX_GREP_CONTEXT = 10;
 const USER_AGENT =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
     '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -33,10 +37,32 @@ export const WEB_FETCH_PARAMETERS = {
         },
         max_length: {
             type: 'number',
-            description: `Maximum number of characters to return. Default ${DEFAULT_MAX_LENGTH}, hard cap ${HARD_MAX_LENGTH}.`,
+            description: `Maximum number of characters to return from the (post-grep) body. Default ${DEFAULT_MAX_LENGTH}, hard cap ${HARD_MAX_LENGTH}.`,
+        },
+        start_index: {
+            type: 'number',
+            description: 'Character offset into the body to start returning from. Use with max_length to paginate long pages.',
+        },
+        query: {
+            type: 'string',
+            description: 'Optional case-insensitive regex. When set, only matching lines (with surrounding context) are returned instead of the head of the body. Use this to grep a long page without paginating through it.',
+        },
+        context: {
+            type: 'number',
+            description: `Lines of context around each query match (like ripgrep -C). Ignored unless query is set. Default ${DEFAULT_GREP_CONTEXT}, max ${MAX_GREP_CONTEXT}.`,
+        },
+        force_refresh: {
+            type: 'boolean',
+            description: 'Bypass the in-memory response cache and re-fetch from the network. Default false. Cache TTL is 15 minutes; stale hits are still returned but flagged in the output.',
+        },
+        mode: {
+            type: 'string',
+            enum: ['auto', 'crawl4ai', 'jina', 'direct'],
+            description: "Fetch backend. 'auto' (default) tries the warm Crawl4AI worker first (handles JS, shadow DOM, dynamic content), then falls back to Jina Reader, then a raw GET. 'crawl4ai' forces the worker (Chromium); 'jina' forces r.jina.ai; 'direct' forces a raw HTTP fetch with HTML \u2192 text extraction.",
         },
     },
     required: ['url'],
+    additionalProperties: false,
 } as const;
 
 export const WEB_SEARCH_PARAMETERS = {
@@ -52,13 +78,15 @@ export const WEB_SEARCH_PARAMETERS = {
         },
     },
     required: ['query'],
+    additionalProperties: false,
 } as const;
 
 export const WEB_FETCH_DESCRIPTION = [
     'Fetch a URL over HTTPS/HTTP and return the response body as text.',
     'HTML responses are stripped of nav/footer/scripts/styles so the model',
-    `sees mostly main content. Default cap ${DEFAULT_MAX_LENGTH} chars (hard cap ${HARD_MAX_LENGTH});`,
-    'increase max_length only when you need more.',
+    `sees mostly main content. Default cap ${DEFAULT_MAX_LENGTH} chars (hard cap ${HARD_MAX_LENGTH}).`,
+    'Responses are cached in-memory for 15 minutes; repeat calls are free unless force_refresh=true.',
+    'For long pages, prefer `query` (regex grep with context lines) over paginating with `start_index`+`max_length`.',
 ].join(' ');
 
 export const WEB_SEARCH_DESCRIPTION = [
@@ -68,9 +96,56 @@ export const WEB_SEARCH_DESCRIPTION = [
     'succession.',
 ].join(' ');
 
+export type WebFetchMode = 'auto' | 'crawl4ai' | 'jina' | 'direct';
+
 export interface WebFetchArgs {
     url: string;
     max_length?: number;
+    start_index?: number;
+    query?: string;
+    context?: number;
+    force_refresh?: boolean;
+    mode?: WebFetchMode;
+}
+
+interface CacheEntry {
+    url: string;
+    status: number;
+    statusText: string;
+    contentType: string;
+    body: string;
+    via: string;
+    fetchedAt: number;
+}
+
+const responseCache = new Map<string, CacheEntry>();
+
+function cacheGet(url: string): CacheEntry | undefined {
+    const entry = responseCache.get(url);
+    if (!entry) {
+        return undefined;
+    }
+    responseCache.delete(url);
+    responseCache.set(url, entry);
+
+    return entry;
+}
+
+function cacheSet(url: string, entry: CacheEntry): void {
+    responseCache.delete(url);
+    responseCache.set(url, entry);
+    while (responseCache.size > CACHE_MAX_ENTRIES) {
+        const oldest = responseCache.keys().next().value;
+        if (oldest === undefined) {
+            break;
+        }
+        responseCache.delete(oldest);
+    }
+}
+
+/** Test-only. Clears the in-memory response cache. */
+export function _clearWebFetchCache(): void {
+    responseCache.clear();
 }
 
 export interface WebSearchArgs {
@@ -202,20 +277,214 @@ async function fetchViaJina(url: string): Promise<{ ok: boolean; body: string; s
 }
 
 
-function buildOutput(parts: { url: string; status: number; statusText: string; contentType: string; body: string; maxLength: number; via?: string }): string {
-    const truncated = parts.body.length > parts.maxLength;
+interface BuildOutputParts {
+    url: string;
+    status: number;
+    statusText: string;
+    contentType: string;
+    body: string;
+    maxLength: number;
+    startIndex: number;
+    via?: string | undefined;
+    cache?: { ageMs: number; stale: boolean } | undefined;
+    matches?: { count: number; matchedLineCount: number } | undefined;
+}
+
+function buildOutput(parts: BuildOutputParts): string {
+    const safeStart = Math.max(0, Math.min(parts.startIndex, parts.body.length));
+    const slice = parts.body.slice(safeStart, safeStart + parts.maxLength);
+    const end = safeStart + slice.length;
+    const truncated = end < parts.body.length || safeStart > 0;
+    const ageMin = parts.cache ? Math.max(1, Math.round(parts.cache.ageMs / 60_000)) : 0;
+    const cacheLine = parts.cache
+        ? `Cache: ${parts.cache.stale ? 'stale' : 'hit'} (${ageMin}m old)${parts.cache.stale ? ' — pass force_refresh=true for the latest' : ''}`
+        : '';
+    const matchLine = parts.matches
+        ? `Matches: ${parts.matches.count} across ${parts.matches.matchedLineCount} lines`
+        : '';
+    const rangeLine = truncated
+        ? `Range: chars ${safeStart}–${end} of ${parts.body.length}${end < parts.body.length ? ' (use start_index to continue)' : ''}`
+        : '';
 
     return [
         `URL: ${parts.url}`,
         `Status: ${parts.status} ${parts.statusText}`,
         `Content-Type: ${parts.contentType || '(unknown)'}`,
         parts.via ? `Fetched-Via: ${parts.via}` : '',
-        truncated ? `Truncated: showing first ${parts.maxLength} of ${parts.body.length} chars` : '',
+        cacheLine,
+        matchLine,
+        rangeLine,
         '',
-        parts.body.slice(0, parts.maxLength),
+        slice,
     ]
         .filter(Boolean)
         .join('\n');
+}
+
+function applyQueryFilter(
+    body: string,
+    query: string,
+    context: number
+): { body: string; matches: number; matchedLineCount: number } {
+    let regex: RegExp;
+    try {
+        regex = new RegExp(query, 'i');
+    } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+
+        return {
+            body: `(invalid query regex /${query}/: ${reason})`,
+            matches: 0,
+            matchedLineCount: 0,
+        };
+    }
+    const lines = body.split('\n');
+    const includedIdx = new Set<number>();
+    let matches = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+            matches++;
+            const lo = Math.max(0, i - context);
+            const hi = Math.min(lines.length - 1, i + context);
+            for (let j = lo; j <= hi; j++) {
+                includedIdx.add(j);
+            }
+        }
+    }
+    if (matches === 0) {
+        return { body: `(no matches for /${query}/i)`, matches: 0, matchedLineCount: 0 };
+    }
+    const sorted = [...includedIdx].sort((a, b) => a - b);
+    const chunks: string[] = [];
+    let current: string[] = [];
+    let prev = -2;
+    for (const idx of sorted) {
+        if (idx !== prev + 1 && current.length > 0) {
+            chunks.push(current.join('\n'));
+            current = [];
+        }
+        current.push(`${idx + 1}: ${lines[idx]}`);
+        prev = idx;
+    }
+    if (current.length > 0) {
+        chunks.push(current.join('\n'));
+    }
+
+    return { body: chunks.join('\n--\n'), matches, matchedLineCount: includedIdx.size };
+}
+
+function statusTextFor(code: number): string {
+    const map: Record<number, string> = {
+        200: 'OK', 201: 'Created', 204: 'No Content',
+        301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified',
+        400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden',
+        404: 'Not Found', 408: 'Request Timeout', 410: 'Gone', 429: 'Too Many Requests',
+        500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout',
+    };
+    if (map[code]) return map[code];
+    if (code >= 200 && code < 300) return 'OK';
+    if (code >= 300 && code < 400) return 'Redirect';
+    if (code >= 400 && code < 500) return 'Client Error';
+    if (code >= 500) return 'Server Error';
+    return '';
+}
+
+
+async function fetchViaCrawl4ai(
+    url: string,
+    crawlerMode: 'auto' | 'http' | 'browser' | undefined,
+): Promise<{ entry: CacheEntry } | { error: string }> {
+    // Lazy require so a missing venv / unrelated error doesn't blow up the
+    // whole module on import. fetchWorker handles its own "not installed"
+    // detection but we still want to swallow any unexpected throws.
+    try {
+        const { getFetchWorker } = await import('@/AI/AIAgent/shared/web/fetchWorker');
+        const worker = getFetchWorker();
+        const opts = crawlerMode ? { mode: crawlerMode } : {};
+        const result = await worker.fetch(url, opts);
+        if (!result.markdown.trim()) {
+            return { error: 'crawl4ai returned empty markdown' };
+        }
+        const status = result.status ?? 200;
+        return {
+            entry: {
+                url,
+                status,
+                statusText: statusTextFor(status),
+                contentType: `text/markdown (via Crawl4AI ${result.mode}${result.coldStart ? ' cold' : ' warm'})`,
+                body: result.markdown.slice(0, HARD_MAX_LENGTH),
+                via: result.coldStart ? 'crawl4ai-cold' : 'crawl4ai-warm',
+                fetchedAt: Date.now(),
+            },
+        };
+    } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+async function fetchAndBuildEntry(
+    url: string,
+    mode: WebFetchMode,
+): Promise<{ entry?: CacheEntry; error?: string }> {
+    const errors: string[] = [];
+
+    if (mode === 'auto' || mode === 'crawl4ai') {
+        const c = await fetchViaCrawl4ai(url, mode === 'crawl4ai' ? 'browser' : 'auto');
+        if ('entry' in c) return { entry: c.entry };
+        errors.push(`crawl4ai: ${c.error}`);
+        if (mode === 'crawl4ai') {
+            return { error: `Fetch failed via crawl4ai: ${c.error}` };
+        }
+    }
+
+    let jinaError: string | null = null;
+
+    if (mode === 'auto' || mode === 'jina') try {
+        const jina = await fetchViaJina(url);
+        if (jina.ok && jina.body.trim().length >= 200) {
+            return {
+                entry: {
+                    url,
+                    status: jina.status,
+                    statusText: jina.statusText,
+                    contentType: 'text/markdown (via Jina Reader)',
+                    body: jina.body.slice(0, HARD_MAX_LENGTH),
+                    via: 'r.jina.ai',
+                    fetchedAt: Date.now(),
+                },
+            };
+        }
+    } catch (error) {
+        jinaError = error instanceof Error ? error.message : String(error);
+        errors.push(`jina: ${jinaError}`);
+    }
+
+    if (mode === 'jina') {
+        return { error: `Fetch failed via jina: ${jinaError ?? 'no usable content'}` };
+    }
+
+    try {
+        const direct = await fetchDirect(url);
+
+        return {
+            entry: {
+                url: direct.finalUrl,
+                status: direct.status,
+                statusText: direct.statusText,
+                contentType: direct.contentType,
+                body: (direct.body || '(empty body; Jina Reader fallback also failed)').slice(0, HARD_MAX_LENGTH),
+                via: 'direct',
+                fetchedAt: Date.now(),
+            },
+        };
+    } catch (error) {
+        const directError = error instanceof Error ? error.message : String(error);
+        errors.push(`direct: ${directError}`);
+
+        return {
+            error: `Fetch failed (${errors.join('; ')})`,
+        };
+    }
 }
 
 export async function runWebFetch(args: WebFetchArgs): Promise<WebToolResult> {
@@ -224,52 +493,58 @@ export async function runWebFetch(args: WebFetchArgs): Promise<WebToolResult> {
     }
 
     const maxLength = Math.min(args.max_length ?? DEFAULT_MAX_LENGTH, HARD_MAX_LENGTH);
+    const startIndex = Math.max(0, args.start_index ?? 0);
+    const context = Math.max(0, Math.min(args.context ?? DEFAULT_GREP_CONTEXT, MAX_GREP_CONTEXT));
+    const query = typeof args.query === 'string' && args.query.length > 0 ? args.query : undefined;
 
-    let jinaError: string | null = null;
+    let entry: CacheEntry | undefined;
+    let cacheMeta: { ageMs: number; stale: boolean } | undefined;
 
-    try {
-        const jina = await fetchViaJina(args.url);
-        if (jina.ok && jina.body.trim().length >= 200) {
-            return {
-                output: buildOutput({
-                    url: args.url,
-                    status: jina.status,
-                    statusText: jina.statusText,
-                    contentType: 'text/markdown (via Jina Reader)',
-                    body: jina.body,
-                    maxLength,
-                    via: 'r.jina.ai',
-                }),
-                isError: false,
-            };
+    const mode: WebFetchMode = args.mode ?? 'auto';
+    const cacheKey = `${mode}|${args.url}`;
+
+    if (!args.force_refresh) {
+        const hit = cacheGet(cacheKey);
+        if (hit) {
+            entry = hit;
+            const ageMs = Date.now() - hit.fetchedAt;
+            cacheMeta = { ageMs, stale: ageMs > CACHE_TTL_MS };
         }
-    } catch (error) {
-        jinaError = error instanceof Error ? error.message : String(error);
     }
 
-    try {
-        const direct = await fetchDirect(args.url);
-
-        return {
-            output: buildOutput({
-                url: direct.finalUrl,
-                status: direct.status,
-                statusText: direct.statusText,
-                contentType: direct.contentType,
-                body: direct.body || '(empty body; Jina Reader fallback also failed)',
-                maxLength,
-                via: 'direct',
-            }),
-            isError: !direct.ok,
-        };
-    } catch (error) {
-        const directError = error instanceof Error ? error.message : String(error);
-
-        return {
-            output: `Fetch failed: Jina Reader (${jinaError ?? 'no usable content'}) and direct fetch (${directError}) both failed.`,
-            isError: true,
-        };
+    if (!entry) {
+        const fetched = await fetchAndBuildEntry(args.url, mode);
+        if (fetched.error || !fetched.entry) {
+            return { output: fetched.error ?? 'Unknown fetch error', isError: true };
+        }
+        entry = fetched.entry;
+        cacheSet(cacheKey, entry);
     }
+
+    let body = entry.body;
+    let matchInfo: { count: number; matchedLineCount: number } | undefined;
+
+    if (query) {
+        const grepped = applyQueryFilter(body, query, context);
+        body = grepped.body;
+        matchInfo = { count: grepped.matches, matchedLineCount: grepped.matchedLineCount };
+    }
+
+    return {
+        output: buildOutput({
+            url: entry.url,
+            status: entry.status,
+            statusText: entry.statusText,
+            contentType: entry.contentType,
+            body,
+            maxLength,
+            startIndex,
+            via: entry.via,
+            cache: cacheMeta,
+            matches: matchInfo,
+        }),
+        isError: entry.status >= 400,
+    };
 }
 
 interface SearchResult {
