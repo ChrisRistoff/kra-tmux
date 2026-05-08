@@ -24,9 +24,9 @@ import type {
     ChatCompletion,
     ChatCompletionChunk,
     ChatCompletionMessageParam,
-    ChatCompletionMessageToolCall,
-    ChatCompletionTool,
-} from 'openai/resources/chat/completions';
+    ChatCompletionMessageFunctionToolCall,
+    ChatCompletionFunctionTool,
+} from 'openai/resources/chat/completions/completions';
 import type { Stream } from 'openai/streaming';
 import {
     type AgentSendOptions,
@@ -99,7 +99,7 @@ function extractNameFromCallId(callId: string): string | undefined {
  * This function tries an exact match first, then falls back to normalising
  * hyphens to underscores and colons to double underscores.
  */
-function resolveToolName(name: string, knownTools: ChatCompletionTool[]): string | undefined {
+function resolveToolName(name: string, knownTools: ChatCompletionFunctionTool[]): string | undefined {
     // Exact match
     if (knownTools.some((t) => t.function.name === name)) return name;
 
@@ -201,7 +201,7 @@ function stripTextToolCalls(rawText: string): string {
  */
 function extractPlainTextToolCalls(
     text: string,
-    knownTools: ChatCompletionTool[],
+    knownTools: ChatCompletionFunctionTool[],
 ): InternalToolCall[] {
     if (knownTools.length === 0) return [];
 
@@ -248,7 +248,7 @@ function extractPlainTextToolCalls(
  */
 function stripPlainTextToolCalls(
     text: string,
-    knownTools: ChatCompletionTool[],
+    knownTools: ChatCompletionFunctionTool[],
 ): string {
     if (knownTools.length === 0) return text;
     const toolNames = knownTools.map((t) => t.function.name);
@@ -283,7 +283,7 @@ const MAX_STRIP_ITERATIONS = 16;
 
 interface ParamContext {
     opts: AgentSessionOptions;
-    openaiTools: ChatCompletionTool[];
+    openaiTools: ChatCompletionFunctionTool[];
     messages: ChatCompletionMessageParam[];
     stripped: ReadonlySet<string>;
 }
@@ -379,12 +379,14 @@ function synthesizeStreamFromCompletion(completion: ChatCompletion): Stream<Chat
                     content: typeof msg.content === 'string' ? msg.content : null,
                     ...(msg.tool_calls
                         ? {
-                            tool_calls: msg.tool_calls.map((tc, i) => ({
-                                index: i,
-                                id: tc.id,
-                                type: 'function' as const,
-                                function: { name: tc.function.name, arguments: tc.function.arguments },
-                            })),
+                            tool_calls: msg.tool_calls
+                                .filter((tc): tc is ChatCompletionMessageFunctionToolCall => tc.type === 'function')
+                                .map((tc, i) => ({
+                                    index: i,
+                                    id: tc.id,
+                                    type: 'function' as const,
+                                    function: { name: tc.function.name, arguments: tc.function.arguments },
+                                })),
                         }
                         : {}),
                 },
@@ -404,7 +406,7 @@ export class OpenAICompatibleSession implements AgentSession {
     private readonly openai: OpenAI;
     private readonly opts: AgentSessionOptions;
     private mcp: McpClientPool | undefined;
-    private openaiTools: ChatCompletionTool[] = [];
+    private openaiTools: ChatCompletionFunctionTool[] = [];
     private messages: ChatCompletionMessageParam[] = [];
     private listeners: { [K in keyof AgentSessionEventMap]?: EventListener<K>[] } = {};
     private abortController: AbortController | undefined;
@@ -482,8 +484,8 @@ export class OpenAICompatibleSession implements AgentSession {
             workingDirectory: this.opts.workingDirectory,
         });
 
-        const mcpOpenaiTools = this.mcp.openaiTools as ChatCompletionTool[];
-        const localOpenaiTools: ChatCompletionTool[] = [];
+        const mcpOpenaiTools = this.mcp.openaiTools as ChatCompletionFunctionTool[];
+        const localOpenaiTools: ChatCompletionFunctionTool[] = [];
 
         for (const localTool of this.opts.localTools ?? []) {
             if (this.mcp.tools.has(localTool.name)) {
@@ -1044,7 +1046,7 @@ export class OpenAICompatibleSession implements AgentSession {
             content: assistantText || null,
             ...(toolCalls.length > 0
                 ? {
-                    tool_calls: toolCalls.map<ChatCompletionMessageToolCall>((tc) => ({
+                    tool_calls: toolCalls.map<ChatCompletionMessageFunctionToolCall>((tc) => ({
                         id: tc.id,
                         type: 'function',
                         function: { name: tc.name, arguments: tc.args || '{}' },

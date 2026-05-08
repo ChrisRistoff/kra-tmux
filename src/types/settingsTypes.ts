@@ -51,6 +51,10 @@ type AgentSettings = {
         chunkLines?: number,
         chunkOverlap?: number,
     },
+    quota?: {
+        copilot?: boolean,
+        claude?: boolean,
+    },
 }
 
 export type DocsSource = {

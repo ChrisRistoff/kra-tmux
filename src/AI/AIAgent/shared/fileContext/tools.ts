@@ -156,10 +156,6 @@ export const TOOLS = [
                 },
             },
             required: [],
-            anyOf: [
-                { required: ['name_pattern'] },
-                { required: ['content_pattern'] },
-            ],
         },
     },
 

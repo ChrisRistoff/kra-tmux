@@ -33,13 +33,15 @@ import {
 } from '@/AI/shared/data/modelsDevCatalog';
 import { OpenAICompatibleClient } from '@/AI/AIAgent/providers/byok/byokClient';
 import { CopilotClientWrapper } from '@/AI/AIAgent/providers/copilot/copilotClient';
+import { ClaudeClient, type ClaudeModelInfo } from '@/AI/AIAgent/providers/claude';
 import { getGithubToken } from '@/AI/AIAgent/shared/utils/agentSettings';
 import { type ModelInfo as CopilotModelInfo } from '@github/copilot-sdk';
 import type { AgentClient, ReasoningEffort } from '@/AI/AIAgent/shared/types/agentTypes';
 const PROVIDER_KIND_BYOK = 'BYOK (OpenAI-compatible)';
 const PROVIDER_KIND_COPILOT = 'GitHub Copilot';
+const PROVIDER_KIND_CLAUDE = 'Anthropic Claude (claude-agent-sdk)';
 
-export type AgentProviderKind = 'byok' | 'copilot';
+export type AgentProviderKind = 'byok' | 'copilot' | 'claude';
 export type AgentRole = 'orchestrator' | 'executor' | 'investigator';
 
 export interface AgentRuntimePick {
@@ -405,14 +407,87 @@ async function pickCopilotRuntime(role: AgentRole): Promise<AgentRuntimePick> {
     };
 }
 
+async function pickClaudeRuntime(role: AgentRole): Promise<AgentRuntimePick> {
+    const client = new ClaudeClient({ useLoggedInUser: true });
+    await client.start();
+
+    let authStatus = client.getAuthStatus();
+    if (!authStatus.isAuthenticated) {
+        const choice = await ui.searchSelectAndReturnFromArray({
+            itemsArray: [
+                'Log in with Claude subscription (Pro/Max OAuth)',
+                'Log in with Anthropic Console (API billing)',
+                'Cancel',
+            ],
+            prompt: 'Not logged in to Anthropic. How do you want to log in?',
+        });
+        if (choice === 'Cancel') {
+            await client.forceStop();
+            throw new Error('Claude login cancelled.');
+        }
+        const method: 'claudeai' | 'console' =
+            choice === 'Log in with Anthropic Console (API billing)' ? 'console' : 'claudeai';
+        const result = await client.runInteractiveLogin(method);
+        if (!result.success) {
+            await client.forceStop();
+            throw new Error(result.message ?? 'Claude login failed.');
+        }
+        authStatus = client.getAuthStatus();
+        if (!authStatus.isAuthenticated) {
+            await client.forceStop();
+            throw new Error(authStatus.statusMessage ?? 'Login completed but auth status still negative.');
+        }
+    }
+
+    const models = await client.listModels();
+    const labelToModel = new Map<string, ClaudeModelInfo>();
+    const itemsArray = models.map((m) => {
+        const ctx = m.contextWindow && m.contextWindow > 0
+            ? ` [${Math.round(m.contextWindow / 1000)}k]`
+            : '';
+        const price = m.pricing
+            ? ` $${m.pricing.inputPerM.toFixed(2)}/$${m.pricing.outputPerM.toFixed(2)}`
+            : '';
+        const label = `${m.name} (${m.id})${ctx}${price}`;
+        labelToModel.set(label, m);
+
+        return label;
+    });
+
+    const selectedLabel = await ui.searchSelectAndReturnFromArray({
+        itemsArray,
+        prompt: `Select a ${role} Claude model`,
+    });
+    const selectedModel = labelToModel.get(selectedLabel);
+    if (!selectedModel) {
+        await client.forceStop();
+        throw new Error('No Claude model selected.');
+    }
+
+    const reasoningEffort = await pickByokReasoningEffort();
+    if (reasoningEffort) {
+        client.setReasoningEffort(reasoningEffort);
+    }
+
+    return {
+        kind: 'claude',
+        client,
+        model: selectedModel.id,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+    };
+}
+
 export async function pickAgentRuntime(role: AgentRole): Promise<AgentRuntimePick> {
     const kind = await ui.searchSelectAndReturnFromArray({
-        itemsArray: [PROVIDER_KIND_BYOK, PROVIDER_KIND_COPILOT],
+        itemsArray: [PROVIDER_KIND_BYOK, PROVIDER_KIND_COPILOT, PROVIDER_KIND_CLAUDE],
         prompt: `Provider for the ${role}`,
     });
 
     if (kind === PROVIDER_KIND_COPILOT) {
         return pickCopilotRuntime(role);
+    }
+    if (kind === PROVIDER_KIND_CLAUDE) {
+        return pickClaudeRuntime(role);
     }
 
     return pickByokRuntime(role);

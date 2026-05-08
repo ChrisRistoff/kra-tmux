@@ -70,7 +70,24 @@ export type AgentSessionEventMap = {
     'assistant.usage': AssistantUsageEvent;
     'session.param_stripped': ParamStrippedEvent;
     'session.streaming_behavior_detected': StreamingBehaviorDetectedEvent;
+    'session.error': SessionErrorEvent;
 };
+
+export interface SessionErrorEvent {
+    data: {
+        /**
+         * Where the error came from:
+         *  - 'drain'  : the provider's event-drain loop crashed (transport/SDK exception)
+         *  - 'sdk'    : the SDK reported an error result (e.g. error_during_execution)
+         *  - 'auth'   : authentication/authorization failure surfaced mid-session
+         *  - 'mirror' : an internal SDK mirror/sync error (degraded but not fatal)
+         */
+        source: 'drain' | 'sdk' | 'auth' | 'mirror';
+        message: string;
+        /** Optional structured cause (Error instance, parsed payload, etc.) for debugging. */
+        cause?: unknown;
+    };
+}
 
 export interface ParamStrippedEvent {
     data: {
