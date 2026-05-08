@@ -113,13 +113,18 @@ export async function buildMcpClientPool(options: BuildPoolOptions): Promise<Mcp
                 continue;
             }
 
-            if (excluded.has(tool.name)) {
-                continue;
-            }
-
             const namespaced = namespacedToolName(serverName, tool.name);
 
-            if (allowedSet && !matchesSubAgentWhitelist(namespaced, allowedSet)) {
+            if (allowedSet) {
+                // Sub-agent path: positive whitelist wins. `excluded` is
+                // intended for SDK built-in names (e.g. 'bash', 'search')
+                // and we must not let those bare names accidentally strip
+                // a same-named MCP tool the whitelist explicitly allows.
+                if (!matchesSubAgentWhitelist(namespaced, allowedSet)) {
+                    continue;
+                }
+            } else if (excluded.has(tool.name)) {
+                // Orchestrator path: honour caller-supplied excludes.
                 continue;
             }
 

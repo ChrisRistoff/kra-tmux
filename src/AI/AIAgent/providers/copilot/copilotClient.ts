@@ -56,6 +56,60 @@ async function decideCopilotExcludedTools(
     return Array.from(merged);
 }
 
+// Mirrors Copilot SDK's internal `TL()` sanitizer used to derive tool IDs from
+// MCP client/server names. The SDK builds tool IDs as `${TL(clientName)}-${toolName}`
+// (see CopilotClient.getToolIdFromClientAndToolName) and then `availableTools`
+// is matched via exact `Array.includes`. So to whitelist an MCP tool we MUST
+// use the same sanitized prefix the SDK will use internally.
+function sanitizeMcpClientName(name: string): string {
+    return name.replace(/@/g, '-').replace(/[^a-zA-Z0-9-_]/g, '-');
+}
+
+// For sub-agents on Copilot we use the SDK's `availableTools` whitelist
+// instead of `excludedTools`. That hides built-in tools (read_bash, etc.)
+// without us having to enumerate them. The catch: `availableTools` is matched
+// by EXACT name against the IDs the SDK constructs for MCP tools, which are
+// `${sanitizedClientName}-${toolName}` — NOT the bare tool name we store in
+// our whitelist. So we have to enumerate the configured MCP servers, find the
+// tools that match our bare-name whitelist, and translate them into Copilot's
+// prefixed form before handing them to the SDK.
+async function decideCopilotAvailableTools(
+    options: AgentSessionOptions,
+    localToolNames: string[]
+): Promise<string[]> {
+    const allowedSet = new Set(options.allowedTools ?? []);
+    const result = new Set<string>(localToolNames);
+
+    let probePool: McpClientPool | undefined;
+    try {
+        probePool = await buildMcpClientPool({
+            servers: options.mcpServers,
+            workingDirectory: options.workingDirectory,
+        });
+
+        for (const tool of probePool.tools.values()) {
+            if (!matchesSubAgentWhitelist(tool.namespacedName, allowedSet)) {
+                continue;
+            }
+            const copilotId = `${sanitizeMcpClientName(tool.server)}-${tool.originalName}`;
+            result.add(copilotId);
+        }
+    } catch {
+        // If enumeration fails we fall back to whatever the caller passed
+        // (bare names + local tools). The sub-agent will be tool-starved
+        // for MCP, but at least local tools (`submit_result`) keep working.
+        for (const name of allowedSet) {
+            result.add(name);
+        }
+    } finally {
+        if (probePool) {
+            await probePool.disconnect();
+        }
+    }
+
+    return Array.from(result);
+}
+
 export class CopilotClientWrapper implements AgentClient {
     public readonly inner: CopilotClient;
     private reasoningEffort: ReasoningEffort | undefined;
@@ -108,10 +162,8 @@ export class CopilotClientWrapper implements AgentClient {
         let mergedExcluded: string[] = options.excludedTools ?? [];
 
         if (isSubAgent && options.allowedTools && options.allowedTools.length > 0) {
-            availableToolsForSdk = Array.from(new Set([
-                ...options.allowedTools,
-                ...(options.localTools?.map((t) => t.name) ?? []),
-            ]));
+            const localToolNames = options.localTools?.map((t) => t.name) ?? [];
+            availableToolsForSdk = await decideCopilotAvailableTools(options, localToolNames);
         } else {
             // Orchestrator path: keep the existing enumerate-and-exclude
             // behaviour so any user-supplied excludes are honoured.
