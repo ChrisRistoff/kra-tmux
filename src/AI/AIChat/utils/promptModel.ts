@@ -3,10 +3,10 @@ import OpenAI from 'openai';
 import type {
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageParam,
-    ChatCompletionMessageToolCall,
-    ChatCompletionTool,
+    ChatCompletionMessageFunctionToolCall,
+    ChatCompletionFunctionTool,
     ChatCompletionToolMessageParam,
-} from 'openai/resources/chat/completions';
+} from 'openai/resources/chat/completions/completions';
 import { StreamController } from '@/AI/shared/types/aiTypes';
 import { getProviderApiKey, getProviderBaseURL } from '@/AI/shared/data/providers';
 import {
@@ -96,7 +96,7 @@ const DOCS_SEARCH_PREAMBLE = [
     'PREFER `docs_search` over `web_search` / `web_fetch` whenever the user’s question matches one of the configured sources listed in the tool’s description — it is faster, offline, and version-pinned to what is installed.',
 ].join(' ');
 
-const CHAT_TOOLS: ChatCompletionTool[] = [
+const CHAT_TOOLS: ChatCompletionFunctionTool[] = [
     {
         type: 'function',
         function: {
@@ -243,7 +243,7 @@ async function createOpenAIStream(
 ): Promise<AsyncIterable<string>> {
     const useTools = !!toolContext;
 
-    const chatTools: ChatCompletionTool[] = [...CHAT_TOOLS];
+    const chatTools: ChatCompletionFunctionTool[] = [...CHAT_TOOLS];
     let docsPreamble = '';
     if (useTools) {
         try {
@@ -435,7 +435,7 @@ async function createOpenAIStream(
                             const assistantMessage: ChatCompletionAssistantMessageParam = {
                                 role: 'assistant',
                                 content: cleanedContent || null,
-                                tool_calls: extracted.map<ChatCompletionMessageToolCall>((tc) => ({
+                                tool_calls: extracted.map<ChatCompletionMessageFunctionToolCall>((tc) => ({
                                     id: tc.id || `call_${Math.random().toString(36).slice(2, 10)}`,
                                     type: 'function',
                                     function: { name: tc.name, arguments: tc.args || '{}' },
@@ -447,6 +447,8 @@ async function createOpenAIStream(
                                 if (controller?.isAborted) {
                                     return;
                                 }
+
+                                if (tc.type !== 'function') continue;
 
                                 let parsedArgs: Record<string, unknown> = {};
                                 try {
@@ -498,7 +500,7 @@ async function createOpenAIStream(
                 const assistantMessage: ChatCompletionAssistantMessageParam = {
                     role: 'assistant',
                     content: assistantContent || null,
-                    tool_calls: orderedCalls.map<ChatCompletionMessageToolCall>((tc) => ({
+                    tool_calls: orderedCalls.map<ChatCompletionMessageFunctionToolCall>((tc) => ({
                         id: tc.id || `call_${Math.random().toString(36).slice(2, 10)}`,
                         type: 'function',
                         function: { name: tc.name, arguments: tc.argsBuffer || '{}' },
@@ -511,6 +513,8 @@ async function createOpenAIStream(
                     if (controller?.isAborted) {
                         return;
                     }
+
+                    if (tc.type !== 'function') continue;
 
                     let parsedArgs: Record<string, unknown> = {};
                     try {

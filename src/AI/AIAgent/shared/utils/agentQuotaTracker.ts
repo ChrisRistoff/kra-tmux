@@ -43,7 +43,22 @@ export function setupQuotaTracking(state: AgentConversationState): void {
                 const key = `${quotaId}:${threshold}`;
                 if (pct <= threshold && !warnedThresholds.has(key)) {
                     warnedThresholds.add(key);
-                    const label = quotaId === 'weekly' ? 'weekly usage limit' : `${quotaId} usage limit`;
+                    let label: string;
+                    if (quotaId.startsWith('claude:')) {
+                        const suffix = quotaId.slice('claude:'.length);
+                        const claudeLabels: Record<string, string> = {
+                            'five_hour': 'Claude 5-hour limit',
+                            'seven_day': 'Claude 7-day limit',
+                            'seven_day_opus': 'Claude 7-day Opus limit',
+                            'seven_day_sonnet': 'Claude 7-day Sonnet limit',
+                            'overage': 'Claude overage limit',
+                        };
+                        label = claudeLabels[suffix] ?? `Claude ${suffix} limit`;
+                    } else if (quotaId === 'weekly') {
+                        label = 'weekly usage limit';
+                    } else {
+                        label = `${quotaId} usage limit`;
+                    }
                     const color = pct <= 10 ? '\x1b[31m' : '\x1b[33m';
                     console.warn(`\n${color}⚠ You've used over ${100 - threshold}% of your ${label}. Resets: ${resetDate}\x1b[0m\n`);
                 }

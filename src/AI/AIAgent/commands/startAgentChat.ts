@@ -79,7 +79,7 @@ export async function startAgentChat(): Promise<void> {
             ...(orchestrator.reasoningEffort ? { reasoningEffort: orchestrator.reasoningEffort } : {}),
             ...(orchestrator.temperature != null ? { temperature: orchestrator.temperature } : {}),
             ...(orchestrator.dynamicParams ? { dynamicParams: orchestrator.dynamicParams } : {}),
-            ...(orchestrator.kind === 'byok'
+            ...(orchestrator.kind === 'byok' || orchestrator.kind === 'claude'
                 ? { additionalMcpServers: buildByokExtraMcpServers() }
                 : {}),
             ...(executor ? { executor } : {}),

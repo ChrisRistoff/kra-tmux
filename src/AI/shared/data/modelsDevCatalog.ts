@@ -306,6 +306,37 @@ export async function getModelsDevCatalog(
 }
 
 /**
+ * Return every model in a models.dev provider catalog by its raw key
+ * (e.g. `'anthropic'`, `'openai'`). Unlike `getModelsDevCatalog`, this does
+ * not require the provider to be one of `SUPPORTED_PROVIDERS` — useful for
+ * providers that bypass the BYOK pipeline (e.g. Claude via the Agent SDK).
+ */
+export async function getModelsDevProviderModels(
+    providerKey: string,
+    opts?: { forceRefresh?: boolean }
+): Promise<ModelsDevModelInfo[]> {
+    const providers = await getProviders(opts);
+    const providerData = providers[providerKey];
+    if (!providerData) return [];
+
+    return Object.values(providerData.models).map((model): ModelsDevModelInfo => {
+        const pricing = toPricing(model.cost);
+        const maxOutputTokens = model.limit?.output;
+
+        return {
+            id: model.id,
+            name: model.name ?? model.id,
+            provider: providerKey,
+            providerName: providerData.name ?? providerKey,
+            capabilities: toModelCapabilities(model),
+            ...(pricing != null ? { pricing } : {}),
+            contextWindow: model.limit?.context ?? 0,
+            ...(maxOutputTokens != null ? { maxOutputTokens } : {}),
+        };
+    });
+}
+
+/**
  * Look up a single model's capabilities from models.dev.
  * Searches across all providers for a match.
  */
