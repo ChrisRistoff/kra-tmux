@@ -161,6 +161,30 @@ function mergeChanges(...lists: CatchupChange[][]): CatchupChange[] {
  * workspace, given the previously persisted `lastIndexedCommit` /
  * `lastIndexedAt` from the registry.
  */
+async function filterDirtyByMtime(
+    changes: CatchupChange[],
+    repoRoot: string,
+    lastIndexedAt: number,
+): Promise<CatchupChange[]> {
+    const results = await Promise.all(
+        changes.map(async (c): Promise<CatchupChange | null> => {
+            if (c.kind === 'delete') return c;
+
+            try {
+                const stat = await fs.stat(path.join(repoRoot, c.relPath));
+
+                return stat.mtimeMs > lastIndexedAt ? c : null;
+            } catch {
+                // File unreadable — treat as deleted.
+                return { relPath: c.relPath, kind: 'delete' };
+            }
+        }),
+    );
+
+    return results.filter((c): c is CatchupChange => c !== null);
+}
+
+
 export async function computeChangedFiles(opts: {
     repoRoot?: string;
     lastIndexedCommit: string;
@@ -186,7 +210,15 @@ export async function computeChangedFiles(opts: {
         );
         const dirtyRaw = await tryExec(`git -C ${quote(repoRoot)} status --porcelain`);
         const committed = committedRaw ? parseNameStatus(committedRaw) : [];
-        const dirty = dirtyRaw ? parsePorcelain(dirtyRaw) : [];
+        const allDirty = dirtyRaw ? parsePorcelain(dirtyRaw) : [];
+
+        // Filter dirty (uncommitted) files by mtime so that files already indexed
+        // in the last session don't re-appear on every startup. Committed changes
+        // are always included because their content is definitively newer.
+        const dirty = opts.lastIndexedAt
+            ? await filterDirtyByMtime(allDirty, repoRoot, opts.lastIndexedAt)
+            : allDirty;
+
         const merged = mergeChanges(committed, dirty)
             .filter((c) => c.kind === 'delete' || isIndexable(c.relPath, settings));
 
