@@ -125,6 +125,13 @@ export class ClaudeClient implements AgentClient {
                 : {
                     settingSources: ['user', 'project', 'local'],
                 }),
+            // Stream incremental text/thinking deltas as the model generates
+            // them, instead of receiving entire blocks at once when the
+            // assistant message is finalized. We forward these as
+            // `assistant.message_delta` / `assistant.reasoning_delta` so the
+            // UI can render token-by-token.
+            includePartialMessages: true,
+
             // Note: Claude Agent SDK / CLI deliberately expose no
             // temperature, top-p, or sampling controls; the only model-
             // behavior dial is `--effort` (wired via reasoningEffort above).

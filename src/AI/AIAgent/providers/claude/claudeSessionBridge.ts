@@ -184,6 +184,10 @@ export class ClaudeSessionBridge implements AgentSession {
                 this.handleSystemMessage(msg);
 
                 return;
+            case 'stream_event':
+                this.handleStreamEvent(msg as SDKMessage & { type: 'stream_event'; event: { type: string; delta?: { type: string; text?: string; thinking?: string } } });
+
+                return;
             case 'auth_status':
                 if (typeof (msg as { error?: unknown }).error === 'string') {
                     this.emit('session.error', {
@@ -282,7 +286,30 @@ export class ClaudeSessionBridge implements AgentSession {
         this.emit('assistant.usage', { data: { quotaSnapshots: snapshots } });
     }
 
+    private handleStreamEvent(msg: { event: { type: string; delta?: { type: string; text?: string; thinking?: string } } }): void {
+        // SDK partial messages wrap Anthropic's raw streaming events. We only
+        // forward incremental text/thinking deltas; the SDK still emits a
+        // final consolidated `assistant` message which we use for tool_use
+        // dispatch and transcript capture (without re-emitting deltas).
+        const ev = msg.event;
+        if (ev.type !== 'content_block_delta' || !ev.delta) {
+            return;
+        }
+        if (ev.delta.type === 'text_delta' && typeof ev.delta.text === 'string') {
+            this.emit('assistant.message_delta', {
+                data: { deltaContent: ev.delta.text },
+            });
+        } else if (ev.delta.type === 'thinking_delta' && typeof ev.delta.thinking === 'string') {
+            this.emit('assistant.reasoning_delta', {
+                data: { deltaContent: ev.delta.thinking },
+            });
+        }
+    }
+
     private handleAssistantMessage(msg: SDKAssistantMessage): void {
+        // Note: text/thinking deltas are emitted live from `stream_event`
+        // above (see `includePartialMessages: true` in claudeClient). Here
+        // we only collect transcript fragments and dispatch tool_use blocks.
         const content = msg.message.content;
         if (!Array.isArray(content)) {
             return;
@@ -290,14 +317,7 @@ export class ClaudeSessionBridge implements AgentSession {
         const transcriptParts: string[] = [];
         for (const block of content) {
             if (block.type === 'text' && typeof block.text === 'string') {
-                this.emit('assistant.message_delta', {
-                    data: { deltaContent: block.text },
-                });
                 transcriptParts.push(block.text);
-            } else if (block.type === 'thinking' && typeof (block as { thinking?: unknown }).thinking === 'string') {
-                this.emit('assistant.reasoning_delta', {
-                    data: { deltaContent: (block as { thinking: string }).thinking },
-                });
             } else if (block.type === 'tool_use') {
                 const callId = String(block.id);
                 const toolName = String(block.name);

@@ -78,12 +78,22 @@ export type DocsSettings = {
     sources?: DocsSource[],
 }
 
+export type WebSettings = {
+    fetchEnabled?: boolean,
+    fetchIdleTimeoutMs?: number,
+    fetchMaxPagesPerWorker?: number,
+    fetchPageTimeoutMs?: number,
+    fetchMode?: 'auto' | 'http' | 'browser',
+    fetchMaxConcurrent?: number,
+}
+
 export type Settings = {
     autosave: Autosave,
 
     ai?: {
         agent?: AgentSettings,
         docs?: DocsSettings,
+        web?: WebSettings,
     },
     lsp?: Record<string, LspServerSettings>,
 }

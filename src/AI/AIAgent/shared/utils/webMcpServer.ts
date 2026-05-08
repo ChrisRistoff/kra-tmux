@@ -49,10 +49,16 @@ runStdioMcpServer({
                 throw new JsonRpcToolError(-32602, 'Missing required argument: url');
             }
 
-            const { output, isError } = await runWebFetch({
-                url: args.url,
-                ...(args.max_length !== undefined ? { max_length: args.max_length } : {}),
-            });
+            const fetchArgs: WebFetchArgs = { url: args.url };
+            if (typeof args.max_length === 'number') fetchArgs.max_length = args.max_length;
+            if (typeof args.start_index === 'number') fetchArgs.start_index = args.start_index;
+            if (typeof args.query === 'string') fetchArgs.query = args.query;
+            if (typeof args.context === 'number') fetchArgs.context = args.context;
+            if (typeof args.force_refresh === 'boolean') fetchArgs.force_refresh = args.force_refresh;
+            if (args.mode === 'auto' || args.mode === 'crawl4ai' || args.mode === 'jina' || args.mode === 'direct') {
+                fetchArgs.mode = args.mode;
+            }
+            const { output, isError } = await runWebFetch(fetchArgs);
 
             return {
                 content: [{ type: 'text', text: output }],
