@@ -6,6 +6,7 @@ import { openVim } from '@/utils/neovimHelper';
 import { neovimConfig } from '@/filePaths';
 import * as aiNeovimHelper from '@/AI/shared/conversation';
 import { formatUserDraftHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
+import { loadSettings } from '@/utils/common';
 const AGENT_PROMPT_ACTIONS = [
     ['ReviewProposal', 'review_proposal'],
     ['OpenProposalFile', 'open_proposal_file'],
@@ -72,7 +73,13 @@ export async function setupAgentSplitLayout(
     channelId: number,
     chatFile: string
 ): Promise<void> {
-    await nvimClient.executeLua(`require('kra_agent_layout').setup(...)`, [channelId, chatFile]);
+    const iface = (await loadSettings()).ai?.chatInterface;
+    const opts = {
+        scroll_tick_ms: iface?.scrollTickMs ?? 16,
+        scroll_acceleration: iface?.scrollAcceleration ?? 8,
+        append_debounce_ms: iface?.appendDebounceMs ?? 0,
+    };
+    await nvimClient.executeLua(`require('kra_agent_layout').setup(...)`, [channelId, chatFile, opts]);
 }
 
 
@@ -117,6 +124,28 @@ export function appendToAgentChatLayout(nvimClient: neovim.NeovimClient, text: s
     } catch {
         // Ignore — UI updates are best-effort.
     }
+}
+
+// See aiNeovimHelper.streamingStarted/Ended — same idea, agent layout.
+// Bracket each streaming response so render-markdown.nvim is suspended on
+// the transcript buffer between calls and we get a single styled repaint
+// at the end instead of per-chunk extmark recomputes.
+export function streamingStartedAgent(nvimClient: neovim.NeovimClient): void {
+    try {
+        nvimClient.notify('nvim_exec_lua', [
+            `require('kra_agent_layout').streaming_started()`,
+            [],
+        ]);
+    } catch { /* best-effort */ }
+}
+
+export function streamingEndedAgent(nvimClient: neovim.NeovimClient): void {
+    try {
+        nvimClient.notify('nvim_exec_lua', [
+            `require('kra_agent_layout').streaming_ended()`,
+            [],
+        ]);
+    } catch { /* best-effort */ }
 }
 
 export async function openAgentNeovim(chatFile: string): Promise<neovim.NeovimClient> {

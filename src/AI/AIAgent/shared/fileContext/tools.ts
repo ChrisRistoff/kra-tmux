@@ -13,7 +13,7 @@ export const TOOLS = [
 
     {
         name: 'read_lines',
-        description: 'Returns specific lines from a file (1-indexed, inclusive); each prefixed with its line number for use as an anchor. Up to 150 lines per call; larger reads on structured files are bounced back to get_outline (unstructured files are never gated). Hard cap 500 lines (summed across ranges). Supports multiple ranges via parallel startLines/endLines arrays — prefer that over multiple calls.',
+        description: 'Returns specific lines from a file (1-indexed, inclusive). Up to 150 lines per call; larger reads on structured files are bounced back to get_outline (unstructured files are never gated). Hard cap 500 lines (summed across ranges). Supports multiple ranges via parallel startLines/endLines arrays — prefer that over multiple calls.',
         inputSchema: {
             type: 'object',
             properties: {

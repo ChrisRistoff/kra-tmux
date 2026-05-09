@@ -21,6 +21,9 @@ import * as fs from 'fs/promises';
 // Mock modules
 jest.mock('os');
 jest.mock('fs/promises');
+jest.mock('@/utils/common', () => ({
+    loadSettings: jest.fn(async () => ({})),
+}));
 
 // Mock StreamController
 const mockStreamController = {
@@ -155,7 +158,15 @@ describe('nvim-utils', () => {
                     .mockResolvedValueOnce(undefined);
 
                 await setupChatSplitLayout(mockNvim, 123, '/tmp/test-chat.md');
-                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(1, `require('kra_chat_layout').setup(...)`, [123, '/tmp/test-chat.md']);
+                expect(mockNvim.executeLua).toHaveBeenNthCalledWith(
+                    1,
+                    `require('kra_chat_layout').setup(...)`,
+                    [123, '/tmp/test-chat.md', expect.objectContaining({
+                        scroll_tick_ms: expect.any(Number),
+                        scroll_acceleration: expect.any(Number),
+                        append_debounce_ms: expect.any(Number),
+                    })],
+                );
 
                 const prompt = await getChatPromptText(mockNvim);
                 expect(prompt).toBe('Prompt text');

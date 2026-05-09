@@ -87,6 +87,15 @@ export type WebSettings = {
     fetchMaxConcurrent?: number,
 }
 
+export type ChatInterfaceSettings = {
+    pacerIntervalMs?: number,
+    pacerMinChars?: number,
+    pacerDivisor?: number,
+    scrollTickMs?: number,
+    scrollAcceleration?: number,
+    appendDebounceMs?: number,
+}
+
 export type Settings = {
     autosave: Autosave,
 
@@ -94,6 +103,7 @@ export type Settings = {
         agent?: AgentSettings,
         docs?: DocsSettings,
         web?: WebSettings,
+        chatInterface?: ChatInterfaceSettings,
     },
     lsp?: Record<string, LspServerSettings>,
 }
