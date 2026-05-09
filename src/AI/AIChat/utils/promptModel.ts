@@ -7,6 +7,8 @@ import type {
     ChatCompletionFunctionTool,
     ChatCompletionToolMessageParam,
 } from 'openai/resources/chat/completions/completions';
+import * as fs from 'fs/promises';
+import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
 import { StreamController } from '@/AI/shared/types/aiTypes';
 import { getProviderApiKey, getProviderBaseURL } from '@/AI/shared/data/providers';
 import {
@@ -25,6 +27,12 @@ import { buildDocsSearchTool } from '@/AI/AIAgent/shared/utils/memoryMcpServer';
 import { docsSearch } from '@/AI/AIAgent/shared/docs/search';
 import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import { summarizeToolCall, formatToolLine } from '@/AI/AIAgent/shared/utils/agentUi';
+import { loadDeepSearchSettings, type DeepSearchSettings } from './deepSearch/settings';
+import { runDeepSearch } from './deepSearch/chatSubAgent';
+import {
+    type ChatApprovalState,
+    requestChatToolApproval,
+} from './chatToolApproval';
 
 const MAX_TOOL_ITERATIONS = 8;
 
@@ -96,6 +104,36 @@ const DOCS_SEARCH_PREAMBLE = [
     'PREFER `docs_search` over `web_search` / `web_fetch` whenever the user’s question matches one of the configured sources listed in the tool’s description — it is faster, offline, and version-pinned to what is installed.',
 ].join(' ');
 
+const DEEP_SEARCH_PREAMBLE = [
+    '',
+    'You also have `deep_search`: a budgeted multi-step web research helper. It runs an inner loop using the same provider/model as this chat, calling web_search + scraping + indexing on its own, and returns ONE curated digest with cited evidence — without leaking raw page content into this conversation.',
+    'Use `deep_search` instead of chaining `web_search` + several `web_fetch` calls when the question requires reading multiple sources ("compare X across…", "what changed in…", "survey of…", deep how-tos, hard-to-find specifics). Pass any context the chat already has via `hint` so the inner loop does not waste budget rediscovering it.',
+    'CRITICAL — BATCH RELATED SUB-QUESTIONS INTO ONE CALL. If the user asks you to compare/survey/list across N items ("prices for providers X, Y, Z", "latest version of libraries A, B, C", "how does feature F work in tools P, Q, R"), make a SINGLE `deep_search` call whose `query` enumerates ALL items together — NOT one call per item. The inner loop is built to fan out searches/scrapes within its budget; making it run N separate top-level investigations wastes N× the budget and floods this chat with N digests. One outer call, one curated digest.',
+    'For a single known URL, prefer `web_fetch`. For a quick fact lookup, prefer `web_search` + one `web_fetch`. `deep_search` is the heavyweight option — use it sparingly, once per user question.',
+].join(' ');
+
+const DEEP_SEARCH_PARAMETERS: Record<string, unknown> = {
+    type: 'object',
+    properties: {
+        query: {
+            type: 'string',
+            description: 'The research question. Be concrete: what should the helper find out?',
+        },
+        hint: {
+            type: 'string',
+            description: 'Optional context from the chat (known URLs, prior findings, scope). The inner loop only sees `query` + `hint`, so be generous.',
+        },
+    },
+    required: ['query'],
+    additionalProperties: false,
+};
+
+const DEEP_SEARCH_DESCRIPTION = [
+    'Budgeted multi-step web research. Spawns an inner research loop (same provider/model) that runs web_search + scraping + indexing autonomously and returns ONE curated digest with citations.',
+    'Use ONCE per user question, even when the question covers multiple items. If asked to compare/survey/list across N items (e.g. prices for providers X, Y, Z; versions of libraries A, B, C), put ALL items in a SINGLE `query` string — do NOT make N separate calls. The inner loop will fan out within its own budget; calling deep_search per item wastes budget N× and floods the chat with N digests.',
+    'Prefer `web_fetch` for a single known URL, `web_search` + one `web_fetch` for a single quick fact. deep_search is heavyweight.',
+].join(' ');
+
 const CHAT_TOOLS: ChatCompletionFunctionTool[] = [
     {
         type: 'function',
@@ -118,6 +156,22 @@ const CHAT_TOOLS: ChatCompletionFunctionTool[] = [
 export interface ChatToolContext {
     nvim: neovim.NeovimClient;
     chatFile: string;
+    /** Provider currently powering the chat. Used by `deep_search` for its inner loop. */
+    provider?: string;
+    /** Model currently powering the chat. Used by `deep_search` for its inner loop. */
+    model?: string;
+    /** Cached deep_search settings, populated lazily by createOpenAIStream. */
+    deepSearch?: DeepSearchSettings;
+    /** Stream controller for the outer chat. Bridged to deep_search so Ctrl+C aborts it. */
+    controller?: StreamController;
+    /**
+     * Per-chat-session tool-permission state. When set, every tool call
+     * (outer chat tools AND deep_search inner-loop tools) is gated through
+     * the agent's existing Neovim approval popup. State persists for the
+     * life of the chat conversation so `allow-family` / `yolo` decisions
+     * survive across turns.
+     */
+    approval?: ChatApprovalState;
 }
 
 export async function promptModel(
@@ -134,7 +188,18 @@ export async function promptModel(
 
     const openai = new OpenAI({ apiKey, baseURL });
 
-    return createOpenAIStream(openai, model, system, messages, temperature, controller, toolContext);
+    const enrichedContext: ChatToolContext | undefined = toolContext
+        ? {
+            ...toolContext,
+            provider: toolContext.provider ?? provider,
+            model: toolContext.model ?? model,
+            ...(controller ? { controller } : {}),
+        }
+        : controller
+            ? { nvim: undefined as unknown as neovim.NeovimClient, chatFile: '', controller }
+            : undefined;
+
+    return createOpenAIStream(openai, model, system, messages, temperature, controller, enrichedContext);
 }
 
 /**
@@ -174,6 +239,7 @@ interface ToolCallAccumulator {
 async function executeToolCall(
     toolName: string,
     rawArgs: string,
+    context?: ChatToolContext,
 ): Promise<WebToolResult> {
     let parsed: Record<string, unknown> = {};
 
@@ -183,6 +249,26 @@ async function executeToolCall(
         const message = error instanceof Error ? error.message : String(error);
 
         return { output: `Invalid JSON arguments for ${toolName}: ${message}`, isError: true };
+    }
+
+    // Gate every chat tool call through the approval popup when enabled.
+    // This runs BEFORE per-tool dispatch so the same gate covers web_fetch,
+    // web_search, docs_search, and deep_search uniformly.
+    if (context?.approval && context.nvim) {
+        const decision = await requestChatToolApproval(context.nvim, context.approval, {
+            toolName,
+            toolArgs: parsed,
+        });
+        if (decision.action === 'deny') {
+            const reason = decision.denyReason
+                ? `User denied ${toolName}. Reason: "${decision.denyReason}". Treat the user's reason as authoritative direction. Do not retry the same call; either follow the user's guidance or ask them what to do instead.`
+                : `User denied ${toolName}. Do not retry this tool call. Ask the user what they want instead.`;
+
+            return { output: reason, isError: true };
+        }
+        if (decision.modifiedArgs && typeof decision.modifiedArgs === 'object') {
+            parsed = decision.modifiedArgs as Record<string, unknown>;
+        }
     }
 
     if (toolName === 'web_fetch') {
@@ -226,6 +312,67 @@ async function executeToolCall(
         }
 
         return runWebSearch(args);
+    }
+
+    if (toolName === 'deep_search') {
+        if (!context?.deepSearch?.enabled) {
+            return { output: 'deep_search is not enabled. Set `[ai.chat.deepSearch].enabled = true` in settings.toml.', isError: true };
+        }
+        if (!context.provider || !context.model) {
+            return { output: 'deep_search misconfigured: missing provider/model in chat context.', isError: true };
+        }
+        if (typeof parsed.query !== 'string' || parsed.query.trim().length === 0) {
+            return { output: 'deep_search missing required argument: query', isError: true };
+        }
+
+        // Bridge the chat's StreamController to an AbortSignal so Ctrl+C
+        // (which flips controller.isAborted) cancels the in-flight inner-loop
+        // request and exits the loop on the next iteration.
+        const ac = new AbortController();
+        const abortPoll = context.controller
+            ? setInterval(() => { if (context.controller!.isAborted) ac.abort(); }, 200)
+            : null;
+
+        // Stream short progress lines into the chat transcript so the user
+        // can see what the inner loop is doing during long deep_search calls.
+        const progressPrefix = '\n_[deep_search]_ ';
+        const writeProgress = async (msg: string): Promise<void> => {
+            const line = `${progressPrefix}${msg}\n`;
+            try {
+                if (context.chatFile) await fs.appendFile(context.chatFile, line, 'utf8');
+            } catch { /* ignore transcript write errors */ }
+            try {
+                if (context.nvim) aiNeovimHelper.appendToChatLayout(context.nvim, line);
+            } catch { /* ignore neovim sink errors */ }
+        };
+
+        try {
+            const opts: Parameters<typeof runDeepSearch>[0] = {
+                query: parsed.query,
+                provider: context.provider,
+                model: context.model,
+                settings: context.deepSearch,
+                signal: ac.signal,
+                onProgress: writeProgress,
+            };
+            if (context.approval && context.nvim) {
+                opts.approval = context.approval;
+                opts.nvim = context.nvim;
+            }
+            if (typeof parsed.hint === 'string' && parsed.hint.length > 0) {
+                opts.hint = parsed.hint;
+            }
+            const result = await runDeepSearch(opts);
+            await writeProgress(`done (${result.stats.toolCalls} tool calls${result.partial ? ', partial' : ''})\n`);
+
+            return { output: JSON.stringify(result, null, 2), isError: false };
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+
+            return { output: `deep_search failed: ${message}`, isError: true };
+        } finally {
+            if (abortPoll) clearInterval(abortPoll);
+        }
     }
 
     if (toolName === 'docs_search') {
@@ -278,6 +425,22 @@ async function createOpenAIStream(
                 docsPreamble = '\n\n' + DOCS_SEARCH_PREAMBLE;
             }
         } catch { /* docs settings missing — leave web tools only */ }
+
+        try {
+            const deepSearch = await loadDeepSearchSettings();
+            if (deepSearch.enabled && toolContext) {
+                toolContext.deepSearch = deepSearch;
+                chatTools.push({
+                    type: 'function',
+                    function: {
+                        name: 'deep_search',
+                        description: DEEP_SEARCH_DESCRIPTION,
+                        parameters: DEEP_SEARCH_PARAMETERS,
+                    },
+                });
+                docsPreamble += '\n\n' + DEEP_SEARCH_PREAMBLE;
+            }
+        } catch { /* deep_search settings missing — leave it disabled */ }
     }
 
     const systemContent = useTools
@@ -312,10 +475,12 @@ async function createOpenAIStream(
 
                     if (suspected.has('temperature') && !temperatureDisabled) {
                         temperatureDisabled = true;
+
                         return openStream();
                     }
                     if (suspected.has('tools') && useTools && !toolsDisabled) {
                         toolsDisabled = true;
+
                         return openStream();
                     }
                 }
@@ -349,6 +514,17 @@ async function createOpenAIStream(
                 const toolCalls = new Map<number, ToolCallAccumulator>();
                 let assistantContent = '';
                 let finishReason: string | null | undefined;
+                // Track whether we are currently streaming a chain-of-thought
+                // reasoning block so we can wrap it in a fenced ```thinking
+                // block in the chat transcript. Distinct from `delta.content`
+                // which carries the visible final answer.
+                let inReasoning = false;
+                const closeReasoningBlock = (): string => {
+                    if (!inReasoning) return '';
+                    inReasoning = false;
+
+                    return '\n```\n\n';
+                };
                 // Some providers reuse the same index for multiple parallel tool calls,
                 // causing them to merge into one. Track ids to detect collisions.
                 let syntheticIndexCounter = 0;
@@ -371,7 +547,39 @@ async function createOpenAIStream(
                         continue;
                     }
 
+                    // DeepSeek-style providers stream chain-of-thought via
+                    // `reasoning_content`; some Gemini-style providers use
+                    // structured `reasoning_details`; older ones use raw
+                    // `reasoning`. Surface whichever we get, wrapped in a
+                    // ```thinking fenced block so the user can see the model
+                    // working without polluting the final-answer text.
+                    const deltaAny = delta as unknown as {
+                        reasoning_content?: string;
+                        reasoning?: string;
+                        reasoning_details?: Array<{ type?: string; text?: string }>;
+                    };
+                    let reasoningChunk: string | undefined;
+                    if (typeof deltaAny.reasoning_content === 'string') {
+                        reasoningChunk = deltaAny.reasoning_content;
+                    } else if (typeof deltaAny.reasoning === 'string') {
+                        reasoningChunk = deltaAny.reasoning;
+                    } else if (Array.isArray(deltaAny.reasoning_details)) {
+                        reasoningChunk = deltaAny.reasoning_details
+                            .filter((d) => d.type === 'reasoning' && typeof d.text === 'string')
+                            .map((d) => d.text!)
+                            .join('');
+                    }
+                    if (typeof reasoningChunk === 'string' && reasoningChunk.length > 0) {
+                        if (!inReasoning) {
+                            inReasoning = true;
+                            yield '\n```thinking\n';
+                        }
+                        yield reasoningChunk;
+                    }
+
                     if (typeof delta.content === 'string' && delta.content.length > 0) {
+                        const closeMarker = closeReasoningBlock();
+                        if (closeMarker) yield closeMarker;
                         assistantContent += delta.content;
                         yield delta.content;
                     }
@@ -392,7 +600,7 @@ async function createOpenAIStream(
                                     effectiveIndex = knownIndex;
                                 } else {
                                     const existing = toolCalls.get(tcDelta.index ?? 0);
-                                    if (existing && existing.id && existing.id !== tcDelta.id) {
+                                    if (existing?.id && existing.id !== tcDelta.id) {
                                         effectiveIndex = 1000 + syntheticIndexCounter++;
                                     } else {
                                         effectiveIndex = tcDelta.index ?? 0;
@@ -431,6 +639,11 @@ async function createOpenAIStream(
                         finishReason = choice.finish_reason;
                     }
                 }
+
+                // Make sure a reasoning block is always closed before we
+                // dispatch tool calls or end the turn.
+                const tailClose = closeReasoningBlock();
+                if (tailClose) yield tailClose;
 
                 if (finishReason !== 'tool_calls' || toolCalls.size === 0 || !toolContext) {
                     // No structured tool calls — check for text-based tool call patterns
@@ -482,7 +695,7 @@ async function createOpenAIStream(
                                     tc.function.arguments || '{}',
                                 ]);
 
-                                const result = await executeToolCall(tc.function.name, tc.function.arguments);
+                                const result = await executeToolCall(tc.function.name, tc.function.arguments, toolContext);
 
                                 await updateAgentUi(toolContext.nvim, 'complete_tool', [
                                     tc.function.name,
@@ -492,6 +705,13 @@ async function createOpenAIStream(
                                 ]);
 
                                 yield formatToolLine(summary, !result.isError);
+                                if (result.isError && result.output.startsWith('User denied ')) {
+                                    // Persist a non-strippable note so the next
+                                    // turn (which reconstructs messages from
+                                    // markdown) preserves the fact that the
+                                    // user denied this tool call.
+                                    yield `\n> ${result.output}\n\n`;
+                                }
 
                                 const toolMessage: ChatCompletionToolMessageParam = {
                                     role: 'tool',
@@ -548,7 +768,7 @@ async function createOpenAIStream(
                         tc.function.arguments || '{}',
                     ]);
 
-                    const result = await executeToolCall(tc.function.name, tc.function.arguments);
+                    const result = await executeToolCall(tc.function.name, tc.function.arguments, toolContext);
 
                     await updateAgentUi(toolContext.nvim, 'complete_tool', [
                         tc.function.name,
@@ -558,6 +778,12 @@ async function createOpenAIStream(
                     ]);
 
                     yield formatToolLine(summary, !result.isError);
+                    if (result.isError && result.output.startsWith('User denied ')) {
+                        // Persist a non-strippable note so the next turn
+                        // (which reconstructs messages from markdown)
+                        // preserves the fact that the user denied this call.
+                        yield `\n> ${result.output}\n\n`;
+                    }
 
                     const toolMessage: ChatCompletionToolMessageParam = {
                         role: 'tool',

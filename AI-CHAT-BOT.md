@@ -14,6 +14,7 @@ A sophisticated AI interface built on Neovim with advanced file context manageme
 - **🎯 Visual Selection**: Select specific code portions using Neovim's visual mode
 - **📊 Context Management**: Visual popup interface for managing file contexts
 - **🌐 Built-in Web Tools**: Models can call `web_search` (Jina or DuckDuckGo) and `web_fetch` (with Jina Reader + Wayback fallbacks for JS/paywalled pages) directly from chat
+- **🔎 Deep Search (opt-in)**: Models can call `deep_search({query, hint?})` to spawn an inner research loop using the SAME provider/model. The loop runs `web_search` + bulk scrape/index + vector query autonomously and returns ONE curated digest with citations — raw page bodies never enter the chat history. Configure via `[ai.chat.deepSearch]` in `settings.toml` (`enabled = true` to turn on).
 - **🪜 Tool History**: `<leader>h` opens the same tool-call history popup the agent uses, showing every web call made in the conversation
 
 ## 🏗️ System Architecture
