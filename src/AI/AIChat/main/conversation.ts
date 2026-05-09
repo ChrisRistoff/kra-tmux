@@ -3,6 +3,8 @@ import * as neovim from 'neovim';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { aiRoles } from '@/AI/shared/data/roles';
 import { promptModel } from '@/AI/AIChat/utils/promptModel';
+import { createChatApprovalState, type ChatApprovalState } from '@/AI/AIChat/utils/chatToolApproval';
+import { loadChatApprovalSettings } from '@/AI/AIChat/utils/chatApprovalSettings';
 import { saveChat } from '@/AI/AIChat/utils/saveChat';
 import { ChatHistory, Role, StreamController } from '@/AI/shared/types/aiTypes'
 import * as bash from '@/utils/bashHelper';
@@ -22,6 +24,19 @@ const fileContext = conversation;
 
 // stream controller for the current request
 let currentStreamController: StreamController | null = null;
+
+// per-process tool-permission state for the chat. Mode is loaded lazily from
+// settings.toml on first use; allow-family / yolo decisions made via the
+// neovim popup are stored in `allowedFamilies` and persist across turns.
+let currentApprovalState: ChatApprovalState | null = null;
+async function getApprovalState(): Promise<ChatApprovalState> {
+    if (!currentApprovalState) {
+        const { mode } = await loadChatApprovalSettings();
+        currentApprovalState = createChatApprovalState(mode);
+    }
+
+    return currentApprovalState;
+}
 
 export async function converse(
     chatFile: string,
@@ -178,7 +193,7 @@ async function handleSubmit(
             temperature,
             aiRoles[role],
             currentStreamController,
-            { nvim, chatFile },
+            { nvim, chatFile, approval: await getApprovalState() },
         );
 
         await handleStreamingResponse(response, chatFile, nvim, currentStreamController);
@@ -346,6 +361,9 @@ const TOOL_MARKER_LINE = /^\s*`[✓✗]\s[^`]*`\s*$/;
 
 function stripToolMarkers(message: string): string {
     return message
+        // Drop fenced ```thinking ... ``` reasoning blocks: they are
+        // private scratchpad and bloat the prompt on subsequent turns.
+        .replace(/```thinking[\s\S]*?```\s*/g, '')
         .split('\n')
         .filter((line) => !TOOL_MARKER_LINE.test(line))
         .join('\n')

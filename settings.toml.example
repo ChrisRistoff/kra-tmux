@@ -106,6 +106,34 @@ ttlMinutes = 60               # how long indexed page chunks survive before TTL 
 validateExcerpts = true       # reject hallucinated snippets at the tool layer
 # Restrict the toolset the web investigator is allowed to call (defaults shown):
 # toolWhitelist = ["web_search", "web_scrape_and_index", "research_query"]
+# toolWhitelist = ["web_search", "web_scrape_and_index", "research_query"]
+
+# ─── AI Chat: deep_search ────────────────────────────────────────────────────
+# Gives the chat (`kra ai chat`) a `deep_search({query, hint?})` tool that
+# spawns an inner web-research loop using the SAME provider/model the chat is
+# using. The inner loop runs `web_search` + `web_scrape_and_index` +
+# `research_query` autonomously and returns ONE curated digest with citations
+# — the chat never sees raw page bodies. Disabled by default; opt-in.
+[ai.chat.deepSearch]
+enabled = false              # set to true to expose `deep_search` in the chat
+maxSearches = 5              # hard cap on web_search calls per deep_search call
+maxScrapes = 5               # hard cap on web_scrape_and_index calls per deep_search call
+urlsPerScrape = 30           # per-call cap on URLs in one scrape batch
+maxToolCalls = 30            # hard cap on total inner-loop tool calls before forcing submit
+maxEvidenceItems = 8         # cap on evidence array returned to the chat
+maxExcerptLines = 20         # cap on lines per excerpt
+ttlMinutes = 60              # how long indexed chunks survive before TTL eviction
+validateExcerpts = true      # reject hallucinated snippets at the tool layer
+# toolWhitelist = ["web_search", "web_scrape_and_index", "research_query"]
+
+# ─── Chat tool-permission popup ──────────────────────────────────────────────
+# Gate every chat tool call (web_search / web_fetch / docs_search /
+# deep_search and its inner-loop tools) through the same Neovim approval
+# popup the agent uses. `allow-family` and `yolo` decisions persist for the
+# life of the chat process. Default is `strict` (popup on every tool); set
+# to `yolo` to silence the popup entirely.
+[ai.chat.approval]
+mode = "strict"             # "strict" | "yolo"
 
 # ─── Quota dashboard (`kra ai quota-agent`) ──────────────────────────────────
 # Per-provider toggles for which sections the quota dashboard renders, and
