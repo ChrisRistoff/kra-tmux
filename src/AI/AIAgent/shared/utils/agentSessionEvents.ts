@@ -18,6 +18,7 @@ import * as bash from '@/utils/bashHelper';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import type { AgentConversationState, AgentSession } from '@/AI/AIAgent/shared/types/agentTypes';
 import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';
+import { loadSettings } from '@/utils/common';
 
 function quote(value: string): string {
     return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -198,7 +199,13 @@ export async function setupSessionEventHandlers(
     session: AgentSession = state.session,
     opts: SessionEventHandlerOptions = {}
 ): Promise<void> {
-    const FLUSH_INTERVAL_MS = 10;
+    // Smoothness pacer cadence. Defaults produce a 1-by-1 typewriter at
+    // ~250 chars/sec; bursts catch up via proportional drain so we never
+    // fall behind the model. See `[ai.chatInterface]` in settings.toml.example.
+    const iface = (await loadSettings()).ai?.chatInterface;
+    const PACER_INTERVAL_MS = iface?.pacerIntervalMs ?? 4;
+    const PACER_MIN_CHARS = iface?.pacerMinChars ?? 1;
+    const PACER_DIVISOR = iface?.pacerDivisor ?? 64;
     const agentLabel = opts.agentLabel;
     const labelTag = agentLabel ? `[${agentLabel}] ` : '';
     const isSubAgent = agentLabel !== undefined;
@@ -237,13 +244,21 @@ export async function setupSessionEventHandlers(
 
     let needsBlockquotePrefix = true;
 
-    const flushBuffer = (): void => {
+    // `force=true` drains everything (used at end-of-turn so the user
+    // doesn't watch the tail typewriter-trickle after the model is done).
+    const flushBuffer = (force = false): void => {
         if (!pendingBuffer) {
             return;
         }
 
-        const text = pendingBuffer;
-        pendingBuffer = '';
+        const drainCount = force
+            ? pendingBuffer.length
+            : Math.min(
+                pendingBuffer.length,
+                Math.max(PACER_MIN_CHARS, Math.ceil(pendingBuffer.length / PACER_DIVISOR)),
+            );
+        const text = pendingBuffer.slice(0, drainCount);
+        pendingBuffer = pendingBuffer.slice(drainCount);
         if (isSubAgent) {
             // Sub-agent output renders as a markdown blockquote so it stays
             // visually grouped under the sub-agent header. Each line in the
@@ -259,11 +274,9 @@ export async function setupSessionEventHandlers(
         }
     };
 
-    // Flush AI text every FLUSH_INTERVAL_MS so streaming is visible.
-    // Uses a self-scheduling setTimeout rather than setInterval so the timer
-    // goes completely dormant when there is nothing to flush (e.g. while the
-    // agent is paused waiting for user input). An active setInterval keeps the
-    // event loop alive and prevents V8 from running a full GC cycle.
+    // Pacer drains a fraction of pendingBuffer each tick. Self-scheduling
+    // setTimeout so the timer goes fully dormant when there's nothing to
+    // flush (avoids keeping the event loop hot between turns).
     let flushTimerHandle: ReturnType<typeof setTimeout> | null = null;
 
     const scheduleFlush = (): void => {
@@ -271,13 +284,12 @@ export async function setupSessionEventHandlers(
         flushTimerHandle = setTimeout(() => {
             flushTimerHandle = null;
             if (pendingBuffer && activeToolCount === 0) {
-                flushBuffer();
+                flushBuffer(false);
             }
-            // Keep rescheduling only while there is content waiting.
             if (pendingBuffer) {
                 scheduleFlush();
             }
-        }, FLUSH_INTERVAL_MS);
+        }, PACER_INTERVAL_MS);
     };
 
     const clearFlushTimer = (): void => {
@@ -403,7 +415,9 @@ export async function setupSessionEventHandlers(
     session.on('session.idle', () => {
         void (async () => {
             clearFlushTimer();
-            flushBuffer();
+            // Force-drain the remaining buffer so the user doesn't watch a
+            // typewriter tail after the model has already finished.
+            flushBuffer(true);
 
             await writeChain;
 

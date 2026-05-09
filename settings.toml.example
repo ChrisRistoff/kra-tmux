@@ -135,6 +135,119 @@ validateExcerpts = true      # reject hallucinated snippets at the tool layer
 [ai.chat.approval]
 mode = "strict"             # "strict" | "yolo"
 
+# ============================================================================
+# Chat / agent streaming UI (transcript pane)
+# ============================================================================
+#
+# Tunables for how the nvim transcript pane renders streaming model output.
+# Both the chat and the agent share these values. Changes take effect on the
+# next chat/agent session start.
+#
+# Each option is documented on its own block below. Uncomment the
+# `[ai.chatInterface]` table at the bottom and override only the keys you
+# want to change.
+#
+#
+# ----------------------------------------------------------------------------
+# pacerIntervalMs            (default: 4)
+# ----------------------------------------------------------------------------
+#
+# What it does:
+#     Wake interval for the TS-side pacer that drips model chars into nvim.
+#
+# How to tune:
+#     Lower  -  faster typewriter on long outputs (queue drains more often).
+#     Higher -  slower, more deliberate cadence.
+#
+# Cap:
+#     Node clamps setInterval to ~4 ms, so values below 4 have no effect.
+#
+#
+# ----------------------------------------------------------------------------
+# pacerMinChars              (default: 1)
+# ----------------------------------------------------------------------------
+#
+# What it does:
+#     Minimum chars emitted per tick when the queue is small.
+#
+# How to tune:
+#     1   -  strict 1-char-per-tick typewriter feel.
+#     >1  -  brisker baseline cadence, but bigger visible jumps per tick.
+#
+#
+# ----------------------------------------------------------------------------
+# pacerDivisor               (default: 64)
+# ----------------------------------------------------------------------------
+#
+# What it does:
+#     Proportional drain factor for big bursts. Per tick we emit
+#     `max(pacerMinChars, ceil(queue_len / pacerDivisor))`.
+#
+# How to tune:
+#     Higher  -  tighter typewriter feel even with a huge backlog (slower
+#                catch-up).
+#     Lower   -  faster catch-up, but output starts to look chunked.
+#
+# Note:
+#     64 lets ~250 char/s through without the queue growing unbounded.
+#
+#
+# ----------------------------------------------------------------------------
+# scrollTickMs               (default: 16)
+# ----------------------------------------------------------------------------
+#
+# What it does:
+#     Lua-side smooth-scroll animator tick interval, in milliseconds.
+#     The animator advances the cursor toward the latest appended line a
+#     few rows at a time so the viewport scrolls fluidly instead of
+#     snapping in one jump per newline.
+#
+# How to tune:
+#     16 ≈ 60 Hz, which matches most terminals.
+#     Lower   -  smoother but more CPU.
+#     Higher  -  visibly steppier scroll.
+#
+#
+# ----------------------------------------------------------------------------
+# scrollAcceleration         (default: 8)
+# ----------------------------------------------------------------------------
+#
+# What it does:
+#     Catch-up factor for the smooth-scroll animator. When the cursor is
+#     N rows behind the target line, the animator advances
+#     `max(1, floor(N / scrollAcceleration))` rows per tick.
+#
+# How to tune:
+#     Higher  -  gentler scroll, more 1-row ticks; can lag long responses.
+#     Lower   -  snappier catch-up, closer to an instant jump on big bursts.
+#
+#
+# ----------------------------------------------------------------------------
+# appendDebounceMs           (default: 0)
+# ----------------------------------------------------------------------------
+#
+# What it does:
+#     Extra defer between a TS append rpcnotify and the Lua buffer flush.
+#
+# How to tune:
+#     0   -  flush on the next event-loop tick. Same-tick batches are still
+#            coalesced via vim.defer_fn, so this is the typical setting.
+#     >0  -  manually re-clump appends. Only useful if you're hitting RPC
+#            throughput issues; otherwise it just makes the stream feel
+#            chunkier.
+#
+#
+# ----------------------------------------------------------------------------
+# Defaults table — uncomment and edit any value you want to change.
+# ----------------------------------------------------------------------------
+[ai.chatInterface]
+pacerIntervalMs    = 4
+pacerMinChars      = 1
+pacerDivisor       = 64
+scrollTickMs       = 16
+scrollAcceleration = 8
+appendDebounceMs   = 0
+
 # ─── Quota dashboard (`kra ai quota-agent`) ──────────────────────────────────
 # Per-provider toggles for which sections the quota dashboard renders, and
 # whether the in-session quota tracker emits warnings when thresholds are

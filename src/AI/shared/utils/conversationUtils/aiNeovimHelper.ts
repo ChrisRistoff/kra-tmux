@@ -2,6 +2,7 @@ import { StreamController } from "@/AI/shared/types/aiTypes";
 import { NeovimClient } from "neovim";
 import os from 'os';
 import * as fs from 'fs/promises';
+import { loadSettings } from '@/utils/common';
 
 export async function handleStopStream(currentStreamController: StreamController | null, nvim: NeovimClient): Promise<void> {
     if (currentStreamController && !currentStreamController.isAborted) {
@@ -115,7 +116,13 @@ export async function setupKeyBindings(nvim: NeovimClient): Promise<void> {
 }
 
 export async function setupChatSplitLayout(nvim: NeovimClient, channelId: number, chatFile: string): Promise<void> {
-    await nvim.executeLua(`require('kra_chat_layout').setup(...)`, [channelId, chatFile]);
+    const iface = (await loadSettings()).ai?.chatInterface;
+    const opts = {
+        scroll_tick_ms: iface?.scrollTickMs ?? 16,
+        scroll_acceleration: iface?.scrollAcceleration ?? 8,
+        append_debounce_ms: iface?.appendDebounceMs ?? 0,
+    };
+    await nvim.executeLua(`require('kra_chat_layout').setup(...)`, [channelId, chatFile, opts]);
 }
 
 export async function getChatPromptText(nvim: NeovimClient): Promise<string> {
@@ -151,6 +158,29 @@ export function appendToChatLayout(nvim: NeovimClient, text: string): void {
     } catch {
         // Best-effort UI update.
     }
+}
+
+// Fire-and-forget hooks that bracket a streaming response. The Lua side
+// suspends render-markdown.nvim on the transcript buffer between these
+// two calls so per-chunk redraws don't pay for an extmark recompute over
+// the entire visible window every flush. `streaming_ended` re-enables it
+// for one final styled repaint.
+export function streamingStarted(nvim: NeovimClient): void {
+    try {
+        nvim.notify('nvim_exec_lua', [
+            `require('kra_chat_layout').streaming_started()`,
+            [],
+        ]);
+    } catch { /* best-effort */ }
+}
+
+export function streamingEnded(nvim: NeovimClient): void {
+    try {
+        nvim.notify('nvim_exec_lua', [
+            `require('kra_chat_layout').streaming_ended()`,
+            [],
+        ]);
+    } catch { /* best-effort */ }
 }
 
 export async function updateNvimAndGoToLastLine(nvim: NeovimClient): Promise<void> {

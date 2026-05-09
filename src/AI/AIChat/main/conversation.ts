@@ -5,6 +5,7 @@ import { aiRoles } from '@/AI/shared/data/roles';
 import { promptModel } from '@/AI/AIChat/utils/promptModel';
 import { createChatApprovalState, type ChatApprovalState } from '@/AI/AIChat/utils/chatToolApproval';
 import { loadChatApprovalSettings } from '@/AI/AIChat/utils/chatApprovalSettings';
+import { loadSettings } from '@/utils/common';
 import { saveChat } from '@/AI/AIChat/utils/saveChat';
 import { ChatHistory, Role, StreamController } from '@/AI/shared/types/aiTypes'
 import * as bash from '@/utils/bashHelper';
@@ -219,9 +220,43 @@ async function handleStreamingResponse(
     controller: StreamController
 ): Promise<void> {
     let pendingBuffer = '';
-    let lastUpdate = Date.now();
-    const updateInterval = 16;
     let trailingNewlines = 0;
+
+    // Smoothness pacer. Defaults produce a 1-by-1 typewriter at ~250 chars/sec;
+    // bursts catch up via proportional drain so we never fall behind the model.
+    // See `[ai.chatInterface]` in settings.toml.example for tuning notes.
+    const iface = (await loadSettings()).ai?.chatInterface;
+    const PACER_INTERVAL_MS = iface?.pacerIntervalMs ?? 4;
+    const PACER_MIN_CHARS = iface?.pacerMinChars ?? 1;
+    const PACER_DIVISOR = iface?.pacerDivisor ?? 64;
+    let pacerTimer: ReturnType<typeof setInterval> | null = null;
+    const flushPacedBatch = (force = false): void => {
+        if (!pendingBuffer) return;
+        const drainCount = force
+            ? pendingBuffer.length
+            : Math.min(
+                pendingBuffer.length,
+                Math.max(PACER_MIN_CHARS, Math.ceil(pendingBuffer.length / PACER_DIVISOR)),
+            );
+        const slice = pendingBuffer.slice(0, drainCount);
+        pendingBuffer = pendingBuffer.slice(drainCount);
+        aiNeovimHelper.appendToChatLayout(nvim, slice);
+        enqueueDiskWrite(slice);
+    };
+    const startPacer = (): void => {
+        if (pacerTimer !== null) return;
+        pacerTimer = setInterval(() => flushPacedBatch(false), PACER_INTERVAL_MS);
+    };
+    const stopPacer = (): void => {
+        if (pacerTimer === null) return;
+        clearInterval(pacerTimer);
+        pacerTimer = null;
+    };
+
+    let writeChain: Promise<void> = Promise.resolve();
+    const enqueueDiskWrite = (text: string): void => {
+        writeChain = writeChain.then(async () => appendToChat(chatFile, text)).catch(() => { /* swallow */ });
+    };
 
     const normalize = (chunk: string): string => {
         let out = '';
@@ -241,30 +276,27 @@ async function handleStreamingResponse(
     };
 
     try {
+        startPacer();
         for await (const chunk of response) {
             if (controller.isAborted) {
                 break;
             }
-
             pendingBuffer += normalize(chunk);
-
-            if (Date.now() - lastUpdate >= updateInterval) {
-                if (pendingBuffer) {
-                    await appendToChat(chatFile, pendingBuffer);
-                    aiNeovimHelper.appendToChatLayout(nvim, pendingBuffer);
-                    pendingBuffer = '';
-                }
-                lastUpdate = Date.now();
-            }
         }
 
-        if (pendingBuffer && !controller.isAborted) {
-            await appendToChat(chatFile, pendingBuffer);
-            aiNeovimHelper.appendToChatLayout(nvim, pendingBuffer);
+        // Stream finished — stop the pacer and dump whatever's left in one
+        // shot so the user doesn't wait an extra ~200 ms watching the tail
+        // drain at typewriter speed after the model is already done.
+        stopPacer();
+        if (!controller.isAborted) {
+            flushPacedBatch(true);
         }
 
+        await writeChain;
         await aiNeovimHelper.refreshChatLayout(nvim);
     } catch (error: unknown) {
+        // Make sure the pacer is dead even if the stream blew up.
+        stopPacer();
         if (!controller.isAborted) {
             throw error;
         }

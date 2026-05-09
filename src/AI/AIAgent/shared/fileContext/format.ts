@@ -41,12 +41,11 @@ export async function withDiagnostics(filePath: string, summary: string): Promis
 }
 
 /**
- * Render a 1-indexed slice of `lines` with right-padded line numbers.
- * Shared between read_lines (single + multi-range) and read_function so the
- * numbering format stays in lock-step across tools.
+ * Render a 1-indexed slice of `lines` as raw text. Line numbers are surfaced
+ * via the surrounding header (`Lines X\u2013Y:`) only — callers don't need
+ * per-line prefixes since `anchor_edit` is content-addressed (anchors must
+ * match the file verbatim) and line numbers would just be noise.
  */
 export function numberLines(lines: string[], start: number, end: number): string {
-    return lines.slice(start - 1, end)
-        .map((l, i) => `${String(start + i).padStart(5)}: ${l}`)
-        .join('\n');
+    return lines.slice(start - 1, end).join('\n');
 }

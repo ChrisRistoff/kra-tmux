@@ -18,6 +18,9 @@ jest.mock('@/AI/AIChat/utils/aiUtils');
 jest.mock('@/filePaths', () => ({
     neovimConfig: '/home/krasen/programming/kra-tmux/ai-files/init.lua'
 }));
+jest.mock('@/utils/common', () => ({
+    loadSettings: jest.fn(async () => ({})),
+}));
 
 describe('converse', () => {
     const chatFile = 'chat.md';
