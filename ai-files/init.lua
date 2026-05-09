@@ -30,6 +30,14 @@ require("lazy").setup({
 
         config = function()
             require("render-markdown").setup({
+                -- Keep transcript rendering active while typing in the prompt
+                -- pane, and never attach the renderer to that prompt buffer.
+                render_modes = { "n", "i", "c", "t" },
+                ignore = function(buf)
+                    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":t")
+                    return name == "kra-chat-prompt" or name == "kra-agent-prompt"
+                end,
+
                 -- Chat-optimized headings with visual prominence
                 headings = {
                     enabled = true,

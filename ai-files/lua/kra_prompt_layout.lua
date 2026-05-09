@@ -221,6 +221,16 @@ function M.create(config)
     local has_history_sentinel = false
     local load_initial_tail, load_more_history, attach_history_loader, smart_refresh, trim_buffer_to_tail
 
+    local function render_transcript_now(buf, win)
+        pcall(function()
+            local state = require("render-markdown.state")
+            local ui = require("render-markdown.core.ui")
+            state.get(buf)
+            state.attach()
+            ui.updater.new(buf, win, true):run()
+        end)
+    end
+
     local layout = {}
 
     function layout.setup(channel_id, chat_file_path_arg, opts)
@@ -271,6 +281,9 @@ function M.create(config)
             end)
             load_initial_tail()
             attach_history_loader(transcript_buf)
+            render_transcript_now(transcript_buf, transcript_win)
+
+
             pcall(vim.keymap.set, "n", "gh", function()
                 load_more_history()
             end, { buffer = transcript_buf, silent = true, desc = "Load more chat history" })
@@ -784,6 +797,8 @@ function M.create(config)
         -- Tail-windowing path: cheap on-disk diff sync, no full reload.
         if smart_refresh() then
             local transcript_win = get_state("transcript_win")
+            local transcript_buf = get_state("transcript_buf")
+            render_transcript_now(transcript_buf, transcript_win)
             if is_valid_win(transcript_win) then
                 pcall(vim.api.nvim_win_call, transcript_win, function()
                     vim.cmd("normal! G")
@@ -821,6 +836,8 @@ function M.create(config)
                 vim.api.nvim_set_current_win(current_win)
             end
         end)
+
+        render_transcript_now(get_state("transcript_buf"), get_state("transcript_win"))
 
         pcall(vim.cmd, "redraw!")
     end
