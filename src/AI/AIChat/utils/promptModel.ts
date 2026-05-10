@@ -1,5 +1,5 @@
 import * as neovim from 'neovim';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import type {
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageParam,
@@ -186,6 +186,7 @@ export async function promptModel(
     const apiKey = getProviderApiKey(provider);
     const baseURL = getProviderBaseURL(provider);
 
+    const { default: OpenAI } = await import('openai');
     const openai = new OpenAI({ apiKey, baseURL });
 
     const enrichedContext: ChatToolContext | undefined = toolContext

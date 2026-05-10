@@ -50,6 +50,7 @@ const DEFAULTS: MemorySettings = {
     excludeGlobs: DEFAULT_EXCLUDE_GLOBS,
     chunkLines: 80,
     chunkOverlap: 5,
+    embedderIdleTimeoutMs: 60_000,
 };
 
 interface RawMemorySettings {
@@ -62,6 +63,7 @@ interface RawMemorySettings {
     excludeGlobs?: string[];
     chunkLines?: number;
     chunkOverlap?: number;
+    embedderIdleTimeoutMs?: number;
 }
 
 export async function loadMemorySettings(): Promise<MemorySettings> {
@@ -91,6 +93,7 @@ export async function loadMemorySettings(): Promise<MemorySettings> {
             : DEFAULTS.excludeGlobs,
         chunkLines: clampInt(raw.chunkLines, 20, 400, DEFAULTS.chunkLines),
         chunkOverlap: clampInt(raw.chunkOverlap, 0, 50, DEFAULTS.chunkOverlap),
+        embedderIdleTimeoutMs: clampInt(raw.embedderIdleTimeoutMs, 0, 3_600_000, DEFAULTS.embedderIdleTimeoutMs),
     };
 }
 

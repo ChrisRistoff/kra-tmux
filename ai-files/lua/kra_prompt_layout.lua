@@ -73,6 +73,10 @@ function M.create(config)
         vim.bo[prompt_buf].bufhidden = "hide"
         vim.bo[prompt_buf].swapfile = false
         vim.bo[prompt_buf].filetype = "markdown"
+        vim.bo[prompt_buf].undofile = false
+        pcall(vim.api.nvim_set_option_value, "undolevels", -1, { buf = prompt_buf })
+
+
         vim.wo[prompt_win].number = false
         vim.wo[prompt_win].relativenumber = false
         vim.wo[prompt_win].signcolumn = "no"
@@ -85,6 +89,10 @@ function M.create(config)
 
     local function set_transcript_window_options(transcript_buf, transcript_win)
         mark_buffer(transcript_buf)
+        vim.bo[transcript_buf].undofile = false
+        pcall(vim.api.nvim_set_option_value, "undolevels", -1, { buf = transcript_buf })
+
+
         vim.wo[transcript_win].winbar = config.transcript_winbar or " CONVERSATION "
         vim.wo[transcript_win].statusline = config.transcript_statusline or " TRANSCRIPT "
 

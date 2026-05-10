@@ -3,6 +3,21 @@ local M = {}
 local state = require("kra_agent.ui.state")
 local rpc = require("kra_agent.util.rpc")
 local json = require("kra_agent.util.json")
+local spill = require("kra_agent.util.spill")
+
+-- Tool history entries can carry tens of KB each (full args_json + full tool
+-- output). With hundreds of calls per session that adds up to multi-MB of
+-- string content held in the lua heap forever. We spill the heavy fields to
+-- disk and only keep sha refs; the popup loads them back when actually opened.
+local function load_args(entry)
+    if entry.args_sha then return spill.load(entry.args_sha) or "" end
+    return entry.args_json or ""
+end
+
+local function load_full_result(entry)
+    if entry.full_result_sha then return spill.load(entry.full_result_sha) or "" end
+    return entry.full_result or ""
+end
 
 -- Resolve the existing history entry for a given tool_call_id, falling back
 -- to the legacy single active_entry_index when no id is provided. Returns
@@ -32,14 +47,15 @@ function M.upsert_history(tool_name, details, args_json, tool_call_id)
     if entry then
         entry.details = details
         entry.updated_at = timestamp
-        if args_json and args_json ~= "" and (entry.args_json == nil or entry.args_json == "") then
-            entry.args_json = args_json
+        if args_json and args_json ~= "" and entry.args_sha == nil and (entry.args_json == nil or entry.args_json == "") then
+            entry.args_sha = spill.spill(args_json)
+            entry.args_json = nil
         end
         return entry
     end
 
     entry = {
-        args_json = args_json or "",
+        args_sha = (args_json and args_json ~= "") and spill.spill(args_json) or nil,
         details = details,
         started_at = timestamp,
         status = "running",
@@ -69,7 +85,13 @@ function M.complete_history(tool_name, details, success, full_result, tool_call_
 
     entry.title = tool_name
     entry.result = details
-    entry.full_result = (full_result and full_result ~= "") and full_result or details
+    -- Full tool output can be huge (file reads, bash output, search results).
+    -- Spill to disk and keep only the sha; the popup lazy-loads on open.
+    local raw_full = (full_result and full_result ~= "") and full_result or details
+    if raw_full and raw_full ~= "" then
+        entry.full_result_sha = spill.spill(raw_full)
+    end
+    entry.full_result = nil
     entry.details = details
     entry.status = success and "done" or "failed"
     entry.updated_at = os.date("%H:%M:%S")
@@ -86,8 +108,13 @@ local function open_history_view(entry)
     vim.cmd("tabnew")
     local view_tab = vim.api.nvim_get_current_tabpage()
 
-    local args_text = json.pretty_via_jq((entry.args_json and entry.args_json ~= "") and entry.args_json or "{}")
-    local result_text = json.pretty_via_jq(entry.full_result or entry.result or entry.details or "(no result recorded)")
+    local args_raw = load_args(entry)
+    local args_text = json.pretty_via_jq((args_raw and args_raw ~= "") and args_raw or "{}")
+    local result_raw = load_full_result(entry)
+    if not result_raw or result_raw == "" then
+        result_raw = entry.result or entry.details or "(no result recorded)"
+    end
+    local result_text = json.pretty_via_jq(result_raw)
     local is_executable = state.executable_tools[entry.title] ~= nil
 
     -- LEFT (visually right after vsplit): args JSON. Editable when the tool is
@@ -213,7 +240,8 @@ function M.show_history()
                     title = "Tool args + result",
                     define_preview = function(self, entry)
                         local item = entry.value
-                        local args = json.pretty_via_jq((item.args_json and item.args_json ~= "") and item.args_json or "(none)")
+                        local args_raw = load_args(item)
+                        local args = json.pretty_via_jq((args_raw and args_raw ~= "") and args_raw or "(none)")
                         local result = json.pretty_via_jq(item.result or item.details or "(no result)")
                         local sep = string.rep("─", 60)
                         local text = table.concat({

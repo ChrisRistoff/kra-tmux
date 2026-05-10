@@ -16,7 +16,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 
 import { requestChatToolApproval } from '@/AI/AIChat/utils/chatToolApproval';
 import type {
@@ -274,9 +274,10 @@ async function accumulateStream(
     return { content, toolCalls };
 }
 
-function makeOpenAiClient(provider: string): OpenAI {
+async function makeOpenAiClient(provider: string): Promise<OpenAI> {
     const apiKey = getProviderApiKey(provider);
     const baseURL = getProviderBaseURL(provider);
+    const { default: OpenAI } = await import('openai');
 
     return new OpenAI({ apiKey, baseURL });
 }
@@ -362,7 +363,7 @@ export async function runDeepSearch(options: RunDeepSearchOptions): Promise<Deep
         { role: 'user', content: userPrompt },
     ];
 
-    const openai = options.openai ?? makeOpenAiClient(provider);
+    const openai = options.openai ?? await makeOpenAiClient(provider);
     let toolCallCount = 0;
     let lastAssistantText = '';
 

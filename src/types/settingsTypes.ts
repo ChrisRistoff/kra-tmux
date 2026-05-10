@@ -40,6 +40,7 @@ export type LspServerSettings = {
 
 type AgentSettings = {
     mcpServers?: Record<string, McpServerSettings>,
+    mcpClientIdleTimeoutMs?: number,
     memory?: {
         enabled?: boolean,
         indexCodeOnStart?: boolean,
