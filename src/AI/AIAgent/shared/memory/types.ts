@@ -239,6 +239,13 @@ export interface MemorySettings {
     excludeGlobs: string[];
     chunkLines: number;
     chunkOverlap: number;
+    /**
+     * Idle window after which the in-process fastembed/ONNX model is
+     * unloaded to release ~150–300 MB of native heap. Reset on every
+     * embedMany() call. Set to 0 to disable auto-unload (keep alive for
+     * the lifetime of the process).
+     */
+    embedderIdleTimeoutMs: number;
 }
 
 

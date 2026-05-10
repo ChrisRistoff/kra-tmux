@@ -31,9 +31,7 @@ import {
     formatCapabilitiesSummary,
     type ModelsDevModelInfo,
 } from '@/AI/shared/data/modelsDevCatalog';
-import { OpenAICompatibleClient } from '@/AI/AIAgent/providers/byok/byokClient';
-import { CopilotClientWrapper } from '@/AI/AIAgent/providers/copilot/copilotClient';
-import { ClaudeClient, type ClaudeModelInfo } from '@/AI/AIAgent/providers/claude';
+import type { ClaudeModelInfo } from '@/AI/AIAgent/providers/claude';
 import { getGithubToken } from '@/AI/AIAgent/shared/utils/agentSettings';
 import { type ModelInfo as CopilotModelInfo } from '@github/copilot-sdk';
 import type { AgentClient, ReasoningEffort } from '@/AI/AIAgent/shared/types/agentTypes';
@@ -213,6 +211,7 @@ async function pickByokRuntime(role: AgentRole): Promise<AgentRuntimePick> {
         }
     }
 
+    const { OpenAICompatibleClient } = await import('@/AI/AIAgent/providers/byok/byokClient');
     const client = new OpenAICompatibleClient({
         baseURL: getProviderBaseURL(provider),
         apiKey: getProviderApiKey(provider),
@@ -360,6 +359,7 @@ async function pickCopilotReasoningEffort(model: CopilotModelInfo): Promise<Reas
 
 async function pickCopilotRuntime(role: AgentRole): Promise<AgentRuntimePick> {
     const githubToken = getGithubToken();
+    const { CopilotClientWrapper } = await import('@/AI/AIAgent/providers/copilot/copilotClient');
     const client = new CopilotClientWrapper({
         ...(githubToken ? { githubToken } : {}),
         useLoggedInUser: !githubToken,
@@ -408,6 +408,7 @@ async function pickCopilotRuntime(role: AgentRole): Promise<AgentRuntimePick> {
 }
 
 async function pickClaudeRuntime(role: AgentRole): Promise<AgentRuntimePick> {
+    const { ClaudeClient } = await import('@/AI/AIAgent/providers/claude');
     const client = new ClaudeClient({ useLoggedInUser: true });
     await client.start();
 

@@ -2,6 +2,37 @@ local M = {}
 
 local state = require("kra_agent.diff.state")
 local helpers = require("kra_agent.diff.helpers")
+local spill = require("kra_agent.util.spill")
+
+-- Loads the line tables that were spilled to disk by finalize_pending_diff.
+-- Returns (current_lines, applied_lines, proposed_lines), each a list of
+-- strings (or {} on failure). Kept local so we can swap the storage backend
+-- without touching the diff-rendering code that calls it.
+local function load_entry_lines(entry)
+    local crlf = entry.current_crlf or false
+    local current = (entry.current_sha and spill.load_lines(entry.current_sha, crlf))
+        or entry.current_lines -- fallback for legacy entries
+        or {}
+    local applied = (entry.applied_sha and spill.load_lines(entry.applied_sha, crlf))
+        or entry.applied_lines
+    local proposed = (entry.proposed_sha and spill.load_lines(entry.proposed_sha, crlf))
+        or entry.proposed_lines
+    return current, applied, proposed
+end
+
+-- Loads the pre-session original lines for a path. Handles both the new
+-- sha-ref layout and any legacy table-of-lines entries that may still be in
+-- memory from before the disk-back refactor.
+local function load_original_lines(path)
+    local entry = state.original_by_path[path]
+    if entry == nil then return nil end
+    if type(entry) == "string" then
+        local crlf = state.crlf_by_path[path] or false
+        return spill.load_lines(entry, crlf)
+    end
+    -- Legacy: still a list of lines.
+    return entry
+end
 
 -- Opens a focused 2-pane revert view.
 -- LEFT = current on-disk content, RIGHT = pre-session original (editable).
@@ -118,8 +149,9 @@ local function open_history_diff_view(entry)
     local diff_tab = vim.api.nvim_get_current_tabpage()
 
     -- LEFT: before (read-only reference)
+    local cur_lines, app_lines, prop_lines = load_entry_lines(entry)
     local left_buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, entry.current_lines or {})
+    vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, cur_lines or {})
     vim.bo[left_buf].modifiable = false
     vim.bo[left_buf].filetype = ft
     local left_win = vim.api.nvim_get_current_win()
@@ -131,7 +163,7 @@ local function open_history_diff_view(entry)
     -- RIGHT: proposed (editable — <leader>a to apply to disk)
     vim.cmd("vsplit")
     local right_buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(right_buf, 0, -1, false, entry.applied_lines or entry.proposed_lines or {})
+    vim.api.nvim_buf_set_lines(right_buf, 0, -1, false, app_lines or prop_lines or {})
     vim.bo[right_buf].buftype = "nofile"
     vim.bo[right_buf].bufhidden = "wipe"
     vim.bo[right_buf].swapfile = false
@@ -224,8 +256,25 @@ function M.finalize_pending_diff(success)
     end
     entry.seq = #state.diff_history + 1
     entry.status = "approved"
+    local crlf = entry.current_crlf or false
+    -- Spill the heavy line tables to disk. We keep only sha refs in heap so
+    -- the history never grows past O(entries) booleans + sha strings, even
+    -- across hundreds of large-file diffs in a single session.
+    if entry.current_lines then
+        entry.current_sha = spill.spill_lines(entry.current_lines, crlf)
+        entry.current_lines = nil
+    end
+    if entry.applied_lines then
+        entry.applied_sha = spill.spill_lines(entry.applied_lines, crlf)
+        entry.applied_lines = nil
+    end
+    if entry.proposed_lines then
+        entry.proposed_sha = spill.spill_lines(entry.proposed_lines, crlf)
+        entry.proposed_lines = nil
+    end
     if not state.original_by_path[entry.path] then
-        state.original_by_path[entry.path] = entry.current_lines
+        -- Reuse the same on-disk blob (sha is content-addressed, dedup is free).
+        state.original_by_path[entry.path] = entry.current_sha
         state.crlf_by_path[entry.path] = entry.current_crlf
     end
     table.insert(state.diff_history, entry)
@@ -268,7 +317,6 @@ function M.open_diff_history()
             table.insert(results, {
                 kind = "original",
                 path = e.path,
-                original_lines = state.original_by_path[e.path] or {},
             })
         end
     end
@@ -311,12 +359,13 @@ function M.open_diff_history()
                             0,
                             -1,
                             false,
-                            state.original_by_path[item.path] or { "(no content recorded)" }
+                            load_original_lines(item.path) or { "(no content recorded)" }
                         )
                         return
                     end
                     local h = item.entry
-                    local a_lines, b_lines = h.current_lines, h.applied_lines or h.proposed_lines
+                    local cur_lines, app_lines, prop_lines = load_entry_lines(h)
+                    local a_lines, b_lines = cur_lines, app_lines or prop_lines
 
                     local hunks = vim.diff(
                         table.concat(a_lines, "\n") .. "\n",
@@ -385,7 +434,7 @@ function M.open_diff_history()
                     if sel then
                         local item = sel.value
                         if item.kind == "original" then
-                            local orig = state.original_by_path[item.path]
+                            local orig = load_original_lines(item.path)
                             if orig then
                                 open_revert_diff_editor(item.path, orig)
                             end

@@ -11,6 +11,15 @@ timeoutMs = 20000
 #
 # Run `kra ai index` once per repo to build the initial code index, then
 # enable `indexCodeOnSave` to keep it fresh in the background.
+# Lazy-spawn behaviour for the local kra-* MCP servers (file-context, memory,
+# bash, web, session-complete). They're spun up on demand and shut down after
+# this many ms of inactivity, then re-spawned on the next tool call. Default
+# 5000 ms — keeps a short "warm" window during a burst of tool calls. Set to
+# 0 to shut down immediately when idle (cold-spawn every call, ~150 ms each).
+# Set to a large number to keep them warm for the whole session.
+# [ai.agent]
+# mcpClientIdleTimeoutMs = 5000
+
 [ai.agent.memory]
 enabled = true              # master switch for the whole memory layer
 indexCodeOnStart = false    # full reindex when an agent session starts
@@ -20,6 +29,7 @@ gitignoreMemory = true      # documentation-only: whether you keep .kra-memory/ 
 # Tune the chunker (defaults are good for most repos):
 # chunkLines = 80
 # chunkOverlap = 5
+# embedderIdleTimeoutMs = 60000  # unload the in-process embedder after this many ms idle (saves ~150–300 MB native heap). 0 = keep loaded.
 # includeExtensions = [".ts", ".js", ".py", ".go", ".rs", ".md"]
 # excludeGlobs = ["node_modules/**", "dest/**", "coverage/**", ".kra-memory/**"]
 

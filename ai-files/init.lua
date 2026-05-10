@@ -18,7 +18,6 @@ if not vim.loop.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
--- Load plugins
 require("lazy").setup({
     -- Stunning markdown rendering optimized for chat
     {
@@ -520,7 +519,7 @@ require("lazy").setup({
     {
         "folke/tokyonight.nvim",
         lazy = false,
-        priority = 1000,
+priority = 1000,
         config = function()
             vim.cmd.colorscheme("tokyonight-night")
         end,
@@ -711,3 +710,21 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 
 -- Apply colors immediately
 setup_markdown_colors()
+
+-- Periodic GC: long-running embed accumulates lua allocations from plugin
+-- TextChanged/CursorMoved/redraw callbacks; vim's incremental GC isn't
+-- aggressive enough to keep up. A manual collect every 30s drops the heap
+-- back to a sane baseline (observed 326 MB -> 175 MB on forced collect).
+-- collectgarbage('collect') is a full stop-the-world cycle but at 30s cadence
+-- it's imperceptible.
+local _kra_gc_timer = (vim.uv or vim.loop).new_timer()
+_kra_gc_timer:start(30000, 30000, vim.schedule_wrap(function()
+    collectgarbage("collect")
+end))
+vim.api.nvim_create_autocmd("VimLeavePre", {
+    once = true,
+    callback = function()
+        pcall(function() _kra_gc_timer:stop() end)
+        pcall(function() _kra_gc_timer:close() end)
+    end,
+})

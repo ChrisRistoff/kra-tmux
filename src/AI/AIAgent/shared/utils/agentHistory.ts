@@ -1,21 +1,88 @@
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
+import * as os from 'os';
+import * as crypto from 'crypto';
 import type * as neovim from 'neovim';
 import { execCommand } from '@/utils/bashHelper';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 const BINARY_CHECK_BYTES = 8 * 1024;   // 8 KB
 
+// ---- Disk-backed original-content cache ---------------------------------
+// Original (pre-edit) file content is hashed and spilled to a per-process
+// temp dir. The in-memory map only retains the SHA (or `null` when the file
+// did not exist pre-edit). This keeps `originalContent` from holding tens of
+// megabytes of file bytes for the lifetime of an agent session.
+//
+// Layout: $TMPDIR/kra-agent-state-ts-<pid>/originals/<sha>.bin
+// Cleanup: best-effort on graceful exit (see registerExitCleanup() below).
+
+const STATE_DIR_ROOT = path.join(os.tmpdir(), `kra-agent-state-ts-${process.pid}`);
+const ORIGINALS_DIR = path.join(STATE_DIR_ROOT, 'originals');
+let originalsDirEnsured = false;
+let exitCleanupRegistered = false;
+
+function ensureOriginalsDir(): void {
+    if (originalsDirEnsured) return;
+    fsSync.mkdirSync(ORIGINALS_DIR, { recursive: true });
+    originalsDirEnsured = true;
+    registerExitCleanup();
+    sweepStaleStateDirs();
+}
+
+function registerExitCleanup(): void {
+    if (exitCleanupRegistered) return;
+    exitCleanupRegistered = true;
+    const cleanup = (): void => {
+        try { fsSync.rmSync(STATE_DIR_ROOT, { recursive: true, force: true }); } catch { /* ignore */ }
+    };
+    process.once('exit', cleanup);
+    for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+        process.once(sig, () => { cleanup(); process.exit(); });
+    }
+}
+
+// On startup, prune state dirs whose owner pid is no longer alive (covers
+// SIGKILL / OOM / hard crashes that bypass our exit handler).
+function sweepStaleStateDirs(): void {
+    try {
+        const root = os.tmpdir();
+        const entries = fsSync.readdirSync(root);
+        for (const name of entries) {
+            const m = /^kra-agent-state-ts-(\d+)$/.exec(name);
+            if (!m) continue;
+            const pid = Number(m[1]);
+            if (!Number.isFinite(pid) || pid === process.pid) continue;
+            try {
+                process.kill(pid, 0); // throws if pid is gone
+            } catch {
+                try { fsSync.rmSync(path.join(root, name), { recursive: true, force: true }); } catch { /* ignore */ }
+            }
+        }
+    } catch { /* ignore */ }
+}
+
+function spillOriginalSync(content: string): string {
+    ensureOriginalsDir();
+    const sha = crypto.createHash('sha1').update(content, 'utf8').digest('hex');
+    const filePath = path.join(ORIGINALS_DIR, `${sha}.bin`);
+    if (!fsSync.existsSync(filePath)) {
+        fsSync.writeFileSync(filePath, content, 'utf8');
+    }
+
+    return sha;
+}
+
+async function loadOriginal(sha: string): Promise<string> {
+    const filePath = path.join(ORIGINALS_DIR, `${sha}.bin`);
+
+    return await fs.readFile(filePath, 'utf8');
+}
+
 export interface BashSnapshot {
     /** git status snapshots keyed by repo cwd. */
     statusByCwd: Map<string, Map<string, string>>;
-}
-
-interface MutationEntry {
-    path: string;
-    beforeContent: string | null;
-    afterContent: string | null;
-    source: string;
 }
 
 export interface AgentHistory {
@@ -26,8 +93,9 @@ export interface AgentHistory {
         source: string;
     }) => void;
     /** Returns the first-ever recorded `beforeContent` for this path (pre-session state).
-     *  Returns `undefined` if the path has never been recorded. */
-    getOriginalContent: (filePath: string) => string | null | undefined;
+     *  Returns `undefined` if the path has never been recorded.
+     *  Async because content is spilled to disk to keep heap small. */
+    getOriginalContent: (filePath: string) => Promise<string | null | undefined>;
     /** Reverts every path in history back to its pre-session state. */
     revertAll: (nvim: neovim.NeovimClient) => Promise<void>;
     /** All absolute paths that have at least one recorded mutation. */
@@ -88,9 +156,13 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
         throw new Error('createAgentHistory: at least one cwd required');
     }
     const trackedCwds: string[] = [...new Set(cwds)];
-    // First-seen "before" per absolute path — the pre-session original.
+    // First-seen pre-edit content per absolute path. Value is either the SHA
+    // of the spilled content (string) or `null` when the file did not exist.
     const originalContent = new Map<string, string | null>();
-    const entries: MutationEntry[] = [];
+    // Set of paths that have been mutated this session. Used by listChangedPaths
+    // and revertAll. Replaces the old MutationEntry[] which double-stored the
+    // before/after bytes for no reason.
+    const changedPaths = new Set<string>();
 
     function recordMutation(opts: {
         path: string;
@@ -99,32 +171,38 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
         source: string;
     }): void {
         if (!originalContent.has(opts.path)) {
-            originalContent.set(opts.path, opts.beforeContent);
+            const sha = opts.beforeContent === null ? null : spillOriginalSync(opts.beforeContent);
+            originalContent.set(opts.path, sha);
         }
-        entries.push(opts);
+        changedPaths.add(opts.path);
     }
 
-    function getOriginalContent(filePath: string): string | null | undefined {
+    async function getOriginalContent(filePath: string): Promise<string | null | undefined> {
         if (!originalContent.has(filePath)) return undefined;
-
-        return originalContent.get(filePath) ?? null;
+        const sha = originalContent.get(filePath);
+        if (sha === null || sha === undefined) return null;
+        try {
+            return await loadOriginal(sha);
+        } catch {
+            return null;
+        }
     }
 
     async function revertAll(nvim: neovim.NeovimClient): Promise<void> {
-        const paths = new Set(entries.map(e => e.path));
         let reverted = 0;
         let failed = 0;
 
-        for (const filePath of paths) {
+        for (const filePath of changedPaths) {
             try {
-                const original = originalContent.get(filePath);
-                if (original === undefined) continue;
+                if (!originalContent.has(filePath)) continue;
+                const sha = originalContent.get(filePath);
 
-                if (original === null) {
+                if (sha === null || sha === undefined) {
                     // File didn't exist originally → delete it.
                     await fs.rm(filePath, { force: true });
                 } else {
-                    // File existed → restore its original content.
+                    // File existed → restore its original content from disk.
+                    const original = await loadOriginal(sha);
                     await fs.mkdir(path.dirname(filePath), { recursive: true });
                     await fs.writeFile(filePath, original, 'utf8');
                 }
@@ -144,7 +222,7 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
     }
 
     function listChangedPaths(): string[] {
-        return [...new Set(entries.map(e => e.path))];
+        return [...changedPaths];
     }
 
     async function bashSnapshotBefore(): Promise<BashSnapshot> {

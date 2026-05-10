@@ -6,14 +6,55 @@ local layout = require('kra_prompt_layout').create({
     transcript_winbar = ' 󰭻 CONVERSATION ',
     transcript_statusline = ' AGENT ',
     setup_transcript_buffer = function(transcript_buf)
+        -- AgentReasoning highlight: every line starting with '>' is the
+        -- model's chain-of-thought. Was previously a `:syntax match` rule,
+        -- but vim's classic regex syntax engine retains per-line state
+        -- tables that grow without bound as the transcript appends —
+        -- a long thinking section drove nvim to multi-GB RSS. Extmarks
+        -- are O(changed range) per update and don't leak across appends.
         vim.api.nvim_set_hl(0, 'AgentReasoning', { fg = '#61AFEF' })
-        vim.api.nvim_buf_call(transcript_buf, function()
-            vim.cmd('syntax match AgentReasoning /^>.*/')
-        end)
+        local ns = vim.api.nvim_create_namespace('kra_agent_reasoning')
+
+        local function highlight_line(buf, lnum)
+            local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, lnum, lnum + 1, false)
+            if not ok or not lines or not lines[1] then return end
+            if lines[1]:sub(1, 1) == '>' then
+                pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum, 0, {
+                    end_row = lnum,
+                    end_col = #lines[1],
+                    hl_group = 'AgentReasoning',
+                })
+            end
+        end
+
+        local function rescan_range(buf, first, last)
+            pcall(vim.api.nvim_buf_clear_namespace, buf, ns, first, last)
+            for i = first, last - 1 do
+                highlight_line(buf, i)
+            end
+        end
+
+        local function rescan_all(buf)
+            if not vim.api.nvim_buf_is_valid(buf) then return end
+            local n = vim.api.nvim_buf_line_count(buf)
+            rescan_range(buf, 0, n)
+        end
+
+        rescan_all(transcript_buf)
+
+        vim.api.nvim_buf_attach(transcript_buf, false, {
+            on_lines = function(_, buf, _, first_line, _last_line_old, last_line_new)
+                if not vim.api.nvim_buf_is_valid(buf) then return true end
+                vim.schedule(function()
+                    rescan_range(buf, first_line, last_line_new)
+                end)
+            end,
+        })
+
         vim.api.nvim_create_autocmd('BufReadPost', {
             buffer = transcript_buf,
             callback = function()
-                vim.cmd('syntax match AgentReasoning /^>.*/')
+                rescan_all(transcript_buf)
             end,
         })
     end,
