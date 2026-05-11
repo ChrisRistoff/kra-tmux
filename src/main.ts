@@ -83,6 +83,24 @@ const commandTypeOptions: ReadonlyArray<MenuOption<CommandType>> = [
 const main = async (): Promise<void> => {
     const args = process.argv.slice(2);
     const initialCommandType = args[0];
+
+    // Stage 1 POC short-circuit: launch the chat blessed TUI without touching
+    // the install / menu / settings pipeline. Removed once Stage 5 wires the
+    // real chat spawn path through this entrypoint.
+    if (initialCommandType === '--tui-chat-poc') {
+        const { runChatTuiPoc } = await import('@/AI/TUI/cli/chatTuiPoc');
+        await runChatTuiPoc();
+
+        return;
+    }
+
+    // Stage 5: blessed TUI chat. Spawned by `converse()` via tmux.
+    if (initialCommandType === '--tui-chat') {
+        const { runChatTui } = await import('@/AI/TUI/cli/chatTui');
+        await runChatTui(args.slice(1));
+
+        return;
+    }
     const hasValidCommandType = commandTypeOptions.some((option) => option.name === initialCommandType);
 
     if (isHelpFlag(initialCommandType)) {

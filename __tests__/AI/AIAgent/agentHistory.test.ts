@@ -4,15 +4,6 @@ import * as path from 'path';
 import { createAgentHistory } from '@/AI/AIAgent/shared/utils/agentHistory';
 import { execCommand } from '@/utils/bashHelper';
 
-// Minimal neovim client stub (revertAll only calls nvim.command).
-function makeNvimStub(): { command: jest.Mock; messages: string[] } {
-    const messages: string[] = [];
-
-    return {
-        command: jest.fn(async (msg: string) => { messages.push(msg); }),
-        messages,
-    };
-}
 
 async function initGitRepo(dir: string): Promise<void> {
     await execCommand(`git -C '${dir}' init`);
@@ -53,8 +44,8 @@ describe('agentHistory', () => {
         // Simulate the agent having written new content.
         await fs.writeFile(filePath, 'new content', 'utf8');
 
-        const nvim = makeNvimStub();
-        await history.revertAll(nvim as unknown as Parameters<typeof history.revertAll>[0]);
+
+        await history.revertAll();
 
         const restored = await fs.readFile(filePath, 'utf8');
         expect(restored).toBe('original content');
@@ -72,8 +63,8 @@ describe('agentHistory', () => {
             source: 'test',
         });
 
-        const nvim = makeNvimStub();
-        await history.revertAll(nvim as unknown as Parameters<typeof history.revertAll>[0]);
+
+        await history.revertAll();
 
         await expect(fs.access(filePath)).rejects.toThrow();
     });
@@ -94,8 +85,8 @@ describe('agentHistory', () => {
         // Simulate the deletion.
         await fs.rm(filePath, { force: true });
 
-        const nvim = makeNvimStub();
-        await history.revertAll(nvim as unknown as Parameters<typeof history.revertAll>[0]);
+
+        await history.revertAll();
 
         const restored = await fs.readFile(filePath, 'utf8');
         expect(restored).toBe(originalContent);
@@ -121,8 +112,8 @@ describe('agentHistory', () => {
         expect(changed).toContain(filePath);
 
         // After revert the file should go back to committed content
-        const nvim = makeNvimStub();
-        await history.revertAll(nvim as unknown as Parameters<typeof history.revertAll>[0]);
+
+        await history.revertAll();
 
         const restored = await fs.readFile(filePath, 'utf8');
         expect(restored).toBe('committed content');

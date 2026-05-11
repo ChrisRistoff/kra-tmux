@@ -238,14 +238,17 @@ function colorizeStat(s: string): string {
             const rest = summary[3]
                 .replace(/(\d+) insertions?\(\+\)/g, (_m, n) => `${theme.success(n + ' insertions(+)')}`)
                 .replace(/(\d+) deletions?\(-\)/g, (_m, n) => `${theme.err(n + ' deletions(-)')}`);
+
             return `${summary[1]}${theme.label(summary[2])}${rest}`;
         }
         const fileLine = line.match(/^(\s*)(\S.*?)(\s*\|\s*)(\d+|Bin[^+\-]*)(\s*)([+\-]*)\s*$/);
         if (fileLine) {
             const [, lead, file, sep, count, gap, bar] = fileLine;
             const coloredBar = bar.replace(/[+\-]/g, (c) => c === '+' ? theme.success('+') : theme.err('-'));
+
             return `${lead}${theme.path(file)}${theme.dim(sep)}${theme.count(count)}${gap}${coloredBar}`;
         }
+
         return line;
     }).join('\n');
 }
@@ -413,6 +416,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         const loadingPart = loading
             ? `   ${theme.warn('\u25dc loading\u2026')}`
             : '';
+
         return ` ${theme.title('\u25c6 git log')}` +
             `   ${theme.label('branch')} ${theme.warn(escape(branch))}` +
             `   ${theme.label('repo')} ${theme.path(escape(topLevel))}` +
@@ -432,18 +436,22 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                 if (firstKey !== undefined) graphCache.delete(firstKey);
             }
             graphPending.delete(short);
+
             return out;
         }).catch((e: Error) => {
             graphPending.delete(short);
+
             return { content: `${theme.err('Failed to load graph:')} ${escape(e.message)}`, matchLine: -1 };
         });
         graphPending.set(short, p);
+
         return p;
     }
 
     function centerGraphOn(graphPanel: blessed.Widgets.BoxElement, matchLine: number): void {
         if (matchLine < 0) {
             graphPanel.setScroll(0);
+
             return;
         }
         const g = graphPanel as unknown as { _clines?: { ftor?: number[][] }; iheight?: number };
@@ -460,12 +468,15 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             const formatted = colorizeStat(escape(out));
             statCache.set(hash, formatted);
             statPending.delete(hash);
+
             return formatted;
         }).catch((e: Error) => {
             statPending.delete(hash);
+
             return `${theme.err('Failed:')} ${escape(e.message)}`;
         });
         statPending.set(hash, p);
+
         return p;
     }
 
@@ -497,6 +508,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         const files = await loadCommitFiles(c.hash);
         if (files.length === 0) {
             a.flashHeader(` ${theme.success('no files in commit')}`);
+
             return;
         }
         await browseFiles(screen, {
@@ -511,6 +523,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             const { stdout } = await bash.execCommand('git rev-parse --git-dir');
             const gitDir = stdout.trim();
             const { stdout: head } = await bash.execCommand(`test -f ${gitDir}/CHERRY_PICK_HEAD && echo yes || echo no`);
+
             return head.trim() === 'yes';
         } catch {
             return false;
@@ -520,6 +533,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
     async function abortCherryPick(a: ListDetailDashboardApi<Commit>): Promise<void> {
         if (!(await isCherryPickInProgress())) {
             a.flashHeader(` ${theme.success('no cherry-pick in progress')}`);
+
             return;
         }
         const ok = await modalConfirm(a.screen, 'Abort cherry-pick', 'Abort the in-progress cherry-pick and restore HEAD?');
@@ -543,7 +557,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             a.setRows(commits.slice(), { preserveKey: cur ? cur.hash : null });
             a.refreshHeader();
         }, 200);
-        pendingRefresh.unref?.();
+        pendingRefresh.unref();
     }
 
     void streamCommits(logArgs, fmt, (added, _total) => {
@@ -589,6 +603,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
         rowKey: (c) => c.hash,
         renderListItem: (c, _i, _sel) => {
             const w = (api?.shell.list.width as number | undefined) ?? 40;
+
             return formatCommitRow(c, w - 4);
         },
         filter: {
@@ -596,6 +611,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             mode: 'live',
             match: (c, q) => {
                 const lq = q.toLowerCase();
+
                 return c.subject.toLowerCase().includes(lq)
                     || c.author.toLowerCase().includes(lq)
                     || c.hash.toLowerCase().includes(lq)
@@ -620,6 +636,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                         if (ctx.isStale()) return;
                         ctx.api.repaintDetails();
                     });
+
                     return theme.dim('Loading\u2026');
                 },
             },
@@ -634,12 +651,14 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
                             const panel = ctx.api.shell.detailPanels[2];
                             if (panel) centerGraphOn(panel, cached.matchLine);
                         });
+
                         return cached.content;
                     }
                     void loadGraphFor(c.shortHash).then(() => {
                         if (ctx.isStale()) return;
                         ctx.api.repaintDetails();
                     });
+
                     return theme.dim('Loading graph\u2026');
                 },
             },
@@ -707,6 +726,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             console.log(`cherry-pick ${req.shortHash}: ${result.outcome} \u2014 ${result.message}`);
         }
         await gitLogDashboard({ ...opts });
+
         return;
     }
 
@@ -728,6 +748,7 @@ export async function gitLogDashboard(opts: GitLogDashboardOptions = {}): Promis
             nextScope = { value: result.value === ALL ? null : result.value };
         } else {
             await gitLogDashboard({ ...opts });
+
             return;
         }
     }

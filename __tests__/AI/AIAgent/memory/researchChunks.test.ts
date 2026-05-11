@@ -25,6 +25,7 @@ function makeTable(searchRows: Record<string, unknown>[] = []): FakeTable {
     const search = jest.fn(() => ({
         where: (filter: string) => {
             whereSpy(filter);
+
             return {
                 limit: jest.fn(() => ({ toArray: jest.fn(async () => searchRows) })),
             };

@@ -40,19 +40,48 @@ export async function reindexAll(opts: { onProgress?: ProgressFn; root?: string;
     const started = Date.now();
     const settings = await loadMemorySettings();
     const root = opts.root ?? workspaceRoot();
-    const files = await listIndexableFiles(root, settings);
+    const rawFiles = await listIndexableFiles(root, settings);
 
-    opts.onProgress?.({
-        phase: 'scanning',
-        filesTotal: files.length,
-        filesDone: 0,
-        chunksTotal: 0,
-        chunksWritten: 0,
-    });
+    // Some entries returned by git ls-files (or the fallback walker, racing
+    // against deletions) may no longer exist on disk. Stat-filter so we
+    // don't bother trying to embed them, and so the live-set we diff the
+    // index against below is accurate.
+    const liveFiles = await filterExistingFiles(root, rawFiles);
+    const liveSet = new Set(liveFiles);
 
     let chunksWritten = 0;
     let chunksSkipped = 0;
     let chunksDeleted = 0;
+
+    // Orphan cleanup: remove index entries for files that no longer exist
+    // on disk OR have been excluded from indexing since they were last
+    // embedded. Without this pass, a file that was deleted while the
+    // watcher was inactive (or that moved into an excludeGlob) would sit
+    // in the vector DB forever, polluting search results.
+    const indexedPaths = await listIndexedPaths(opts.repoKey);
+    const orphans: string[] = [];
+    for (const p of indexedPaths) {
+        if (!liveSet.has(p)) orphans.push(p);
+    }
+
+    opts.onProgress?.({
+        phase: 'scanning',
+        filesTotal: liveFiles.length,
+        filesDone: 0,
+        chunksTotal: 0,
+        chunksWritten: 0,
+        ...(orphans.length > 0 ? { currentPath: `cleaning up ${orphans.length} stale entries…` } : {}),
+    });
+
+    for (const orphan of orphans) {
+        try {
+            chunksDeleted += await removeFile(orphan, opts.repoKey);
+        } catch (err) {
+            process.stderr.write(`[kra-memory] orphan removal failed for ${orphan}: ${err instanceof Error ? err.message : String(err)}\n`);
+        }
+    }
+
+    const files = liveFiles;
 
     for (let i = 0; i < files.length; i++) {
         const rel = files[i];
@@ -100,7 +129,7 @@ interface IndexFileOpts {
     repoKey?: string;
 }
 
-interface PerFileResult {
+export interface PerFileResult {
     chunksWritten: number;
     chunksSkipped: number;
     chunksDeleted: number;
@@ -123,6 +152,12 @@ export async function indexFile(relPath: string, opts: IndexFileOpts = {}): Prom
         const stat = await fs.stat(abs);
 
         if (!stat.isFile()) return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
+
+        // Empty files have nothing to embed. Treat them like deleted files
+        // so any prior chunks for this path are purged from the DB — we do
+        // NOT want stale embeddings hanging around for a file that's now
+        // empty. This also covers the watcher path (truncate-to-empty edits).
+        if (stat.size === 0) return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
 
         if (!isIndexable(rel, settings)) {
             return { chunksWritten: 0, chunksSkipped: 0, chunksDeleted: await removeFile(rel, opts.repoKey) };
@@ -204,6 +239,41 @@ export async function removeFile(relPath: string, repoKey?: string): Promise<num
 
     return existing.size;
 }
+
+async function filterExistingFiles(root: string, files: string[]): Promise<string[]> {
+    const checks = await Promise.all(files.map(async (rel) => {
+        try {
+            const stat = await fs.stat(path.join(root, rel));
+            // Skip non-files and zero-byte files. Empty files produce zero
+            // chunks but would still be re-stat'd / re-read on every reindex,
+            // showing up in the progress UI as "being indexed" even though
+            // there's nothing to embed.
+            if (!stat.isFile() || stat.size === 0) return null;
+            return rel;
+        } catch {
+            return null;
+        }
+    }));
+    return checks.filter((rel): rel is string => rel !== null);
+}
+
+export async function listIndexedPaths(repoKey?: string): Promise<Set<string>> {
+    const { table } = await getCodeChunksTable(null, repoKey);
+
+    if (!table) return new Set();
+
+    try {
+        const rows = await table
+            .query()
+            .select(['path'])
+            .toArray();
+
+        return new Set(rows.map((r) => String((r as { path: unknown }).path)));
+    } catch {
+        return new Set();
+    }
+}
+
 
 async function existingChunkIdsForPath(relPath: string, repoKey?: string): Promise<Set<string>> {
     const { table } = await getCodeChunksTable(null, repoKey);

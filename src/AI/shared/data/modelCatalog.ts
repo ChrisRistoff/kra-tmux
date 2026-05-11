@@ -450,7 +450,7 @@ async function fetchDeepSeek(apiKey: string): Promise<ModelInfo[]> {
         return {
             id: m.id,
             label: m.id,
-            contextWindow: meta.contextWindow ?? 0,
+            contextWindow: meta?.contextWindow ?? 0,
             ...(meta ? { pricing: meta.pricing } : {}),
         };
     });
@@ -506,7 +506,7 @@ async function fetchOpenAI(apiKey: string): Promise<ModelInfo[]> {
         return {
             id: m.id,
             label: m.id,
-            contextWindow: meta.contextWindow || 0,
+            contextWindow: meta?.contextWindow || 0,
             ...(meta ? { pricing: meta.pricing } : {}),
         };
     });
@@ -529,8 +529,8 @@ async function fetchMistral(apiKey: string): Promise<ModelInfo[]> {
         return {
             id: m.id,
             label: m.id,
-            contextWindow: m.max_context_length ?? meta.contextWindow ?? 0,
-            ...(meta.pricing ? { pricing: meta.pricing } : {}),
+            contextWindow: m.max_context_length ?? meta?.contextWindow ?? 0,
+            ...(meta?.pricing ? { pricing: meta.pricing } : {}),
         };
     });
 }
@@ -584,8 +584,8 @@ async function fetchOxlo(apiKey: string): Promise<ModelInfo[]> {
         return {
             id: m.id,
             label: m.id,
-            contextWindow: m.context_length ?? meta.contextWindow ?? 0,
-            ...(meta.pricing ? { pricing: meta.pricing } : {}),
+            contextWindow: m.context_length ?? meta?.contextWindow ?? 0,
+            ...(meta?.pricing ? { pricing: meta.pricing } : {}),
         };
     });
 }

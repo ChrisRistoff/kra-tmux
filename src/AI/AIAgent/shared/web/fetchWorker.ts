@@ -59,7 +59,7 @@ async function getConfig(): Promise<ResolvedConfig> {
     if (cachedConfig) return cachedConfig;
     try {
         const settings = await loadSettings();
-        const w = settings?.ai?.web ?? {};
+        const w = settings.ai?.web ?? {};
         cachedConfig = {
             enabled: w.fetchEnabled ?? DEFAULTS.enabled,
             idleTimeoutMs: w.fetchIdleTimeoutMs ?? DEFAULTS.idleTimeoutMs,
@@ -71,6 +71,7 @@ async function getConfig(): Promise<ResolvedConfig> {
     } catch {
         cachedConfig = { ...DEFAULTS };
     }
+
     return cachedConfig;
 }
 
@@ -105,17 +106,20 @@ class FetchWorker {
             if (this.pagesServed >= cfg.maxPagesPerWorker) {
                 this.recycle('page-limit');
             }
+
             return { ...result, coldStart: wasCold };
         } finally {
             this.releaseSlot();
         }
     }
 
-    private acquireSlot(max: number): Promise<void> {
+    private async acquireSlot(max: number): Promise<void> {
         if (this.inFlight < max) {
             this.inFlight += 1;
+
             return Promise.resolve();
         }
+
         return new Promise<void>((resolve) => {
             this.waitQueue.push(() => {
                 this.inFlight += 1;
@@ -189,6 +193,7 @@ class FetchWorker {
                 this.onReady = undefined;
                 cb();
             }
+
             return;
         }
         if (msg.type === 'fetch-result') {
@@ -227,7 +232,7 @@ class FetchWorker {
         }
     }
 
-    private sendRequest(url: string, opts: FetchWorkerOptions, cfg: ResolvedConfig): Promise<FetchWorkerResult> {
+    private async sendRequest(url: string, opts: FetchWorkerOptions, cfg: ResolvedConfig): Promise<FetchWorkerResult> {
         const child = this.child;
         if (!child) return Promise.reject(new Error('fetch worker not running'));
 
@@ -261,7 +266,7 @@ class FetchWorker {
                 this.recycle('idle-ttl');
             }
         }, idleMs);
-        this.idleTimer.unref?.();
+        this.idleTimer.unref();
     }
 
     private recycle(_reason: string): void {
@@ -275,7 +280,7 @@ class FetchWorker {
         const killTimer = setTimeout(() => {
             try { child.kill('SIGTERM'); } catch { /* ignore */ }
         }, 2_000);
-        killTimer.unref?.();
+        killTimer.unref();
     }
 
     // For tests: state inspection
@@ -300,6 +305,7 @@ let singleton: FetchWorker | undefined;
 
 export function getFetchWorker(): FetchWorker {
     if (!singleton) singleton = new FetchWorker();
+
     return singleton;
 }
 

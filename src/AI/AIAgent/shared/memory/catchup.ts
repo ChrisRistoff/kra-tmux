@@ -24,7 +24,7 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import { execCommand } from '@/utils/bashHelper';
-import { isIndexable, listIndexableFiles, workspaceRoot } from './indexer';
+import { isIndexable, listIndexableFiles, listIndexedPaths, workspaceRoot } from './indexer';
 import { loadMemorySettings } from './settings';
 
 export const CATCHUP_FULL_REINDEX_THRESHOLD = 500;
@@ -184,11 +184,49 @@ async function filterDirtyByMtime(
     return results.filter((c): c is CatchupChange => c !== null);
 }
 
+/**
+ * Drop "index" entries that point to zero-byte files. Empty files have
+ * no chunks to embed, so including them in the catchup plan just
+ * inflates the "N files to index" counter and forces a no-op indexFile()
+ * call on every single run.
+ *
+ * Stat failures are converted to 'delete' (file might have been removed
+ * since git status ran).
+ *
+ * If a previously-indexed file is now empty we still need its chunks
+ * removed from the DB — that is handled by `indexFile`'s own size===0
+ * check (it calls removeFile internally), AND by `reindexAll`'s orphan
+ * cleanup pass. So safely dropping the entry here doesn't leak stale
+ * chunks; at worst they get cleaned on the next full reindex.
+ */
+async function dropEmptyIndexEntries(
+    changes: CatchupChange[],
+    repoRoot: string,
+): Promise<CatchupChange[]> {
+    const results = await Promise.all(
+        changes.map(async (c): Promise<CatchupChange | null> => {
+            if (c.kind === 'delete') return c;
+
+            try {
+                const stat = await fs.stat(path.join(repoRoot, c.relPath));
+                if (!stat.isFile()) return { relPath: c.relPath, kind: 'delete' };
+                if (stat.size === 0) return null;
+                return c;
+            } catch {
+                return { relPath: c.relPath, kind: 'delete' };
+            }
+        }),
+    );
+
+    return results.filter((c): c is CatchupChange => c !== null);
+}
+
 
 export async function computeChangedFiles(opts: {
     repoRoot?: string;
     lastIndexedCommit: string;
     lastIndexedAt: number;
+    repoKey?: string;
 }): Promise<CatchupPlan> {
     const repoRoot = opts.repoRoot ?? workspaceRoot();
 
@@ -219,8 +257,32 @@ export async function computeChangedFiles(opts: {
             ? await filterDirtyByMtime(allDirty, repoRoot, opts.lastIndexedAt)
             : allDirty;
 
-        const merged = mergeChanges(committed, dirty)
+        const mergedRaw = mergeChanges(committed, dirty)
             .filter((c) => c.kind === 'delete' || isIndexable(c.relPath, settings));
+        const mergedNoEmpty = await dropEmptyIndexEntries(mergedRaw, repoRoot);
+
+        // Drop deletes for paths that were never (or are no longer) in the
+        // index. Without this, a tracked file that was rm'd from disk but
+        // not `git rm`'d shows up as ` D` in `git status` on every run
+        // forever, polluting the catchup plan with phantom deletes that
+        // resolve to a no-op `removeFile()` (returns 0, but still counts
+        // toward "N files to index" and shows the trash-bin progress entry).
+        const indexedPaths = await listIndexedPaths(opts.repoKey);
+        const merged = mergedNoEmpty.filter((c) => c.kind !== 'delete' || indexedPaths.has(c.relPath));
+
+        // Orphan cleanup: an untracked file that was indexed (via the
+        // watcher OR a previous catchup `??` entry) and then deleted off
+        // disk is invisible to both `git ls-files` and `git status` on
+        // subsequent runs. Without this pass it would sit in the vector DB
+        // forever. Diff the live indexable set against indexedPaths and
+        // emit deletes for the leftovers.
+        const liveSet = new Set(await listIndexableFiles(repoRoot, settings));
+        const seen = new Set(merged.map((c) => c.relPath));
+        for (const p of indexedPaths) {
+            if (!liveSet.has(p) && !seen.has(p)) {
+                merged.push({ relPath: p, kind: 'delete' });
+            }
+        }
 
         return {
             changes: merged,
@@ -238,6 +300,7 @@ export async function computeChangedFiles(opts: {
     const settings = await loadMemorySettings();
     const files = await listIndexableFiles(repoRoot, settings);
     const changes: CatchupChange[] = [];
+    const indexedPaths = await listIndexedPaths(opts.repoKey);
 
     for (const rel of files) {
         const abs = path.join(repoRoot, rel);
@@ -245,11 +308,16 @@ export async function computeChangedFiles(opts: {
         try {
             const stat = await fs.stat(abs);
 
+            if (!stat.isFile()) {
+                if (indexedPaths.has(rel)) changes.push({ relPath: rel, kind: 'delete' });
+                continue;
+            }
+            if (stat.size === 0) continue; // empty: nothing to index
             if (stat.mtimeMs > opts.lastIndexedAt) {
                 changes.push({ relPath: rel, kind: 'index' });
             }
         } catch {
-            changes.push({ relPath: rel, kind: 'delete' });
+            if (indexedPaths.has(rel)) changes.push({ relPath: rel, kind: 'delete' });
         }
     }
 

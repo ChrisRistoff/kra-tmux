@@ -20,6 +20,7 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { getActiveConsoleRedirect } from '@/AI/TUI/host/consoleRedirect';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import { matchesSubAgentWhitelist } from '@/AI/AIAgent/shared/subAgents/whitelist';
 import { getActiveSearchRepoKeys } from '@/AI/AIAgent/shared/memory/groups';
@@ -221,11 +222,16 @@ class LazyClient implements ToolClient {
     }
 
     private async spawn(): Promise<Client> {
+        // When the TUI is active, capture the MCP server's stderr instead
+        // of letting it inherit the parent TTY (would write directly onto
+        // the blessed framebuffer as raw bytes / colour escapes).
+        const redirect = getActiveConsoleRedirect();
         const transport = new StdioClientTransport({
             command: this.spec.command,
             args: this.spec.args,
             env: this.spec.env,
             ...(this.spec.cwd ? { cwd: this.spec.cwd } : {}),
+            ...(redirect ? { stderr: 'pipe' as const } : {}),
         });
         const client = new Client(
             { name: 'kra-byok-agent', version: '1.0.0' },
@@ -233,6 +239,12 @@ class LazyClient implements ToolClient {
         );
         try {
             await client.connect(transport);
+            if (redirect) {
+                // The transport exposes the spawned child's stderr stream
+                // once connected; pipe it to the log sink.
+                const stderrStream = (transport as unknown as { stderr?: NodeJS.ReadableStream | null }).stderr;
+                if (stderrStream) redirect.captureChild({ stderr: stderrStream as unknown as { pipe: (d: import('stream').Writable) => unknown } });
+            }
         } catch (err) {
             this.connecting = undefined;
             const message = err instanceof Error ? err.message : String(err);

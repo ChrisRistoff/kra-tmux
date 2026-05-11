@@ -131,12 +131,12 @@ export async function upsertRegistryEntry(
         const existing: RegistryEntry | undefined = reg.repos[id];
 
         const next: RegistryEntry = {
-            alias: patch.alias ?? existing?.alias ?? id,
-            rootPath: patch.rootPath ?? existing?.rootPath ?? '',
-            repoKey: patch.repoKey ?? existing?.repoKey ?? computeRepoKey(id),
-            lastIndexedCommit: patch.lastIndexedCommit ?? existing?.lastIndexedCommit ?? '',
-            lastIndexedAt: patch.lastIndexedAt ?? existing?.lastIndexedAt ?? 0,
-            chunksCount: patch.chunksCount ?? existing?.chunksCount ?? 0,
+            alias: patch.alias ?? existing.alias ?? id,
+            rootPath: patch.rootPath ?? existing.rootPath ?? '',
+            repoKey: patch.repoKey ?? existing.repoKey ?? computeRepoKey(id),
+            lastIndexedCommit: patch.lastIndexedCommit ?? existing.lastIndexedCommit ?? '',
+            lastIndexedAt: patch.lastIndexedAt ?? existing.lastIndexedAt ?? 0,
+            chunksCount: patch.chunksCount ?? existing.chunksCount ?? 0,
         };
 
         reg.repos[id] = next;

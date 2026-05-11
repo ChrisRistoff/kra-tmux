@@ -22,9 +22,7 @@
  * proceed. Anything they DON'T want indexed simply shouldn't be selected.
  */
 
-import type * as neovim from 'neovim';
-import { computeChangedFiles } from '@/AI/AIAgent/shared/memory/catchup';
-import type { CatchupChange } from '@/AI/AIAgent/shared/memory/catchup';
+import { computeChangedFiles, type CatchupChange } from '@/AI/AIAgent/shared/memory/catchup';
 import {
     getRepoIdentity,
     getRegistryEntry,
@@ -38,13 +36,14 @@ import type { MemorySettings } from '@/AI/AIAgent/shared/memory/types';
 import { execCommand } from '@/utils/bashHelper';
 import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import { handleAgentUserInput } from '@/AI/AIAgent/shared/utils/agentToolHook';
+import type { AgentHost } from '@/AI/TUI/host/agentHost';
 
 export interface StartupIndexingResult {
     semanticSearchEnabled: boolean;
 }
 
 interface ProgressContext {
-    nvimClient: neovim.NeovimClient;
+    target: AgentHost;
 }
 
 async function safeHeadCommit(repoRoot: string): Promise<string> {
@@ -57,26 +56,19 @@ async function safeHeadCommit(repoRoot: string): Promise<string> {
     }
 }
 
-async function waitForModalDismiss(nvimClient: neovim.NeovimClient): Promise<void> {
-    return new Promise((resolve) => {
-        const handler = (method: string): void => {
-            if (method !== 'index_progress_dismissed') return;
-            nvimClient.removeListener('notification', handler);
-            resolve();
-        };
-        nvimClient.on('notification', handler);
-    });
+async function waitForModalDismiss(_target: AgentHost): Promise<void> {
+    // The TUI host's index-progress modal handles dismissal internally.
+    return Promise.resolve();
 }
 
 async function showProgressModal(ctx: ProgressContext, alias: string, totalFiles: number, mode: 'initial' | 'catchup'): Promise<void> {
-    const channelId = await ctx.nvimClient.channelId;
-    await updateAgentUi(ctx.nvimClient, 'show_index_progress_modal', [
-        { channel_id: channelId, alias, total_files: totalFiles, mode },
+    await updateAgentUi(ctx.target, 'show_index_progress_modal', [
+        { channel_id: 0, alias, total_files: totalFiles, mode },
     ]);
 }
 
 async function appendProgress(ctx: ProgressContext, line: string, filesDone: number, filesTotal: number): Promise<void> {
-    await updateAgentUi(ctx.nvimClient, 'append_index_progress', [{ line, files_done: filesDone, files_total: filesTotal }]);
+    await updateAgentUi(ctx.target, 'append_index_progress', [{ line, files_done: filesDone, files_total: filesTotal }]);
 }
 
 function formatProgressLine(filesDone: number, filesTotal: number, suffix: string): string {
@@ -86,11 +78,11 @@ function formatProgressLine(filesDone: number, filesTotal: number, suffix: strin
 }
 
 async function markDone(ctx: ProgressContext, summary: string): Promise<void> {
-    await updateAgentUi(ctx.nvimClient, 'set_index_progress_done', [{ summary }]);
+    await updateAgentUi(ctx.target, 'set_index_progress_done', [{ summary }]);
 }
 
 async function appendLine(ctx: ProgressContext, line: string): Promise<void> {
-    await updateAgentUi(ctx.nvimClient, 'append_index_progress', [{ line }]);
+    await updateAgentUi(ctx.target, 'append_index_progress', [{ line }]);
 }
 
 interface RepoIndexingPlan {
@@ -142,6 +134,7 @@ async function buildRepoPlan(cwd: string, settings: MemorySettings): Promise<Rep
         repoRoot: identity.rootPath,
         lastIndexedCommit: existing.lastIndexedCommit,
         lastIndexedAt: existing.lastIndexedAt,
+        repoKey,
     });
 
     return {
@@ -242,7 +235,7 @@ function summaryAlias(plans: RepoIndexingPlan[]): string {
  * Neovim modal. The modal stays open until the user dismisses it.
  */
 export async function runMultiRepoIndexingFlow(
-    nvimClient: neovim.NeovimClient,
+    target: AgentHost,
     repoCwds: string[],
 ): Promise<StartupIndexingResult> {
     const settings = await loadMemorySettings();
@@ -255,9 +248,9 @@ export async function runMultiRepoIndexingFlow(
         return { semanticSearchEnabled: false };
     }
 
-    const plans = await Promise.all(repoCwds.map((cwd) => buildRepoPlan(cwd, settings)));
+    const plans = await Promise.all(repoCwds.map(async (cwd) => buildRepoPlan(cwd, settings)));
     const totalFiles = plans.reduce((sum, p) => sum + planTotalFiles(p), 0);
-    const ctx: ProgressContext = { nvimClient };
+    const ctx: ProgressContext = { target };
     const aliasHeader = summaryAlias(plans);
     const mode: 'initial' | 'catchup' = plans.every((p) => p.mode === 'catchup') ? 'catchup' : 'initial';
 
@@ -269,7 +262,7 @@ export async function runMultiRepoIndexingFlow(
             .map((p) => `• ${p.aliasLabel}: ${planTotalFiles(p)} ${p.mode === 'fresh' ? 'files (full reindex)' : 'changed files (catch-up)'}`)
             .join('\n');
         const question = `Index the following repos now?\n\n${planSummary}`;
-        const { answer } = await handleAgentUserInput(nvimClient, question, ['Yes', 'No'], false);
+        const { answer } = await handleAgentUserInput(target, question, ['Yes', 'No'], false);
         if (answer.trim().toLowerCase() !== 'yes') {
             return { semanticSearchEnabled: true };
         }
@@ -285,7 +278,7 @@ export async function runMultiRepoIndexingFlow(
 
     const workPlans = plans.filter((p) => planTotalFiles(p) > 0);
     const results = await Promise.all(
-        workPlans.map((plan) =>
+        workPlans.map(async (plan) =>
             executeRepoPlan(plan, settings, (line) => {
                 aggregatedDone += 1;
                 void appendProgress(
@@ -333,7 +326,7 @@ export async function runMultiRepoIndexingFlow(
     }
 
     await markDone(ctx, plans.length === 1 ? 'Done.' : `Done. Indexed ${plans.length} repos.`);
-    await waitForModalDismiss(nvimClient);
+    await waitForModalDismiss(target);
 
     return { semanticSearchEnabled: true };
 }
@@ -344,8 +337,8 @@ export async function runMultiRepoIndexingFlow(
  * UI can show one combined progress modal.
  */
 export async function runStartupIndexingFlow(
-    nvimClient: neovim.NeovimClient,
+    target: AgentHost,
     cwd: string,
 ): Promise<StartupIndexingResult> {
-    return runMultiRepoIndexingFlow(nvimClient, [cwd]);
+    return runMultiRepoIndexingFlow(target, [cwd]);
 }

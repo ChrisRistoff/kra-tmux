@@ -7,6 +7,7 @@ async function makeFile(content: string): Promise<string> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'edit-handler-'));
     const file = path.join(dir, 'sample.txt');
     await fs.writeFile(file, content);
+
     return file;
 }
 

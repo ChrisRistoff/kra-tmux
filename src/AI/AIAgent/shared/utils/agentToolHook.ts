@@ -1,8 +1,7 @@
 import * as fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import * as neovim from 'neovim';
-import type { VimValue } from 'neovim/lib/types/VimValue';
+import type { AgentHost } from '@/AI/TUI/host/agentHost';
 import {
     coerceNumber,
     coerceNumberArray,
@@ -21,7 +20,6 @@ import {
 } from '@/AI/AIAgent/shared/utils/agentUi';
 import { formatAssistantHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
 import { getFileOutline, formatOutline } from '@/AI/AIAgent/shared/utils/fileOutline';
-import { pickMemories } from '@/AI/AIAgent/shared/main/agentMemoryActions';
 import { recall } from '@/AI/AIAgent/shared/memory/notes';
 import { semanticSearch } from '@/AI/AIAgent/shared/memory/search';
 import { isMemoryLookupKind } from '@/AI/AIAgent/shared/memory/types';
@@ -35,7 +33,6 @@ import type {
     ToolWritePreview,
 } from '@/AI/AIAgent/shared/types/agentTypes';
 import { atomicWriteFile } from '@/AI/AIAgent/shared/utils/fileSafety';
-import { refreshAgentLayout } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 
 // Matches the kra-file-context 'anchor_edit' tool. We require the trailing
 // 'edit' token to be preceded by a separator (start-of-string or one of the
@@ -86,36 +83,18 @@ export async function appendToChat(file: string, content: string): Promise<void>
     await fs.appendFile(file, content, 'utf-8');
 }
 
+/**
+ * Show the agent's user-input popup and resolve with the user's answer.
+ */
 export async function handleAgentUserInput(
-    nvimClient: neovim.NeovimClient,
+    target: AgentHost,
     question: string,
     choices?: string[],
     allowFreeform = true
 ): Promise<AgentUserInputResponse> {
-    const channelId = await nvimClient.channelId;
+    const resp = await target.requestUserInput(question, choices, allowFreeform);
 
-    return new Promise<AgentUserInputResponse>((resolve) => {
-        const handler = (method: string, args: unknown[]): void => {
-            if (method !== 'user_input_response') {
-                return;
-            }
-
-            nvimClient.removeListener('notification', handler);
-            const answer = typeof args[0] === 'string' ? args[0] : '';
-            const wasFreeform = args[1] === true || !choices?.includes(answer);
-            resolve({ answer, wasFreeform });
-        };
-
-        nvimClient.on('notification', handler);
-
-        void nvimClient.executeLua(
-            `require('kra_agent.ui').request_user_input(...)`,
-            [channelId, question, choices ?? [], allowFreeform] as VimValue[]
-        ).catch(() => {
-            nvimClient.removeListener('notification', handler);
-            resolve({ answer: '', wasFreeform: true });
-        });
-    });
+    return { answer: resp.answer, wasFreeform: resp.wasFreeform };
 }
 
 // Build preview for content-field write tools (write_file etc.)
@@ -419,96 +398,43 @@ export async function buildToolApprovalDetails(input: AgentPreToolUseHookInput, 
         };
 }
 
-async function writePreviewToTempFiles(preview: ToolWritePreview): Promise<{
-    currentPath: string,
-    proposedPath: string,
-}> {
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const currentPath = path.join(os.tmpdir(), `kra-agent-diff-current-${suffix}`);
-    const proposedPath = path.join(os.tmpdir(), `kra-agent-diff-proposed-${suffix}`);
-
-    await fs.writeFile(currentPath, preview.currentContent, 'utf8');
-    await fs.writeFile(proposedPath, preview.proposedContent, 'utf8');
-
-    return { currentPath, proposedPath };
-}
 
 export async function promptToolApproval(
-    nvimClient: neovim.NeovimClient,
+    target: AgentHost,
     input: AgentPreToolUseHookInput,
     workspacePath: string
 ): Promise<{ decision: ToolApprovalResult, preview: ToolWritePreview | undefined }> {
-    const channelId = await nvimClient.channelId;
     const payload = await buildToolApprovalDetails(input, workspacePath);
-    let tempFiles: { currentPath: string, proposedPath: string } | undefined;
 
-    if (payload.writePreview) {
-        tempFiles = await writePreviewToTempFiles(payload.writePreview);
-    }
+    // Build the chat-modal payload directly from the agent's richer
+    // approval details. The write preview's diff is already embedded in
+    // `payload.details` by `buildToolApprovalDetails`, so the user can
+    // review changes inline.
+    const summary = (payload.details.split('\n')[2] ?? '').trim() || input.toolName;
+    const modalPayload = {
+        toolName: input.toolName,
+        ...(input.agentLabel ? { agentLabel: input.agentLabel } : {}),
+        title: `Approve tool · ${input.agentLabel ? `[${input.agentLabel}] ` : ''}${input.toolName}`,
+        summary,
+        details: payload.details,
+        argsJson: payload.argsJson,
+        toolArgs: input.toolArgs,
+        ...(payload.writePreview ? { writePreview: payload.writePreview } : {}),
+    };
+    const decision = await target.requestApproval(modalPayload);
+    const result: ToolApprovalResult = decision.action === 'allow'
+        ? (decision.modifiedArgs !== undefined
+            ? { action: 'allow', modifiedArgs: decision.modifiedArgs }
+            : { action: 'allow' })
+        : decision.action === 'allow-family'
+            ? { action: 'allow-family' }
+            : decision.action === 'yolo'
+                ? { action: 'yolo' }
+                : (decision.denyReason
+                    ? { action: 'deny', denyReason: decision.denyReason }
+                    : { action: 'deny' });
 
-    const decision = await new Promise<ToolApprovalResult>((resolve) => {
-        const cleanup = async (): Promise<void> => {
-            if (tempFiles) {
-                await fs.rm(tempFiles.currentPath, { force: true });
-                await fs.rm(tempFiles.proposedPath, { force: true });
-            }
-        };
-
-        const handler = (method: string, args: unknown[]): void => {
-            if (method !== 'tool_permission_decision') {
-                return;
-            }
-
-            nvimClient.removeListener('notification', handler);
-            void cleanup();
-
-            const action = args[0];
-            const modifiedArgsJson = args[1];
-
-            if (action === 'edited' && typeof modifiedArgsJson === 'string') {
-                resolve({
-                    action: 'allow',
-                    modifiedArgs: JSON.parse(modifiedArgsJson),
-                });
-
-                return;
-            }
-
-            if (action === 'allow-family' || action === 'yolo' || action === 'allow') {
-                resolve({ action: action as ToolApprovalResult['action'] });
-
-                return;
-            }
-
-            const reasonRaw = typeof args[1] === 'string' ? args[1].trim() : '';
-            resolve({ action: 'deny', ...(reasonRaw.length > 0 ? { denyReason: reasonRaw } : {}) });
-        };
-
-        nvimClient.on('notification', handler);
-
-        void nvimClient.executeLua(`require('kra_agent.ui').request_permission(...)`, [
-            channelId,
-            {
-                details: payload.details,
-                title: `Approve tool · ${input.agentLabel ? `[${input.agentLabel}] ` : ''}${input.toolName}`,
-                toolName: input.toolName,
-                argsJson: payload.argsJson,
-                hasWritePreview: !!payload.writePreview,
-                previewCurrentPath: tempFiles?.currentPath,
-                previewProposedPath: tempFiles?.proposedPath,
-                previewDisplayPath: payload.writePreview?.displayPath,
-                previewApplyStrategy: payload.writePreview?.applyStrategy,
-                previewEndsWithNewline: payload.writePreview?.proposedEndsWithNewline,
-                previewNote: payload.writePreview?.note,
-            } satisfies Record<string, unknown> as unknown as VimValue,
-        ]).catch(() => {
-            nvimClient.removeListener('notification', handler);
-            void cleanup();
-            resolve({ action: 'deny' });
-        });
-    });
-
-    return { decision, preview: payload.writePreview };
+    return { decision: result, preview: payload.writePreview };
 }
 
 // str_replace and edit both invoke the same Dts handler in the CLI binary.
@@ -607,16 +533,31 @@ export async function handleAskKra(
     // Always append "End session" so the user has an explicit exit path.
     const choices = [...aiChoices, 'End session'];
 
-    // Write the AI's question + choices into the chat file before showing the popup.
-    await appendToChat(state.chatFile, formatConfirmQuestion(summary, choices));
-    try { await refreshAgentLayout(state.nvim); } catch { /* nvim busy */ }
-    try { await state.nvim.command('redraw!'); } catch { /* nvim busy */ }
+    // Force-drain any prose still queued in the streaming pacer's pending
+    // buffer first so the user sees ALL of the model's output up to this
+    // point BEFORE the modal pops up. Otherwise the typewriter is mid-
+    // sentence and the modal feels like it appeared out of nowhere.
+    await state.flushPendingProse?.();
 
-    const { answer } = await handleAgentUserInput(state.nvim, summary, choices, true);
+    // Close any in-flight ```thinking fence so the question/answer/header
+    // we're about to write land at the top level of the transcript instead
+    // of inside the still-open reasoning code block.
+    state.closeReasoningFence?.();
+
+    // Write the AI's question + choices into the chat file AND mirror it
+    // into the TUI transcript before showing the popup, so the user sees
+    // the same question in-line that gets persisted to the chat file.
+    const questionBlock = formatConfirmQuestion(summary, choices);
+    await appendToChat(state.chatFile, questionBlock);
+    state.host.appendLine(questionBlock);
+
+    const { answer } = await handleAgentUserInput(state.host, summary, choices, true);
 
     if (!answer || answer.trim() === '') {
         // Dismissed — deny so AI stays in the turn and can ask again.
-        await appendToChat(state.chatFile, formatConfirmAnswer('(dismissed)'));
+        const dismissedBlock = formatConfirmAnswer('(dismissed)');
+        await appendToChat(state.chatFile, dismissedBlock);
+        state.host.appendLine(dismissedBlock);
 
         return {
             permissionDecision: 'deny',
@@ -624,12 +565,16 @@ export async function handleAskKra(
         };
     }
 
-    // Write the user's answer into the chat file.
-    await appendToChat(state.chatFile, formatConfirmAnswer(answer));
-    // Write a new ASSISTANT header so the AI's continuation is visually separated.
-    await appendToChat(state.chatFile, formatAssistantHeader(state.model));
-    try { await refreshAgentLayout(state.nvim); } catch { /* nvim busy */ }
-    try { await state.nvim.command('redraw!'); } catch { /* nvim busy */ }
+    // Write the user's answer + a fresh ASSISTANT header into the chat
+    // file AND mirror them into the TUI transcript so the next streamed
+    // chunks land under their own header instead of inside the previous
+    // assistant block.
+    const answerBlock = formatConfirmAnswer(answer);
+    const assistantHeader = formatAssistantHeader(state.model);
+    await appendToChat(state.chatFile, answerBlock);
+    await appendToChat(state.chatFile, assistantHeader);
+    state.host.appendLine(answerBlock);
+    state.host.appendLine(assistantHeader);
 
     if (answer === 'End session') {
         // User is done — allow the tool so the AI ends the turn naturally.
@@ -727,9 +672,9 @@ async function maybeInterceptMemoryRead(
             return { permissionDecision: 'allow' };
         }
 
-        const picked = await pickMemories(state.nvim, candidates, {
+        const picked = await state.host.pickMemories(candidates, {
             title: kind === 'revisit' ? 'Select revisits for recall' : 'Select memories for recall',
-        });
+        }) as typeof candidates | null;
         if (!picked || picked.length === 0) {
             return {
                 permissionDecision: 'deny',
@@ -762,9 +707,9 @@ async function maybeInterceptMemoryRead(
             return { permissionDecision: 'allow' };
         }
 
-        const picked = await pickMemories(state.nvim, candidates, {
+        const picked = await state.host.pickMemories(candidates, {
             title: memoryKind === 'revisit' ? 'Select revisits for semantic search' : 'Select memories for semantic search',
-        });
+        }) as typeof candidates | null;
         if (!picked || picked.length === 0) {
             return {
                 permissionDecision: 'deny',
@@ -874,7 +819,14 @@ export async function handlePreToolUse(
         return (await applyStrReplaceEditorDirectly(input, workspacePath, undefined, state)) ?? { permissionDecision: 'allow' };
     }
 
-    const { decision, preview } = await promptToolApproval(state.nvim, input, workspacePath);
+    // Drain any prose still queued in the streaming pacer before the
+    // approval modal pops up so the user has full context (the model
+    // often writes "I'll now ..." right before the tool call). Without
+    // this drain the modal appears mid-typewriter and the prose only
+    // arrives AFTER the user answers, which is jarring.
+    await state.flushPendingProse?.();
+
+    const { decision, preview } = await promptToolApproval(state.host, input, workspacePath);
 
     if (decision.action === 'allow-family') {
         state.allowedToolFamilies.add(toolFamily);

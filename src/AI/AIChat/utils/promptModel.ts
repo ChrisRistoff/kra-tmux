@@ -1,4 +1,3 @@
-import * as neovim from 'neovim';
 import type OpenAI from 'openai';
 import type {
     ChatCompletionAssistantMessageParam,
@@ -8,7 +7,7 @@ import type {
     ChatCompletionToolMessageParam,
 } from 'openai/resources/chat/completions/completions';
 import * as fs from 'fs/promises';
-import * as aiNeovimHelper from '@/AI/shared/utils/conversationUtils/aiNeovimHelper';
+import type { ChatHost } from '@/AI/TUI/host/chatHost';
 import { StreamController } from '@/AI/shared/types/aiTypes';
 import { getProviderApiKey, getProviderBaseURL } from '@/AI/shared/data/providers';
 import {
@@ -25,7 +24,6 @@ import {
 import { loadSettings } from '@/utils/common';
 import { buildDocsSearchTool } from '@/AI/AIAgent/shared/utils/memoryMcpServer';
 import { docsSearch } from '@/AI/AIAgent/shared/docs/search';
-import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
 import { summarizeToolCall, formatToolLine } from '@/AI/AIAgent/shared/utils/agentUi';
 import { loadDeepSearchSettings, type DeepSearchSettings } from './deepSearch/settings';
 import { runDeepSearch } from './deepSearch/chatSubAgent';
@@ -154,7 +152,8 @@ const CHAT_TOOLS: ChatCompletionFunctionTool[] = [
 ];
 
 export interface ChatToolContext {
-    nvim: neovim.NeovimClient;
+    /** UI surface for streaming, status, approvals. Optional in headless contexts (e.g. saveChat summary). */
+    host?: ChatHost;
     chatFile: string;
     /** Provider currently powering the chat. Used by `deep_search` for its inner loop. */
     provider?: string;
@@ -197,7 +196,7 @@ export async function promptModel(
             ...(controller ? { controller } : {}),
         }
         : controller
-            ? { nvim: undefined as unknown as neovim.NeovimClient, chatFile: '', controller }
+            ? { chatFile: '', controller }
             : undefined;
 
     return createOpenAIStream(openai, model, system, messages, temperature, controller, enrichedContext);
@@ -237,6 +236,46 @@ interface ToolCallAccumulator {
     argsBuffer: string;
 }
 
+/**
+ * Approval gate for a chat tool call. Runs the user-facing approval
+ * popup (if enabled) and returns either the final (possibly user-edited)
+ * args or a denial message to be surfaced as the tool result.
+ *
+ * This is split out from `executeToolCall` so the caller can mutate the
+ * stored `tc.function.arguments` BEFORE the start_tool / recordToolStart
+ * UI updates fire — otherwise the transcript and tool history would
+ * display the original assistant-emitted args even though the run used
+ * the edited ones.
+ */
+export async function approveToolCall(
+    toolName: string,
+    parsedArgs: Record<string, unknown>,
+    context?: ChatToolContext,
+): Promise<
+    | { kind: 'allow'; finalArgs: Record<string, unknown> }
+    | { kind: 'deny'; output: string }
+> {
+    if (!context?.approval || !context.host) {
+        return { kind: 'allow', finalArgs: parsedArgs };
+    }
+    const decision = await requestChatToolApproval(context.host, context.approval, {
+        toolName,
+        toolArgs: parsedArgs,
+    });
+    if (decision.action === 'deny') {
+        const reason = decision.denyReason
+            ? `User denied ${toolName}. Reason: "${decision.denyReason}". Treat the user's reason as authoritative direction. Do not retry the same call; either follow the user's guidance or ask them what to do instead.`
+            : `User denied ${toolName}. Do not retry this tool call. Ask the user what they want instead.`;
+
+        return { kind: 'deny', output: reason };
+    }
+    const finalArgs = (decision.modifiedArgs && typeof decision.modifiedArgs === 'object')
+        ? decision.modifiedArgs as Record<string, unknown>
+        : parsedArgs;
+
+    return { kind: 'allow', finalArgs };
+}
+
 async function executeToolCall(
     toolName: string,
     rawArgs: string,
@@ -250,26 +289,6 @@ async function executeToolCall(
         const message = error instanceof Error ? error.message : String(error);
 
         return { output: `Invalid JSON arguments for ${toolName}: ${message}`, isError: true };
-    }
-
-    // Gate every chat tool call through the approval popup when enabled.
-    // This runs BEFORE per-tool dispatch so the same gate covers web_fetch,
-    // web_search, docs_search, and deep_search uniformly.
-    if (context?.approval && context.nvim) {
-        const decision = await requestChatToolApproval(context.nvim, context.approval, {
-            toolName,
-            toolArgs: parsed,
-        });
-        if (decision.action === 'deny') {
-            const reason = decision.denyReason
-                ? `User denied ${toolName}. Reason: "${decision.denyReason}". Treat the user's reason as authoritative direction. Do not retry the same call; either follow the user's guidance or ask them what to do instead.`
-                : `User denied ${toolName}. Do not retry this tool call. Ask the user what they want instead.`;
-
-            return { output: reason, isError: true };
-        }
-        if (decision.modifiedArgs && typeof decision.modifiedArgs === 'object') {
-            parsed = decision.modifiedArgs as Record<string, unknown>;
-        }
     }
 
     if (toolName === 'web_fetch') {
@@ -343,8 +362,8 @@ async function executeToolCall(
                 if (context.chatFile) await fs.appendFile(context.chatFile, line, 'utf8');
             } catch { /* ignore transcript write errors */ }
             try {
-                if (context.nvim) aiNeovimHelper.appendToChatLayout(context.nvim, line);
-            } catch { /* ignore neovim sink errors */ }
+                if (context.host) context.host.appendChatLine(line);
+            } catch { /* ignore host sink errors */ }
         };
 
         try {
@@ -356,9 +375,9 @@ async function executeToolCall(
                 signal: ac.signal,
                 onProgress: writeProgress,
             };
-            if (context.approval && context.nvim) {
+            if (context.approval && context.host) {
                 opts.approval = context.approval;
-                opts.nvim = context.nvim;
+                opts.host = context.host;
             }
             if (typeof parsed.hint === 'string' && parsed.hint.length > 0) {
                 opts.hint = parsed.hint;
@@ -688,22 +707,49 @@ async function createOpenAIStream(
                                     // summarizeToolCall handles missing fields gracefully
                                 }
 
+                                // Approve BEFORE start_tool so the displayed args / transcript
+                                // / tool history reflect the (possibly user-edited) final args.
+                                const approval = await approveToolCall(tc.function.name, parsedArgs, toolContext);
+                                let denialOutput: string | null = null;
+                                if (approval.kind === 'deny') {
+                                    denialOutput = approval.output;
+                                } else {
+                                    parsedArgs = approval.finalArgs;
+                                    try {
+                                        tc.function.arguments = JSON.stringify(parsedArgs);
+                                    } catch { /* keep original */ }
+                                }
+
                                 const summary = summarizeToolCall(tc.function.name, parsedArgs);
 
-                                await updateAgentUi(toolContext.nvim, 'start_tool', [
+                                await (toolContext.host ? toolContext.host.updateToolUi('start_tool', [
                                     tc.function.name,
                                     summary,
                                     tc.function.arguments || '{}',
-                                ]);
+                                ]) : Promise.resolve());
+                                toolContext.host?.recordToolStart({
+                                    toolName: tc.function.name,
+                                    summary,
+                                    argsJson: tc.function.arguments || '{}',
+                                    ...(tc.id ? { callId: tc.id } : {}),
+                                });
 
-                                const result = await executeToolCall(tc.function.name, tc.function.arguments, toolContext);
+                                const result = denialOutput !== null
+                                    ? { output: denialOutput, isError: true } as WebToolResult
+                                    : await executeToolCall(tc.function.name, tc.function.arguments, toolContext);
 
-                                await updateAgentUi(toolContext.nvim, 'complete_tool', [
+                                await (toolContext.host ? toolContext.host.updateToolUi('complete_tool', [
                                     tc.function.name,
                                     summary,
                                     !result.isError,
                                     result.output,
-                                ]);
+                                ]) : Promise.resolve());
+                                toolContext.host?.recordToolComplete({
+                                    toolName: tc.function.name,
+                                    success: !result.isError,
+                                    result: result.output,
+                                    ...(tc.id ? { callId: tc.id } : {}),
+                                });
 
                                 yield formatToolLine(summary, !result.isError);
                                 if (result.isError && result.output.startsWith('User denied ')) {
@@ -761,22 +807,49 @@ async function createOpenAIStream(
                         // summarizeToolCall handles missing fields gracefully
                     }
 
+                    // Approve BEFORE start_tool so the displayed args / transcript
+                    // / tool history reflect the (possibly user-edited) final args.
+                    const approval = await approveToolCall(tc.function.name, parsedArgs, toolContext);
+                    let denialOutput: string | null = null;
+                    if (approval.kind === 'deny') {
+                        denialOutput = approval.output;
+                    } else {
+                        parsedArgs = approval.finalArgs;
+                        try {
+                            tc.function.arguments = JSON.stringify(parsedArgs);
+                        } catch { /* keep original */ }
+                    }
+
                     const summary = summarizeToolCall(tc.function.name, parsedArgs);
 
-                    await updateAgentUi(toolContext.nvim, 'start_tool', [
+                    await (toolContext.host ? toolContext.host.updateToolUi('start_tool', [
                         tc.function.name,
                         summary,
                         tc.function.arguments || '{}',
-                    ]);
+                    ]) : Promise.resolve());
+                    toolContext.host?.recordToolStart({
+                        toolName: tc.function.name,
+                        summary,
+                        argsJson: tc.function.arguments || '{}',
+                        ...(tc.id ? { callId: tc.id } : {}),
+                    });
 
-                    const result = await executeToolCall(tc.function.name, tc.function.arguments, toolContext);
+                    const result = denialOutput !== null
+                        ? { output: denialOutput, isError: true } as WebToolResult
+                        : await executeToolCall(tc.function.name, tc.function.arguments, toolContext);
 
-                    await updateAgentUi(toolContext.nvim, 'complete_tool', [
+                    await (toolContext.host ? toolContext.host.updateToolUi('complete_tool', [
                         tc.function.name,
                         summary,
                         !result.isError,
                         result.output,
-                    ]);
+                    ]) : Promise.resolve());
+                    toolContext.host?.recordToolComplete({
+                        toolName: tc.function.name,
+                        success: !result.isError,
+                        result: result.output,
+                        ...(tc.id ? { callId: tc.id } : {}),
+                    });
 
                     yield formatToolLine(summary, !result.isError);
                     if (result.isError && result.output.startsWith('User denied ')) {

@@ -31,7 +31,6 @@ import {
     appendToChat,
 } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { setupSessionEventHandlers } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
-import { appendToAgentChatLayout } from '@/AI/AIAgent/shared/main/agentNeovimSetup';
 import {
     formatAssistantHeader,
     formatSubAgentHeader,
@@ -125,6 +124,14 @@ export interface SubAgentSessionHandle {
     submitSlot: { captured?: Record<string, unknown>; resolveSubmitted?: () => void };
     /** Per-turn event sink — reset before each call so events route to the current run's array. */
     emitSlot: { current: (e: SubAgentEvent) => void };
+    /**
+     * Per-turn drain signal. The session's `idle` handler in
+     * `setupSessionEventHandlers` invokes `resolve` AFTER its pending
+     * buffer + writeChain have settled, so the orchestrator can wait
+     * for full transcript drain before splicing in the next role
+     * header (otherwise tail bytes bleed under the new entry).
+     */
+    drainSlot: { resolve?: () => void };
     bridge?: SubAgentChatBridge;
     parentState?: AgentConversationState;
 }
@@ -189,6 +196,7 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
     } else {
         // ── Fresh path ───────────────────────────────────────────────────
         const submitSlot: SubAgentSessionHandle['submitSlot'] = {};
+        const drainSlot: SubAgentSessionHandle['drainSlot'] = {};
         const emitSlot: SubAgentSessionHandle['emitSlot'] = { current: emit };
 
         const submitTool: LocalTool = {
@@ -284,6 +292,7 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         if (bridge && parentState) {
             await setupSessionEventHandlers(parentState, session, {
                 agentLabel: bridge.agentLabel,
+                onDrained: () => { drainSlot.resolve?.(); },
             });
         }
 
@@ -291,6 +300,7 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
             session,
             submitSlot,
             emitSlot,
+            drainSlot,
             ...(bridge ? { bridge } : {}),
             ...(parentState ? { parentState } : {}),
         };
@@ -301,10 +311,20 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
     // Per-turn rebinding: reset capture state and route events into THIS run.
     delete handle.submitSlot.captured;
     delete handle.submitSlot.resolveSubmitted;
+    delete handle.drainSlot.resolve;
     handle.emitSlot.current = emit;
 
     const submitted = new Promise<void>((resolve) => {
         handle.submitSlot.resolveSubmitted = resolve;
+    });
+
+    // Resolves only after the sub-agent's pending buffer + writeChain
+    // finish draining (signalled from the idle handler via onDrained).
+    // Awaited in the finally block before we emit the orchestrator's
+    // assistant header so the sub-agent's tail bytes don't bleed under
+    // the new entry.
+    const drained = new Promise<void>((resolve) => {
+        handle.drainSlot.resolve = resolve;
     });
 
     const session = handle.session;
@@ -317,7 +337,18 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
     if (bridge && parentState) {
         const subAgentHeader = formatSubAgentHeader(bridge.headerEmoji, bridge.agentLabel, opts.runtime.model);
         await appendToChat(parentState.chatFile, subAgentHeader);
-        appendToAgentChatLayout(parentState.nvim, subAgentHeader);
+        // Mirror to the new TUI surface — the legacy nvim path is a
+        // stub on the TUI build so the header would otherwise vanish.
+        try {
+            // Flush first so any in-flight orchestrator markdown is
+            // committed before we splice the sub-agent header in. If we
+            // skip the pre-flush the streaming renderer's pending
+            // buffer can be re-emitted after the header, producing
+            // ghost duplicates of the orchestrator's last few chars.
+            parentState.host.flush();
+            parentState.host.appendChunk(subAgentHeader);
+            parentState.host.flush();
+        } catch { /* host may be torn down on shutdown */ }
     }
 
     let finalMessages: ChatCompletionMessageParam[] | undefined;
@@ -338,9 +369,25 @@ export async function runSubAgentTask(opts: SubAgentRunOptions): Promise<SubAgen
         await Promise.race([idle, submitted]);
     } finally {
         if (bridge && parentState) {
+            // Wait for the sub-agent's transcript to fully drain before
+            // splicing in the orchestrator's assistant header. Without
+            // this the idle handler's async flushBuffer/writeChain can
+            // still emit tail bytes AFTER the new header, producing
+            // duplicated characters under the next entry. Bounded by a
+            // short grace timeout in case the sub-agent disconnected
+            // before idle (e.g. user abort).
+            await Promise.race([
+                drained,
+                new Promise<void>((resolve) => setTimeout(resolve, 500)),
+            ]);
+
             const assistantHeader = formatAssistantHeader(parentState.model);
             await appendToChat(parentState.chatFile, assistantHeader);
-            appendToAgentChatLayout(parentState.nvim, assistantHeader);
+            try {
+                parentState.host.flush();
+                parentState.host.appendChunk(assistantHeader);
+                parentState.host.flush();
+            } catch { /* host may be torn down on shutdown */ }
         }
 
         if (opts.keepAliveOnPause) {

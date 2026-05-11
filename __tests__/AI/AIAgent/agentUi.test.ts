@@ -22,7 +22,7 @@ describe('agentUi helpers', () => {
         );
 
         const answer = formatConfirmAnswer('Yes');
-        expect(answer).toContain('## 👤 USER PROMPT · ');
+        expect(answer).toContain('### 👤 USER PROMPT · ');
         expect(answer.endsWith('Yes\n\n')).toBe(true);
     });
 

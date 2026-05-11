@@ -230,6 +230,7 @@ export function createExecuteTool(opts: CreateExecuteToolOptions): LocalTool {
                     if (liveHandle) {
                         await disposeSubAgentHandle(liveHandle);
                     }
+
                     return [
                         'Executor did not call submit_result. It may have hit a tool-call',
                         'limit, refused the task, or been aborted by the user.',

@@ -6,6 +6,9 @@ export {
     awaitScreenDestroy,
     attachJumpKeys,
     attachTopBottomKeys,
+    pauseScreen,
+    pauseScreenKeys,
+    runInherit,
 } from './screen';
 export {
     setBorder,

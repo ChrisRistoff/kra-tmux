@@ -89,6 +89,7 @@ export async function openGrepDashboard(): Promise<void> {
         const status = isSearching ? `  ${theme.warn('searching…')}` : '';
         const selCount = allResults.filter((r) => r.selected).length;
         const selTag = selCount > 0 ? `  ${theme.selected(`[${selCount} selected]`)}` : '';
+
         return ` ${theme.title('◆ grep')}` +
             `  ${theme.dim('mode')} ${MODE_LABEL[mode]}` +
             q + count + selTag + status;
@@ -181,6 +182,7 @@ export async function openGrepDashboard(): Promise<void> {
                         previewScroll.set(r.absPath, scrollPerc);
                         ctx.api.repaintDetails();
                     });
+
                     return theme.dim('loading…');
                 },
                 scrollPerc: (r) => previewScroll.get(r.absPath) ?? 0,
@@ -196,6 +198,7 @@ export async function openGrepDashboard(): Promise<void> {
                         metaCache.set(r.absPath, v);
                         ctx.api.repaintDetails();
                     });
+
                     return theme.dim('loading…');
                 },
             },
@@ -306,6 +309,7 @@ export async function openGrepDashboard(): Promise<void> {
                     const targets = allResults.filter((row) => row.selected);
                     if (targets.length === 0) {
                         api.flashHeader('No items selected — use space to select');
+
                         return;
                     }
                     const ok = await modalConfirm(api.screen, 'Batch delete', `Delete ${targets.length} selected item(s)?`);

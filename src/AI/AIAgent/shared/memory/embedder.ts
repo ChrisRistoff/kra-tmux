@@ -22,6 +22,7 @@
 
 import path from 'path';
 import { fork, type ChildProcess } from 'child_process';
+import { getActiveConsoleRedirect } from '@/AI/TUI/host/consoleRedirect';
 import { kraHome } from '@/filePaths';
 import { loadMemorySettings } from './settings';
 
@@ -96,11 +97,21 @@ function spawnChild(): Promise<ChildProcess> {
                 ...process.env,
                 KRA_EMBEDDER_CACHE_DIR: defaultCacheDir(),
             },
-            // Inherit stdio so child errors show up in parent logs.
-            stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+            // When the TUI redirect is active we MUST capture child stdio
+            // (otherwise inherited stderr writes the FlagEmbedding init banner
+            // and ONNX warnings straight onto the blessed framebuffer).
+            // Outside the TUI we keep the original 'inherit' behaviour so
+            // CLI users still see embedder errors on their terminal.
+            stdio: getActiveConsoleRedirect()
+                ? ['ignore', 'pipe', 'pipe', 'ipc']
+                : ['ignore', 'inherit', 'inherit', 'ipc'],
             // Don't keep parent's event loop alive just for the child.
             detached: false,
         });
+
+        // Pipe captured child stdio (when active) into the TUI log so it
+        // never reaches the framebuffer.
+        getActiveConsoleRedirect()?.captureChild(cp);
 
         let ready = false;
 

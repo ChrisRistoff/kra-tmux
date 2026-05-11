@@ -49,6 +49,7 @@ function createFakeChild(): FakeChild {
     child.exit = (code, signal = null) => {
         child.emit('exit', code, signal);
     };
+
     return child;
 }
 
@@ -98,8 +99,8 @@ describe('FetchWorker', () => {
         expect(r2.coldStart).toBe(false);
         expect(spawnMock).toHaveBeenCalledTimes(1);
         expect(child._stdinLines.length).toBe(2);
-        expect(JSON.parse(child._stdinLines[0]!)).toMatchObject({ requestId: '1', url: 'https://example.test/a' });
-        expect(JSON.parse(child._stdinLines[1]!)).toMatchObject({ requestId: '2', url: 'https://example.test/b' });
+        expect(JSON.parse(child._stdinLines[0])).toMatchObject({ requestId: '1', url: 'https://example.test/a' });
+        expect(JSON.parse(child._stdinLines[1])).toMatchObject({ requestId: '2', url: 'https://example.test/b' });
     });
 
     it('rejects pending requests when the worker process exits unexpectedly', async () => {
@@ -153,7 +154,7 @@ describe('FetchWorker', () => {
         await flush();
         child.sendLine({ type: 'fetch-result', requestId: '1', ok: true, markdown: 'ok', title: '', status: 200, mode: 'browser' });
         await p;
-        const sent = JSON.parse(child._stdinLines[0]!);
+        const sent = JSON.parse(child._stdinLines[0]);
         expect(sent).toEqual({ requestId: '1', url: 'https://example.test/m', mode: 'browser', pageTimeoutMs: 5000 });
     });
 

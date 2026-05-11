@@ -3,6 +3,7 @@ import { createLockFile, lockFileExist, LockFiles } from '@/../eventSystem/lockF
 import { createIPCClient, IPCEvents, IPCsockets } from '@/../eventSystem/ipc';
 import * as utils from '@/utils/common';
 import { execSync } from 'child_process';
+import { tmuxFiles } from '@/filePaths';
 
 /**
  * Checks whether a tmux session with the specified name exists
@@ -30,7 +31,7 @@ export function checkSessionExists(sessionName: string): boolean {
  * @throws Will throw an error if the source command fails
  */
 export async function sourceTmuxConfig(): Promise<void> {
-    const sourceTmux = `tmux source ${__dirname}/../../../../tmux-files/.tmux.conf`;
+    const sourceTmux = `tmux source ${tmuxFiles}/.tmux.conf`;
     await bash.execCommand(sourceTmux);
     console.log('Sourced tmux configuration file.');
 }

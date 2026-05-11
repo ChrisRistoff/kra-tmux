@@ -1,20 +1,15 @@
 /**
- * Bridges the chat to the agent's existing tool-permission popup
- * (`require('kra_agent.ui').request_permission`).
+ * Chat tool-permission state + approval bridge. Stage 5 refactor: this no
+ * longer talks to Neovim — it consults a `ChatHost` (TUI for the chat
+ * surface, future: an nvim adapter for the agent surface).
  *
- * The agent's `promptToolApproval` is generic: it takes a neovim client, a
- * `{toolName, toolArgs, agentLabel?}` input, and a workspacePath used only by
- * the diff-preview path (chat tools never write files, so the workspace path
- * is incidental). We keep an in-memory `ChatApprovalState` so `allow-family`
- * (one approval per tool name) and `yolo` (silence everything) decisions made
- * via the popup persist across tool calls within the same chat session — and
- * across both the outer chat tools and the `deep_search` inner-loop tools.
+ * State is per-process; `allow-family` and `yolo` decisions persist across
+ * tool calls within the same chat session.
  */
 
-import * as neovim from 'neovim';
-
-import { promptToolApproval } from '@/AI/AIAgent/shared/utils/agentToolHook';
+import type { ChatHost } from '@/AI/TUI/host/chatHost';
 import { getToolFamily, shouldAutoApproveTool } from '@/AI/AIAgent/shared/utils/agentToolApproval';
+import { buildChatApprovalPayload } from './buildChatApprovalPayload';
 
 export type ChatApprovalMode = 'strict' | 'yolo';
 
@@ -27,13 +22,12 @@ export function createChatApprovalState(mode: ChatApprovalMode = 'strict'): Chat
     return { mode, allowedFamilies: new Set<string>() };
 }
 
+// `ChatApprovalRequest` here is the *call-site* shape (toolName + raw args).
+// It gets transformed into the rich `ToolApprovalPayload` (the host-facing
+// shape, defined in `widgets/approvalModal`) before being shown.
 export interface ChatApprovalRequest {
     toolName: string;
     toolArgs: unknown;
-    /**
-     * Optional label that prefixes the popup title so users can tell which
-     * surface issued the call (e.g. `deep_search` for inner-loop calls).
-     */
     agentLabel?: string;
 }
 
@@ -42,12 +36,12 @@ export type ChatApprovalDecision =
     | { action: 'deny', denyReason?: string };
 
 /**
- * Consult the approval state and prompt the user via the agent's existing
- * Neovim popup if needed. Updates `state` in place when the user picks
- * `allow-family` or `yolo`.
+ * Consult the approval state and prompt the user via the host's modal if
+ * needed. Updates `state` in place when the user picks `allow-family` or
+ * `yolo`.
  */
 export async function requestChatToolApproval(
-    nvim: neovim.NeovimClient,
+    host: ChatHost,
     state: ChatApprovalState,
     req: ChatApprovalRequest,
 ): Promise<ChatApprovalDecision> {
@@ -60,15 +54,11 @@ export async function requestChatToolApproval(
         return { action: 'allow' };
     }
 
-    const { decision } = await promptToolApproval(
-        nvim,
-        {
-            toolName: req.toolName,
-            toolArgs: req.toolArgs,
-            ...(req.agentLabel ? { agentLabel: req.agentLabel } : {}),
-        },
-        process.cwd(),
-    );
+    const decision = await host.requestApproval(buildChatApprovalPayload({
+        toolName: req.toolName,
+        toolArgs: req.toolArgs,
+        ...(req.agentLabel ? { agentLabel: req.agentLabel } : {}),
+    }));
 
     if (decision.action === 'allow-family') {
         state.allowedFamilies.add(family);

@@ -1,4 +1,4 @@
-import type * as neovim from 'neovim';
+import type { AgentHost } from '@/AI/TUI/host/agentHost';
 import type { MCPServerConfig } from '@/AI/AIAgent/shared/types/mcpConfig';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { AgentHistory, BashSnapshot } from '@/AI/AIAgent/shared/utils/agentHistory';
@@ -281,7 +281,11 @@ export interface AgentConversationState {
     model: string;
     client: AgentClient;
     session: AgentSession;
-    nvim: neovim.NeovimClient;
+    /**
+     * Blessed-TUI host bridging the agent to the new chatTuiApp. This is
+     * the source-of-truth UI surface; every code path writes to `host.*`.
+     */
+    host: AgentHost;
     cwd: string;
     history: AgentHistory;
     pendingBashSnapshot?: BashSnapshot;
@@ -307,6 +311,24 @@ export interface AgentConversationState {
      * re-fetching them. See `orchestratorTranscript.ts`.
      */
     transcript: import('@/AI/AIAgent/shared/main/orchestratorTranscript').OrchestratorTranscript;
+    /**
+     * Closes any open ```thinking fence opened by `reasoning_delta`. Wired
+     * up by `agentSessionEvents.ts` and called by hooks (e.g. the ask_kra
+     * pre-tool branch) that need to write top-level transcript entries
+     * before the next assistant chunk arrives — otherwise their content
+     * gets trapped inside the still-open reasoning fence.
+     */
+    closeReasoningFence?: () => void;
+
+    /**
+     * Force-drain any prose still queued in the streaming pacer's pending
+     * buffer and wait for the chat-file/transcript writes to flush. Wired
+     * up by `agentSessionEvents.ts` and called by hooks that need to show
+     * a modal (tool approval, ask_kra) before the streaming tail catches
+     * up — otherwise the model keeps streaming behind the modal and the
+     * user sees the prose only AFTER answering, which is jarring.
+     */
+    flushPendingProse?: () => Promise<void>;
 }
 
 export interface ToolApprovalResult {

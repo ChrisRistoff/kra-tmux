@@ -3,16 +3,33 @@ import * as blessed from 'blessed';
 export interface DashboardScreenOptions {
     title: string;
     onQuit?: () => void;
+    /**
+     * Keys that destroy the screen. Defaults to `['q', 'C-c']` for
+     * legacy dashboards. The chat/agent TUI overrides this to
+     * `['C-q']` only so `q` and `C-c` cannot accidentally close the
+     * app mid-conversation.
+     */
+    quitKeys?: string[];
+    /**
+     * Optional output stream. When the caller has redirected raw
+     * `process.stdout/stderr.write` (see `installConsoleRedirect`), it must
+     * pass the protected stream here so blessed renders survive the
+     * redirect.
+     */
+    output?: NodeJS.WritableStream;
 }
 
 export function createDashboardScreen(opts: DashboardScreenOptions): blessed.Widgets.Screen {
-    const screen = blessed.screen({
+    const screenOpts = {
         smartCSR: true,
         title: opts.title,
         fullUnicode: true,
         autoPadding: true,
-    });
-    screen.key(['q', 'C-c'], () => {
+        ...(opts.output ? { output: opts.output } : {}),
+    } as unknown as blessed.Widgets.IScreenOptions;
+    const screen = blessed.screen(screenOpts);
+    const quitKeys = opts.quitKeys ?? ['q', 'C-c'];
+    screen.key(quitKeys, () => {
         if (opts.onQuit) opts.onQuit();
         screen.destroy();
     });
@@ -86,7 +103,22 @@ export function pauseScreen(screen: blessed.Widgets.Screen): () => void {
             program.hideCursor();
             if (resume) resume();
         } catch { /* ignore */ }
+        // Force a full repaint of the framebuffer. `screen.alloc()` alone
+        // marks cells as dirty but blessed's smartCSR will only redraw
+        // changed regions — and after a buffer switch the previous
+        // sub-process output (fzf preview pane, etc.) can persist as
+        // "bleed" in cells blessed doesn't think it owns. realloc() +
+        // render() rebuilds and re-emits every cell.
+        try {
+            (screen as unknown as { realloc?: () => void }).realloc?.();
+        } catch { /* ignore */ }
         screen.alloc();
+        // Explicit terminal clear (CSI 2J + cursor home) wipes anything
+        // the spawned process left in the alternate buffer before we
+        // repaint our framebuffer on top of a clean canvas.
+        try {
+            (program as unknown as { clear?: () => void }).clear?.();
+        } catch { /* ignore */ }
         screen.render();
     };
 }

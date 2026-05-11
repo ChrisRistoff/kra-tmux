@@ -39,6 +39,7 @@ interface RepoInfo {
 async function findWorkspaceRoot(): Promise<string> {
     try {
         const { stdout } = await bash.execCommand('git rev-parse --show-toplevel');
+
         return path.dirname(stdout.trim());
     } catch {
         return process.cwd();
@@ -80,12 +81,13 @@ async function scanForGitRepos(root: string, maxDepth = 2): Promise<RepoInfo[]> 
     return found.sort((a, b) => {
         if (a.isDirty && !b.isDirty) return -1;
         if (!a.isDirty && b.isDirty) return 1;
+
         return a.name.localeCompare(b.name);
     });
 }
 
 async function collectRepoInfo(repoPath: string, root: string): Promise<RepoInfo> {
-    const c = (cmd: string) => bash.execCommand(cmd).catch(() => ({ stdout: '' }));
+    const c = async (cmd: string) => bash.execCommand(cmd).catch(() => ({ stdout: '' }));
     const q = JSON.stringify(repoPath);
 
     const [branch, status, aheadBehind, commitInfo, stash] = await Promise.all([
@@ -157,6 +159,7 @@ function renderRepoRow(r: RepoInfo): string {
         ? ` ${theme.label(`↑${r.ahead}↓${r.behind}`)}`
         : '';
     const stash = r.stashCount > 0 ? ` ${theme.accent(`⚑${r.stashCount}`)}` : '';
+
     return `${icon} ${name} ${branch}${dirty}${sync}${stash}`;
 }
 
@@ -192,9 +195,11 @@ async function loadRecentLog(r: RepoInfo): Promise<string> {
             `git -C ${JSON.stringify(r.fullPath)} log --oneline --decorate -20`,
         );
         if (!stdout.trim()) return theme.dim('(no commits)');
+
         return stdout.trim().split('\n').map((line) => {
             const m = line.match(/^([a-f0-9]+)\s+(.*)$/);
             if (!m) return escTag(line);
+
             return `${theme.warn(m[1])} ${theme.value(escTag(m[2] ?? ''))}`;
         }).join('\n');
     } catch (e) {
@@ -207,6 +212,7 @@ async function loadGitStatus(r: RepoInfo): Promise<string> {
         const { stdout } = await bash.execCommand(
             `git -C ${JSON.stringify(r.fullPath)} status`,
         );
+
         return escTag(stdout.trim()) || theme.success('(clean)');
     } catch (e) {
         return `${theme.err('Error:')} ${escTag((e as Error).message)}`;
@@ -218,6 +224,7 @@ async function loadDirtyFiles(r: RepoInfo): Promise<string[]> {
         const { stdout } = await bash.execCommand(
             `git -C ${JSON.stringify(r.fullPath)} diff --name-only HEAD`,
         );
+
         return stdout.trim().split('\n').filter(Boolean);
     } catch {
         return [];
@@ -238,6 +245,7 @@ async function viewFileDiff(
             ['-c', `cd ${q} && nvim -c "Gedit ${fq}" -c "Gvdiffsplit HEAD"`],
             screen,
         );
+
         return;
     } catch { /* fall back */ }
 
@@ -508,6 +516,7 @@ export async function scout(): Promise<void> {
         const files = await loadDirtyFiles(r);
         if (files.length === 0) {
             flashHeader(`${r.name} has no changes vs HEAD`);
+
             return;
         }
         await browseFiles(screen, {

@@ -249,6 +249,7 @@ export async function openDiskUsageDashboard(): Promise<void> {
         const selCount = selected.size > 0
             ? `   ${theme.label('selected:')} ${theme.count(selected.size)}`
             : '';
+
         return ` ${theme.title('\u25c6 disk-usage')}   ` +
             `${theme.label('root:')} ${theme.path(escapeTag(truncate(root, 80)))}   ` +
             `${sizeText}   ${theme.label('sort:')} ${theme.value(sortLabel())}` +
@@ -280,6 +281,7 @@ export async function openDiskUsageDashboard(): Promise<void> {
                 result.push(...buildRowsForDir(e.absPath, depth + 1, childTotal));
             }
         }
+
         return result;
     }
 
@@ -314,7 +316,9 @@ rebuildAndPush(api?.selectedRow()?.id);
             scanInFlight++;
             void (async (): Promise<void> => {
                 const result = await computeDirSize(e.absPath, () => myVersion !== scanVersion);
-                if (myVersion !== scanVersion) { scanInFlight--; return; }
+                if (myVersion !== scanVersion) { scanInFlight--;
+
+ return; }
                 e.sizeBytes = result.bytes;
                 e.itemCount = result.items;
                 if (result.error) e.sizeError = result.error;
@@ -335,6 +339,7 @@ rebuildAndPush(api?.selectedRow()?.id);
         const fresh = await listChildren(dir);
         cache.set(dir, fresh);
         scanSizesFor(dir, fresh);
+
         return fresh;
     }
 
@@ -353,6 +358,7 @@ rebuildAndPush(api?.selectedRow()?.id);
         const icon = r.entry.isSymlink ? '\ud83d\udd17' : (r.entry.isDir ? '\ud83d\udcc1' : '\ud83d\udcc4');
         const rawName = escapeTag(r.entry.name) + (r.entry.isDir ? '/' : '');
         const name = r.entry.isDir ? theme.dir(rawName) : theme.value(rawName);
+
         return `${select}${sizeStr} ${pctStr}  ${indent}${expandMarker}${icon} ${name}`;
     }
 
@@ -367,6 +373,7 @@ rebuildAndPush(api?.selectedRow()?.id);
         const errLine = e.sizeError
             ? `\n ${theme.err('scan error:')} ${escapeTag(e.sizeError)}`
             : '';
+
         return ` ${theme.label('path:')}    ${theme.path(escapeTag(e.absPath))}\n` +
             ` ${theme.label('type:')}    ${theme.value(typeText)}\n` +
             ` ${theme.label('size:')}    ${theme.size(sizeText)}   ${theme.dim(`(${pctText} of parent)`)}\n` +
@@ -397,11 +404,13 @@ rebuildAndPush(api?.selectedRow()?.id);
                 ? theme.link('L')
                 : (c.isDir ? theme.dir('D') : theme.file('F'));
             const name = c.isSymlink ? theme.link(rawName) : (c.isDir ? theme.dir(rawName) : theme.value(rawName));
+
             return ` ${sz}  ${icon} ${name}`;
         });
         const more = entries.length > sorted.length
             ? `\n ${theme.dim(`\u2026and ${entries.length - sorted.length} more`)}`
             : '';
+
         return ` ${theme.dim('children of')} ${theme.dir(escapeTag(sanitizeForBlessed(e.name)) + '/')}  ${theme.dim(`(${entries.length})`)}\n\n` +
             (lines.join('\n') || ` ${theme.dim('empty')}`) +
             more;
@@ -421,6 +430,7 @@ rebuildAndPush(api?.selectedRow()?.id);
                 if (/\u0000/.test(text)) return ` ${theme.dim('binary file (no preview)')}`;
                 text = sanitizeForBlessed(text);
                 if (bytesRead === cap) text += '\n\u2026';
+
                 return escapeTag(highlightCode(text, e.absPath));
             } finally {
                 await fh.close();
@@ -442,11 +452,13 @@ rebuildAndPush(api?.selectedRow()?.id);
                 ? theme.link('L')
                 : (e.isDir ? theme.dir('D') : theme.file('F'));
             const name = e.isSymlink ? theme.link(rawName) : (e.isDir ? theme.dir(rawName) : theme.value(rawName));
+
             return ` ${theme.dim((`${i + 1}`).padStart(2) + '.')} ${sz}  ${icon} ${name}`;
         });
         const flightLine = scanInFlight > 0
             ? `\n ${theme.dim(`scanning ${scanInFlight} dirs\u2026`)}`
             : '';
+
         return ` ${theme.section('top 10 in current root')}\n\n` +
             (lines.join('\n') || ` ${theme.dim('empty')}`) +
             flightLine;
@@ -552,6 +564,7 @@ rebuildAndPush(api?.selectedRow()?.id);
             const st = await fs.stat(expandedPath);
             if (!st.isDirectory()) {
                 a.flashHeader(` ${theme.err('not a directory')}`);
+
                 return;
             }
             await setRoot(expandedPath);
@@ -599,7 +612,7 @@ rebuildAndPush(api?.selectedRow()?.id);
             {
                 label: 'children',
                 focusName: 'children',
-                paint: (r) => paintChildrenContent(r.entry),
+                paint: async (r) => paintChildrenContent(r.entry),
             },
             {
                 label: 'top 10',
@@ -608,8 +621,8 @@ rebuildAndPush(api?.selectedRow()?.id);
             },
         ],
         actions: [
-            { keys: 'enter', handler: (_r, a) => descend(a) },
-            { keys: ['-', 'backspace'], handler: () => ascend() },
+            { keys: 'enter', handler: async (_r, a) => descend(a) },
+            { keys: ['-', 'backspace'], handler: async () => ascend() },
             {
                 keys: 'e',
                 handler: (r) => {
@@ -629,11 +642,11 @@ rebuildAndPush(api?.selectedRow()?.id);
                     a.refreshHeader();
                 },
             },
-            { keys: ['X', 'S-x'], handler: (_r, a) => deleteSelection(a) },
-            { keys: 'o', handler: (_r, a) => openSelected(a) },
-            { keys: 'r', handler: (_r, a) => refresh(a) },
-            { keys: ['R', 'S-r'], handler: (_r, a) => changeRootPrompt(a) },
-            { keys: ['H', 'S-h'], handler: () => setRoot(os.homedir()) },
+            { keys: ['X', 'S-x'], handler: async (_r, a) => deleteSelection(a) },
+            { keys: 'o', handler: async (_r, a) => openSelected(a) },
+            { keys: 'r', handler: async (_r, a) => refresh(a) },
+            { keys: ['R', 'S-r'], handler: async (_r, a) => changeRootPrompt(a) },
+            { keys: ['H', 'S-h'], handler: async () => setRoot(os.homedir()) },
             {
                 keys: 's',
                 handler: (_r, a) => {
