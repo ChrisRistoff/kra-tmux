@@ -12,6 +12,7 @@
  * Safe to re-run; nothing is overwritten.
  */
 
+import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -19,6 +20,64 @@ import { kraHome } from '@/filePaths';
 import { packageRoot, sourceAllShPath, neovimHooksLuaPath, settingsExamplePath, defaultTmuxConfPath } from '@/packagePaths';
 
 const LEGACY_PROJECT_ROOT = path.join(os.homedir(), 'programming', 'kra-tmux');
+const ASSET_HASHES_FILE = '.asset-hashes.json';
+
+function fileHash(filePath: string): string {
+    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function loadHashStore(home: string): Record<string, string> {
+    const p = path.join(home, ASSET_HASHES_FILE);
+    if (!fs.existsSync(p)) return {};
+    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; }
+}
+
+function saveHashStore(home: string, store: Record<string, string>): void {
+    fs.writeFileSync(path.join(home, ASSET_HASHES_FILE), JSON.stringify(store, null, 2));
+}
+
+/**
+ * Copies `src` to `target` on first use, then keeps `target` in sync with
+ * future template updates — but only when the user has not modified the file
+ * (detected by comparing the target's current hash to the hash we stored when
+ * we last wrote it).
+ */
+function syncManagedFile(
+    home: string,
+    src: string,
+    target: string,
+    label: string,
+    store: Record<string, string>,
+): void {
+    if (!fs.existsSync(src)) return;
+    const key = path.relative(home, target);
+    const srcHash = fileHash(src);
+
+    if (!fs.existsSync(target)) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(src, target);
+        store[key] = srcHash;
+        console.log(`[kra] wrote ${label} from template`);
+        return;
+    }
+
+    const lastInstalledHash = store[key];
+    if (!lastInstalledHash) {
+        // First time we're tracking this file; record the current state without overwriting.
+        store[key] = fileHash(target);
+        return;
+    }
+
+    if (srcHash !== lastInstalledHash) {
+        const userHash = fileHash(target);
+        if (userHash === lastInstalledHash) {
+            fs.copyFileSync(src, target);
+            store[key] = srcHash;
+            console.log(`[kra] updated ${label} to latest template`);
+        }
+        // User has customised the file — leave it untouched.
+    }
+}
 
 function copyDirRecursive(src: string, dest: string): void {
     if (!fs.existsSync(src)) return;
@@ -97,21 +156,29 @@ function migrateFromLegacy(home: string): void {
     copyFileIfMissing(legacyQuotaCache, path.join(home, 'quota-cache.json'));
 }
 
-function ensureDefaultTmuxConf(home: string): void {
-    const target = path.join(home, 'tmux-files', '.tmux.conf');
-    if (fs.existsSync(target)) return;
-    if (fs.existsSync(defaultTmuxConfPath)) {
-        fs.copyFileSync(defaultTmuxConfPath, target);
-        console.log('[kra] wrote default .tmux.conf from template');
-    }
+function ensureDefaultTmuxConf(home: string, store: Record<string, string>): void {
+    syncManagedFile(home, defaultTmuxConfPath, path.join(home, 'tmux-files', '.tmux.conf'), '.tmux.conf', store);
+}
+
+function countLines(filePath: string): number {
+    return fs.readFileSync(filePath, 'utf8').split('\n').length;
 }
 
 function ensureDefaultSettings(home: string): void {
     const target = path.join(home, 'settings.toml');
-    if (fs.existsSync(target)) return;
-    if (fs.existsSync(settingsExamplePath)) {
+    if (!fs.existsSync(settingsExamplePath)) return;
+    if (!fs.existsSync(target)) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.copyFileSync(settingsExamplePath, target);
-        console.log(`[kra] wrote default settings.toml from template`);
+        console.log('[kra] wrote default settings.toml from template');
+        return;
+    }
+    // Only overwrite the user's settings when the template has grown or
+    // shrunk (new settings added / removed). If line counts match the user
+    // may have customised values — leave the file untouched.
+    if (countLines(settingsExamplePath) !== countLines(target)) {
+        fs.copyFileSync(settingsExamplePath, target);
+        console.log('[kra] updated settings.toml to latest template (line count changed)');
     }
 }
 
@@ -154,14 +221,20 @@ export function isInstalled(): boolean {
 
 export function runInstall(opts: InstallOptions = {}): void {
     const home = kraHome();
+
+    // Idempotent file-presence checks run unconditionally so that defaults
+    // added in newer package versions are seeded for existing installs too.
+    const fresh = ensureKraHomeSkeleton(home);
+    const hashStore = loadHashStore(home);
+    ensureDefaultSettings(home);
+    ensureDefaultTmuxConf(home, hashStore);
+    saveHashStore(home, hashStore);
+
     if (isInstalled() && !opts.force) return;
 
-    const fresh = ensureKraHomeSkeleton(home);
     if (fresh) {
         migrateFromLegacy(home);
     }
-    ensureDefaultSettings(home);
-    ensureDefaultTmuxConf(home);
     patchShellRcs();
     patchNeovimConfig();
 
