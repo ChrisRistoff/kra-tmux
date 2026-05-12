@@ -130,13 +130,19 @@ export async function upsertRegistryEntry(
         const reg = await loadRegistry();
         const existing: RegistryEntry | undefined = reg.repos[id];
 
+        // `existing` is undefined on first-time registration. Using
+        // `existing.X` directly here threw a TypeError on the first index
+        // of any new repo (most visible via the `repoKey` line, since the
+        // caller does not pass it), which propagated as an unhandled
+        // rejection and silently killed the agent process after indexing
+        // finished.
         const next: RegistryEntry = {
-            alias: patch.alias ?? existing.alias ?? id,
-            rootPath: patch.rootPath ?? existing.rootPath ?? '',
-            repoKey: patch.repoKey ?? existing.repoKey ?? computeRepoKey(id),
-            lastIndexedCommit: patch.lastIndexedCommit ?? existing.lastIndexedCommit ?? '',
-            lastIndexedAt: patch.lastIndexedAt ?? existing.lastIndexedAt ?? 0,
-            chunksCount: patch.chunksCount ?? existing.chunksCount ?? 0,
+            alias: patch.alias ?? existing?.alias ?? id,
+            rootPath: patch.rootPath ?? existing?.rootPath ?? '',
+            repoKey: patch.repoKey ?? existing?.repoKey ?? computeRepoKey(id),
+            lastIndexedCommit: patch.lastIndexedCommit ?? existing?.lastIndexedCommit ?? '',
+            lastIndexedAt: patch.lastIndexedAt ?? existing?.lastIndexedAt ?? 0,
+            chunksCount: patch.chunksCount ?? existing?.chunksCount ?? 0,
         };
 
         reg.repos[id] = next;

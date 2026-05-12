@@ -245,7 +245,13 @@ void ensureContentFtsIndex(t, key, codeFtsEnsuredKeys);
             [seedRow as unknown as Record<string, unknown>],
         );
         codeChunksTableCache.set(key, t);
-void ensureContentFtsIndex(t, key, codeFtsEnsuredKeys);
+        // MUST await on the create path: firing this concurrently with the
+        // bulk writes that immediately follow a fresh reindex (table.add /
+        // table.delete on the same table) can crash LanceDB's native side
+        // and silently terminate the Node process. On the open path above
+        // we already short-circuit when the FTS index exists, so it's safe
+        // to keep that one fire-and-forget.
+        await ensureContentFtsIndex(t, key, codeFtsEnsuredKeys);
 
         return { table: t, justCreated: true };
     });
@@ -365,7 +371,10 @@ export async function getDocChunksTable(seedRow: DocChunkRow | null): Promise<Ge
             DOC_CHUNKS_TABLE,
             [seedRow as unknown as Record<string, unknown>],
         );
-        void ensureContentFtsIndex(docChunksTableCache, DOC_FTS_KEY, docFtsEnsuredKeys);
+        // See getCodeChunksTable: must await on the create path so the
+        // FTS index build does not race with the writes the caller is
+        // about to issue against the freshly-created table.
+        await ensureContentFtsIndex(docChunksTableCache, DOC_FTS_KEY, docFtsEnsuredKeys);
 
         return { table: docChunksTableCache, justCreated: true };
     });
