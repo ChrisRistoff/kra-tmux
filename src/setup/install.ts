@@ -12,7 +12,7 @@
  * Safe to re-run; nothing is overwritten.
  */
 
-import crypto from 'crypto';
+import * as toml from 'smol-toml';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -20,64 +20,7 @@ import { kraHome } from '@/filePaths';
 import { packageRoot, sourceAllShPath, neovimHooksLuaPath, settingsExamplePath, defaultTmuxConfPath } from '@/packagePaths';
 
 const LEGACY_PROJECT_ROOT = path.join(os.homedir(), 'programming', 'kra-tmux');
-const ASSET_HASHES_FILE = '.asset-hashes.json';
 
-function fileHash(filePath: string): string {
-    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
-}
-
-function loadHashStore(home: string): Record<string, string> {
-    const p = path.join(home, ASSET_HASHES_FILE);
-    if (!fs.existsSync(p)) return {};
-    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; }
-}
-
-function saveHashStore(home: string, store: Record<string, string>): void {
-    fs.writeFileSync(path.join(home, ASSET_HASHES_FILE), JSON.stringify(store, null, 2));
-}
-
-/**
- * Copies `src` to `target` on first use, then keeps `target` in sync with
- * future template updates — but only when the user has not modified the file
- * (detected by comparing the target's current hash to the hash we stored when
- * we last wrote it).
- */
-function syncManagedFile(
-    home: string,
-    src: string,
-    target: string,
-    label: string,
-    store: Record<string, string>,
-): void {
-    if (!fs.existsSync(src)) return;
-    const key = path.relative(home, target);
-    const srcHash = fileHash(src);
-
-    if (!fs.existsSync(target)) {
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.copyFileSync(src, target);
-        store[key] = srcHash;
-        console.log(`[kra] wrote ${label} from template`);
-        return;
-    }
-
-    const lastInstalledHash = store[key];
-    if (!lastInstalledHash) {
-        // First time we're tracking this file; record the current state without overwriting.
-        store[key] = fileHash(target);
-        return;
-    }
-
-    if (srcHash !== lastInstalledHash) {
-        const userHash = fileHash(target);
-        if (userHash === lastInstalledHash) {
-            fs.copyFileSync(src, target);
-            store[key] = srcHash;
-            console.log(`[kra] updated ${label} to latest template`);
-        }
-        // User has customised the file — leave it untouched.
-    }
-}
 
 function copyDirRecursive(src: string, dest: string): void {
     if (!fs.existsSync(src)) return;
@@ -156,29 +99,136 @@ function migrateFromLegacy(home: string): void {
     copyFileIfMissing(legacyQuotaCache, path.join(home, 'quota-cache.json'));
 }
 
-function ensureDefaultTmuxConf(home: string, store: Record<string, string>): void {
-    syncManagedFile(home, defaultTmuxConfPath, path.join(home, 'tmux-files', '.tmux.conf'), '.tmux.conf', store);
+const LAST_TMUX_TEMPLATE_FILE = '.last-tmux-template';
+
+function ensureDefaultTmuxConf(home: string): void {
+    const target           = path.join(home, 'tmux-files', '.tmux.conf');
+    const lastTemplatePath = path.join(home, LAST_TMUX_TEMPLATE_FILE);
+    if (!fs.existsSync(defaultTmuxConfPath)) return;
+
+    const templateText = fs.readFileSync(defaultTmuxConfPath, 'utf8');
+
+    if (!fs.existsSync(target)) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(defaultTmuxConfPath, target);
+        fs.writeFileSync(lastTemplatePath, templateText);
+        console.log('[kra] wrote .tmux.conf from template');
+
+        return;
+    }
+
+    if (!fs.existsSync(lastTemplatePath)) {
+        // First time we’re tracking this file — save the current template as
+        // the baseline without touching the user’s file.
+        fs.writeFileSync(lastTemplatePath, templateText);
+
+        return;
+    }
+
+    const lastTemplate = fs.readFileSync(lastTemplatePath, 'utf8');
+    if (lastTemplate === templateText) return; // nothing changed
+
+    // Find lines that are genuinely new in the template (not present in the
+    // last-installed version). We never re-add lines the user removed.
+    const lastLines = new Set(lastTemplate.split('\n'));
+    const userText  = fs.readFileSync(target, 'utf8');
+    const userLines = new Set(userText.split('\n').map(l => l.trim()));
+
+    const linesToAppend = templateText
+        .split('\n')
+        .filter(l => !lastLines.has(l) && !userLines.has(l.trim()));
+
+    if (linesToAppend.length > 0) {
+        fs.appendFileSync(target, '\n# kra: settings added by template update\n' + linesToAppend.join('\n') + '\n');
+        console.log('[kra] appended new .tmux.conf settings from template update');
+    }
+
+    fs.writeFileSync(lastTemplatePath, templateText);
 }
 
-function countLines(filePath: string): number {
-    return fs.readFileSync(filePath, 'utf8').split('\n').length;
+interface TomlBlock {
+    header: string;
+    isArrayTable: boolean;
+    alias: string | undefined;
+    text: string;
+}
+
+function splitTemplateIntoBlocks(templateText: string): TomlBlock[] {
+    const lines = templateText.split('\n');
+    const blocks: TomlBlock[] = [];
+    let currentLines: string[] = [];
+    let currentHeader: string | null = null;
+    let currentIsArray = false;
+    const headerRe = /^\[\[([^\]]+)\]\]$|^\[([^\]]+)\]$/;
+
+    for (const line of lines) {
+        const m = line.trim().match(headerRe);
+        if (m) {
+            if (currentHeader !== null && currentLines.length > 0) {
+                const text = currentLines.join('\n');
+                const aliasMatch = text.match(/^alias\s*=\s*["']([^"']+)["']/m);
+                blocks.push({ header: currentHeader, isArrayTable: currentIsArray, alias: aliasMatch?.[1], text });
+            }
+            currentHeader = m[1] || m[2];
+            currentIsArray = m[1] !== undefined;
+            currentLines = [line];
+        } else {
+            currentLines.push(line);
+        }
+    }
+
+    if (currentHeader !== null && currentLines.length > 0) {
+        const text = currentLines.join('\n');
+        const aliasMatch = text.match(/^alias\s*=\s*["']([^"']+)["']/m);
+        blocks.push({ header: currentHeader, isArrayTable: currentIsArray, alias: aliasMatch?.[1], text });
+    }
+
+    return blocks;
 }
 
 function ensureDefaultSettings(home: string): void {
     const target = path.join(home, 'settings.toml');
     if (!fs.existsSync(settingsExamplePath)) return;
+
     if (!fs.existsSync(target)) {
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.copyFileSync(settingsExamplePath, target);
         console.log('[kra] wrote default settings.toml from template');
+
         return;
     }
-    // Only overwrite the user's settings when the template has grown or
-    // shrunk (new settings added / removed). If line counts match the user
-    // may have customised values — leave the file untouched.
-    if (countLines(settingsExamplePath) !== countLines(target)) {
-        fs.copyFileSync(settingsExamplePath, target);
-        console.log('[kra] updated settings.toml to latest template (line count changed)');
+
+    const templateText = fs.readFileSync(settingsExamplePath, 'utf8');
+    const userText = fs.readFileSync(target, 'utf8');
+
+    // Bail out early if either file doesn't parse as valid TOML.
+    try {
+        toml.parse(templateText);
+        toml.parse(userText);
+    } catch {
+        return;
+    }
+
+    const blocksToAppend: string[] = [];
+
+    for (const block of splitTemplateIntoBlocks(templateText)) {
+        if (block.isArrayTable) {
+            // [[ai.docs.sources]] etc. — deduplicate by alias value.
+            if (block.alias) {
+                const aliasRe = new RegExp(`alias\\s*=\\s*["']${block.alias}["']`);
+                if (!aliasRe.test(userText)) blocksToAppend.push(block.text);
+            }
+        } else {
+            // [section] — append only if the exact header is absent.
+            const escaped = block.header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const headerRe = new RegExp(`^\\[${escaped}\\]\\s*$`, 'm');
+            if (!headerRe.test(userText)) blocksToAppend.push(block.text);
+        }
+    }
+
+    if (blocksToAppend.length > 0) {
+        fs.appendFileSync(target, '\n' + blocksToAppend.join('\n'));
+        console.log('[kra] appended new settings sections to settings.toml');
     }
 }
 
@@ -225,10 +275,8 @@ export function runInstall(opts: InstallOptions = {}): void {
     // Idempotent file-presence checks run unconditionally so that defaults
     // added in newer package versions are seeded for existing installs too.
     const fresh = ensureKraHomeSkeleton(home);
-    const hashStore = loadHashStore(home);
     ensureDefaultSettings(home);
-    ensureDefaultTmuxConf(home, hashStore);
-    saveHashStore(home, hashStore);
+    ensureDefaultTmuxConf(home);
 
     if (isInstalled() && !opts.force) return;
 
