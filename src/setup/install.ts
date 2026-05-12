@@ -117,22 +117,24 @@ function ensureDefaultTmuxConf(home: string): void {
         return;
     }
 
-    if (!fs.existsSync(lastTemplatePath)) {
-        // First time we’re tracking this file — save the current template as
-        // the baseline without touching the user’s file.
-        fs.writeFileSync(lastTemplatePath, templateText);
+    const userText  = fs.readFileSync(target, 'utf8');
+    const userLines = new Set(userText.split('\n').map(l => l.trim()));
 
+    // Use an empty baseline when there is no tracking file - this treats every
+    // template line as potentially missing, but we still skip lines the user
+    // already has, so existing content is never duplicated.
+    const lastTemplate = fs.existsSync(lastTemplatePath)
+        ? fs.readFileSync(lastTemplatePath, 'utf8')
+        : '';
+
+    if (lastTemplate === templateText) {
+        fs.writeFileSync(lastTemplatePath, templateText);
         return;
     }
 
-    const lastTemplate = fs.readFileSync(lastTemplatePath, 'utf8');
-    if (lastTemplate === templateText) return; // nothing changed
-
-    // Find lines that are genuinely new in the template (not present in the
-    // last-installed version). We never re-add lines the user removed.
+    // Only append lines that are genuinely new in the template (not present in
+    // the last-installed version). We never re-add lines the user removed.
     const lastLines = new Set(lastTemplate.split('\n'));
-    const userText  = fs.readFileSync(target, 'utf8');
-    const userLines = new Set(userText.split('\n').map(l => l.trim()));
 
     const linesToAppend = templateText
         .split('\n')
