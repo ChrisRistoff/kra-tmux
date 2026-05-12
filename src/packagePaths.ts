@@ -64,4 +64,5 @@ export const docsPythonRequirementsPath = path.join(automationScriptsDir, 'pytho
 
 // Default settings template that ships with the package
 export const settingsExamplePath = assetPath('settings.toml.example');
+export const defaultTmuxConfPath = assetPath('tmux-files', '.tmux.conf');
 
