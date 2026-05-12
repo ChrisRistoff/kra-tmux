@@ -16,7 +16,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { kraHome } from '@/filePaths';
-import { packageRoot, sourceAllShPath, neovimHooksLuaPath, settingsExamplePath } from '@/packagePaths';
+import { packageRoot, sourceAllShPath, neovimHooksLuaPath, settingsExamplePath, defaultTmuxConfPath } from '@/packagePaths';
 
 const LEGACY_PROJECT_ROOT = path.join(os.homedir(), 'programming', 'kra-tmux');
 
@@ -97,6 +97,15 @@ function migrateFromLegacy(home: string): void {
     copyFileIfMissing(legacyQuotaCache, path.join(home, 'quota-cache.json'));
 }
 
+function ensureDefaultTmuxConf(home: string): void {
+    const target = path.join(home, 'tmux-files', '.tmux.conf');
+    if (fs.existsSync(target)) return;
+    if (fs.existsSync(defaultTmuxConfPath)) {
+        fs.copyFileSync(defaultTmuxConfPath, target);
+        console.log('[kra] wrote default .tmux.conf from template');
+    }
+}
+
 function ensureDefaultSettings(home: string): void {
     const target = path.join(home, 'settings.toml');
     if (fs.existsSync(target)) return;
@@ -152,6 +161,7 @@ export function runInstall(opts: InstallOptions = {}): void {
         migrateFromLegacy(home);
     }
     ensureDefaultSettings(home);
+    ensureDefaultTmuxConf(home);
     patchShellRcs();
     patchNeovimConfig();
 
