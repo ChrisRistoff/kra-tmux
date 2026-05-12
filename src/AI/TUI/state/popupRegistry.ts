@@ -161,15 +161,25 @@ export class PopupRegistry {
             }
         }
         // Focus priority:
-        //   1. Topmost overlay if any exist — the user almost certainly
-        //      wants to interact with whatever popup just became visible.
-        //   2. lastFocus, if still alive (e.g. the prompt was focused
-        //      when nothing was open).
+        //   1. lastFocus, if it's still alive and lives inside an overlay —
+        //      restores focus to the exact widget (list, input pane, …) the
+        //      user was interacting with before the hide.
+        //   2. Topmost overlay box — covers the case where lastFocus is null,
+        //      detached, or was outside any overlay (e.g. a background pane).
+        //   3. lastFocus even if outside an overlay — e.g. the prompt pane.
         // `findOverlays` walks depth-first; the last entry is the most
         // recently added (topmost) overlay.
         const topmost = overlays.length > 0 ? overlays[overlays.length - 1] : null;
-        const target = topmost
-            ?? ((this.lastFocus && !this.isDetached(this.lastFocus)) ? this.lastFocus : null);
+        // Prefer the exact element that had focus before hiding — it may be a
+        // nested interactive widget (list, input pane, …) inside an overlay box.
+        // Fall back to the topmost overlay box only when lastFocus is gone,
+        // detached, or lives outside every known overlay.
+        const lastFocusInOverlay = this.lastFocus
+            && !this.isDetached(this.lastFocus)
+            && this.isInsideAnyOverlay(this.lastFocus, overlays);
+        const target = lastFocusInOverlay
+            ? this.lastFocus
+            : (topmost ?? (this.lastFocus && !this.isDetached(this.lastFocus) ? this.lastFocus : null));
         if (target) {
             try { target.focus(); } catch { /* ignore */ }
         }

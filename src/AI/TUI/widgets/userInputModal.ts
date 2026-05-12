@@ -19,7 +19,6 @@
 
 import * as blessed from 'blessed';
 import { markOverlay } from '../state/popupRegistry';
-import { pauseScreenKeys } from '@/UI/dashboard/screen';
 import { showFreeformInputModal } from './freeformInputModal';
 import { BG_PRIMARY } from '../theme';
 
@@ -50,10 +49,6 @@ export async function showUserInputModal(
     return new Promise<UserInputResponse>((resolve) => {
         const savedFocus = screen.focused;
         const numericKeys = items.map((_, i) => String((i + 1) % 10));
-        const restoreKeys = pauseScreenKeys(
-            screen,
-            ['escape', 'q', 'C-c', 'enter', 'up', 'down', 'k', 'j', ...numericKeys],
-        );
 
         const questionLines = wrapLines(opts.question, 72);
         const itemLines = items.length;
@@ -75,7 +70,7 @@ export async function showUserInputModal(
             keys: false,
             mouse: false,
         });
-        const overlay = markOverlay(box);
+        const overlay = markOverlay(box, { screen, pausedKeys: ['escape', 'q', 'C-c', 'enter', 'up', 'down', 'k', 'j', ...numericKeys] });
         box.setFront();
 
         let selected = 0;
@@ -97,7 +92,6 @@ export async function showUserInputModal(
 
         const cleanup = (): void => {
             overlay.release();
-            restoreKeys();
             box.destroy();
             if (savedFocus) {
                 try { (savedFocus).focus(); } catch { /* ignore */ }

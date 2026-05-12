@@ -19,7 +19,6 @@
 
 import * as blessed from 'blessed';
 import { markOverlay } from '../state/popupRegistry';
-import { pauseScreenKeys } from '@/UI/dashboard/screen';
 import { createPromptPane, type PromptMode } from './promptPane';
 import { pushActiveInputPane } from '../state/activeInputPane';
 import { BG_PRIMARY, BG_PANEL } from '../theme';
@@ -49,12 +48,6 @@ export async function showFreeformInputModal(
 ): Promise<string | null> {
     return new Promise<string | null>((resolve) => {
         const savedFocus = screen.focused;
-        // While this modal is up, swallow the screen-level leader/quit
-        // keys so they don't fire under the popup.
-        const restoreKeys = pauseScreenKeys(
-            screen,
-            ['escape', 'q', 'C-c', 'C-q', 'enter'],
-        );
 
         const screenH = (screen.height as number) || 24;
         const height = Math.min(Math.max(12, Math.floor(screenH * 0.45)), screenH - 4);
@@ -72,7 +65,7 @@ export async function showFreeformInputModal(
             keys: false,
             mouse: false,
         });
-        const overlay = markOverlay(box);
+        const overlay = markOverlay(box, { screen, pausedKeys: ['escape', 'q', 'C-c', 'C-q', 'enter'] });
         box.setFront();
 
         // Bottom hint line.
@@ -107,7 +100,6 @@ export async function showFreeformInputModal(
 
         const cleanup = (val: string | null): void => {
             overlay.release();
-            restoreKeys();
             try { popInputPane(); } catch { /* noop */ }
             try { box.destroy(); } catch { /* noop */ }
             if (savedFocus) {
