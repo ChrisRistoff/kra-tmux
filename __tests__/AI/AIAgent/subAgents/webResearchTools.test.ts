@@ -68,7 +68,7 @@ describe('webResearchTools.web_search', () => {
 
         const factory = createWebResearchTools('rid', SETTINGS);
         const tool = findTool(factory.tools, 'web_search');
-        const out = JSON.parse(await tool.handler({ query: 'foo', max_results: 3 }) as string);
+        const out = JSON.parse(await tool.handler({ query: 'foo', max_results: 3 }));
 
         expect(mockedSearchPages).toHaveBeenCalledWith('foo', 3);
         expect(out.results).toHaveLength(1);
@@ -83,7 +83,7 @@ describe('webResearchTools.web_search', () => {
         const tool = findTool(factory.tools, 'web_search');
         await tool.handler({ query: 'q1' });
         await tool.handler({ query: 'q2' });
-        const out = JSON.parse(await tool.handler({ query: 'q3' }) as string);
+        const out = JSON.parse(await tool.handler({ query: 'q3' }));
 
         expect(out.error).toMatch(/web_search quota exhausted/);
         expect(mockedSearchPages).toHaveBeenCalledTimes(2);
@@ -133,7 +133,7 @@ describe('webResearchTools.web_scrape_and_index', () => {
         const raw = await tool.handler({
             urls: ['https://a', 'https://b'],
             queries: ['what is foo?', 'why is foo idempotent?'],
-        }) as string;
+        });
         const out = JSON.parse(raw);
 
         expect(out.scraped).toBe(2);
@@ -146,7 +146,7 @@ describe('webResearchTools.web_scrape_and_index', () => {
         expect(mockedFetch).toHaveBeenCalledTimes(2);
         expect(mockedEmbedMany).toHaveBeenCalledTimes(1);
         // breadcrumb prefix is reconstructed from sectionPath
-        const embeddedTexts = mockedEmbedMany.mock.calls[0]?.[0] as string[];
+        const embeddedTexts = mockedEmbedMany.mock.calls[0]?.[0];
         expect(embeddedTexts[0]).toMatch(/^# Intro\n\n/);
         // every inserted row carries the researchId
         const insertedRows = mockedInsert.mock.calls[0]?.[0] ?? [];
@@ -188,7 +188,7 @@ describe('webResearchTools.web_scrape_and_index', () => {
         const out = JSON.parse(await tool.handler({
             urls: ['https://ok', 'https://bad'],
             queries: ['q'],
-        }) as string);
+        }));
 
         expect(out.scraped).toBe(1);
         expect(out.failed).toEqual([{ url: 'https://bad', error: 'HTTP 500' }]);
@@ -210,11 +210,11 @@ describe('webResearchTools.web_scrape_and_index', () => {
         const factory = createWebResearchTools('rid', SETTINGS);
         const tool = findTool(factory.tools, 'web_scrape_and_index');
 
-        const noUrls = JSON.parse(await tool.handler({ urls: [], queries: ['q'] }) as string);
+        const noUrls = JSON.parse(await tool.handler({ urls: [], queries: ['q'] }));
         expect(noUrls.error).toMatch(/No URLs/);
 
         // Still consumes one quota slot — call again with valid urls but no queries.
-        const noQueries = JSON.parse(await tool.handler({ urls: ['https://a'], queries: [] }) as string);
+        const noQueries = JSON.parse(await tool.handler({ urls: ['https://a'], queries: [] }));
         expect(noQueries.error).toMatch(/No queries/);
     });
 
@@ -224,7 +224,7 @@ describe('webResearchTools.web_scrape_and_index', () => {
         const tool = findTool(factory.tools, 'web_scrape_and_index');
 
         await tool.handler({ urls: ['https://a'], queries: ['q'] });
-        const out = JSON.parse(await tool.handler({ urls: ['https://b'], queries: ['q'] }) as string);
+        const out = JSON.parse(await tool.handler({ urls: ['https://b'], queries: ['q'] }));
         expect(out.error).toMatch(/quota exhausted/);
     });
 });
@@ -246,7 +246,7 @@ describe('webResearchTools.research_query', () => {
 
         const factory = createWebResearchTools('rid', SETTINGS);
         const tool = findTool(factory.tools, 'research_query');
-        const out = JSON.parse(await tool.handler({ query: 'sub-q', k: 3 }) as string);
+        const out = JSON.parse(await tool.handler({ query: 'sub-q', k: 3 }));
 
         expect(mockedEmbedOne).toHaveBeenCalledWith('sub-q');
         expect(mockedSearchChunks).toHaveBeenCalledWith(
@@ -263,7 +263,7 @@ describe('webResearchTools.research_query', () => {
     it('rejects an empty query', async () => {
         const factory = createWebResearchTools('rid', SETTINGS);
         const tool = findTool(factory.tools, 'research_query');
-        const out = JSON.parse(await tool.handler({ query: '' }) as string);
+        const out = JSON.parse(await tool.handler({ query: '' }));
         expect(out.error).toMatch(/Missing required argument/);
         expect(mockedEmbedOne).not.toHaveBeenCalled();
     });

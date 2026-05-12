@@ -516,6 +516,7 @@ export async function manageSessions(): Promise<void> {
         listWidth: '50%',
         headerContent: () => {
             const total = entries.length;
+
             return `${theme.title('tmux saves')}  ${theme.dim('|')}  ${theme.count(total)} files`;
         },
         detailPanels: [
@@ -524,6 +525,7 @@ export async function manageSessions(): Promise<void> {
                 focusName: 'summary',
                 paint: async (entry) => {
                     await ensureSessions(entry);
+
                     return renderSummary(entry);
                 },
             },
@@ -532,6 +534,7 @@ export async function manageSessions(): Promise<void> {
                 focusName: 'details',
                 paint: async (entry) => {
                     await ensureSessions(entry);
+
                     return renderDetails(entry);
                 },
             },

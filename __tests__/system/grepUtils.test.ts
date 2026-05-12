@@ -9,6 +9,7 @@ const mockExecCommand = jest.mocked(bash.execCommand);
 
 jest.mock('child_process', () => {
     const actual = jest.requireActual('child_process');
+
     return { ...actual, spawn: jest.fn() };
 });
 const mockSpawn = jest.mocked(childProcess.spawn);
@@ -26,6 +27,7 @@ function fakeChild(stdout: string): childProcess.ChildProcess {
         out.emit('end');
         child.emit('close', 0);
     });
+
     return child;
 }
 
@@ -149,7 +151,7 @@ describe('grepUtils', () => {
             mockExecCommand.mockResolvedValueOnce({ stdout: 'total 0\n', stderr: '' });
             const result = await grepUtils.loadPreview(makeDir('./mydir'), 'dirs');
             expect(result).toBe('total 0\n');
-            expect((mockExecCommand.mock.calls[0][0] as string)).toContain('ls -la');
+            expect((mockExecCommand.mock.calls[0][0])).toContain('ls -la');
         });
 
         it('returns "(empty directory)" when ls output is empty', async () => {
@@ -170,7 +172,7 @@ describe('grepUtils', () => {
         it('runs head for file in files mode', async () => {
             mockExecCommand.mockResolvedValueOnce({ stdout: 'line1\nline2\n', stderr: '' });
             const result = await grepUtils.loadPreview(makeFile('./a.ts'), 'files');
-            expect((mockExecCommand.mock.calls[0][0] as string)).toContain('head');
+            expect((mockExecCommand.mock.calls[0][0])).toContain('head');
             expect(result).toBe('line1\nline2\n');
         });
 

@@ -28,6 +28,7 @@ interface ScriptEntry {
 async function loadScripts(): Promise<ScriptEntry[]> {
     try {
         const names = filterGitKeep(await fs.readdir(systemScriptsPath));
+
         return names.map((name) => ({ name, absPath: path.join(systemScriptsPath, name) }));
     } catch {
         return [];
@@ -38,6 +39,7 @@ async function loadPreview(absPath: string): Promise<string> {
     try {
         const { stdout } = await execCommand(`head -n 100 ${JSON.stringify(absPath)} 2>/dev/null`);
         if (!stdout.trim()) return theme.dim('(empty script)');
+
         return escTag(highlightCode(sanitizeForBlessed(stdout), absPath));
     } catch {
         return theme.err('(could not read script)');
@@ -53,6 +55,7 @@ async function loadMeta(entry: ScriptEntry): Promise<string> {
         const lineCount = wcOut.split(/\s+/)[0] ?? '?';
         const modified = lsOut.split(/\s+/).slice(5, 8).join(' ') || '?';
         const size = lsOut.split(/\s+/)[4] ?? '?';
+
         return (
             `${theme.label('name    ')}${theme.value(escTag(entry.name))}\n` +
             `${theme.label('path    ')}${theme.path(escTag(entry.absPath))}\n` +
@@ -68,6 +71,7 @@ async function loadMeta(entry: ScriptEntry): Promise<string> {
 
 function renderRow(entry: ScriptEntry, isSelected: boolean): string {
     const marker = isSelected ? `${theme.selected('▶')} ` : '  ';
+
     return `${marker}${theme.success('📜')} ${theme.value(escTag(entry.name))}`;
 }
 
@@ -101,6 +105,7 @@ export async function openScriptsDashboard(): Promise<void> {
                     if (cached !== undefined) return cached;
                     const v = await loadPreview(entry.absPath);
                     previewCache.set(entry.absPath, v);
+
                     return v;
                 },
             },
@@ -112,6 +117,7 @@ export async function openScriptsDashboard(): Promise<void> {
                     if (cached !== undefined) return cached;
                     const v = await loadMeta(entry);
                     metaCache.set(entry.absPath, v);
+
                     return v;
                 },
             },

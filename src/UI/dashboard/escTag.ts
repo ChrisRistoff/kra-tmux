@@ -21,5 +21,6 @@ export function sanitizeForBlessed(s: string): string {
         if (cp > 0x7e) { out += '?'; continue; }
         out += ch;
     }
+
     return out;
 }

@@ -7,7 +7,6 @@ import { loadChat } from '@/AI/AIChat/commands/loadChat';
 import { aiHistoryPath } from '@/filePaths';
 import { pickProviderAndModel } from '@/AI/AIChat/utils/aiUtils';
 import { getModelCatalog } from '@/AI/shared/data/modelCatalog';
-import { Role } from '@/AI/shared/types/aiTypes';
 import * as path from 'path';
 
 jest.mock('fs/promises');
@@ -30,8 +29,9 @@ describe('loadChat', () => {
     const savedChatName = 'chat1';
     const fakeChats = [savedChatName];
     const fixedTimestamp = 123456789;
-    const chatFile = `/tmp/ai-chat-${fixedTimestamp}.md`;
-    const chatHistoryPath = path.join(aiHistoryPath, savedChatName, `${savedChatName}.md`);
+    // Stage 6 chat TUI: loadChat now hands the saved JSON path directly
+    // to converse() (no /tmp/ai-chat-*.md scratch file).
+    const chatDataPath = path.join(aiHistoryPath, savedChatName, `${savedChatName}.json`);
     const chatSummaryPath = path.join(aiHistoryPath, savedChatName, 'summary.md');
 
     const validChatData = {
@@ -97,9 +97,8 @@ describe('loadChat', () => {
             details: expect.any(Function),
         }));
         expect(fs.writeFile).toHaveBeenCalledWith(chatSummaryPath, 'Saved summary\n');
-        expect(fs.copyFile).toHaveBeenCalledWith(chatHistoryPath, chatFile);
         expect(conversation.converse).toHaveBeenCalledWith(
-            chatFile,
+            chatDataPath,
             validChatData.temperature,
             validChatData.role,
             validChatData.provider,
@@ -123,38 +122,13 @@ describe('loadChat', () => {
 
         expect(bash.execCommand).not.toHaveBeenCalled();
         expect(conversation.converse).toHaveBeenCalledWith(
-            chatFile,
+            chatDataPath,
             validChatData.temperature,
             validChatData.role,
             validChatData.provider,
             validChatData.model,
             true,
         );
-    });
-
-    it('should rebuild saved chat history without appending a blank draft user turn', async () => {
-        const chatDataWithHistory = {
-            ...validChatData,
-            chatHistory: [
-                { role: Role.User, message: 'First prompt', timestamp: '2026-04-28T10:00:00.000Z' },
-                { role: Role.AI, message: 'First reply', timestamp: '2026-04-28T10:00:01.000Z' },
-            ],
-        };
-
-        (fs.readdir as jest.Mock).mockResolvedValue(fakeChats);
-        (ui.searchSelectAndReturnFromArray as jest.Mock).mockResolvedValue(savedChatName);
-        (ui.promptUserYesOrNo as jest.Mock).mockResolvedValue(true);
-        (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify(chatDataWithHistory));
-        (fs.appendFile as jest.Mock).mockResolvedValue(undefined);
-        (conversation.converse as jest.Mock).mockResolvedValue(undefined);
-
-        await loadChat();
-
-        expect(conversation.initializeChatFile).toHaveBeenCalledWith(chatFile);
-        expect(fs.appendFile).toHaveBeenCalledWith(chatFile, expect.stringContaining('First prompt'));
-
-        const transcript = (fs.appendFile as jest.Mock).mock.calls[0][1] as string;
-        expect((transcript.match(/USER PROMPT/g) ?? [])).toHaveLength(1);
     });
 
     it('should prompt for new provider and model if the saved chat has invalid provider', async () => {
@@ -170,7 +144,7 @@ describe('loadChat', () => {
 
         expect(pickProviderAndModel).toHaveBeenCalled();
         expect(conversation.converse).toHaveBeenCalledWith(
-            chatFile,
+            chatDataPath,
             invalidChatData.temperature,
             invalidChatData.role,
             'gemini',
@@ -192,7 +166,7 @@ describe('loadChat', () => {
 
         expect(ui.promptUserYesOrNo).not.toHaveBeenCalled();
         expect(conversation.converse).toHaveBeenCalledWith(
-            chatFile,
+            chatDataPath,
             validChatData.temperature,
             validChatData.role,
             validChatData.provider,

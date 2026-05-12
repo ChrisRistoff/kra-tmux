@@ -386,6 +386,7 @@ function statusTextFor(code: number): string {
     if (code >= 300 && code < 400) return 'Redirect';
     if (code >= 400 && code < 500) return 'Client Error';
     if (code >= 500) return 'Server Error';
+
     return '';
 }
 
@@ -406,6 +407,7 @@ async function fetchViaCrawl4ai(
             return { error: 'crawl4ai returned empty markdown' };
         }
         const status = result.status ?? 200;
+
         return {
             entry: {
                 url,

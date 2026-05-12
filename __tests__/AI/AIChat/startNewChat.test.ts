@@ -10,7 +10,9 @@ jest.mock('@/AI/AIChat/utils/aiUtils');
 
 describe('startNewChat', () => {
     const fixedTimestamp = 1000;
-    const chatFile = `/tmp/ai-chat-${fixedTimestamp}.md`;
+    // Stage 6 chat TUI: startNewChat passes '' as the hydration path
+    // (no /tmp/ai-chat-*.md scratch file).
+    const chatFile = '';
     const roleSelection = 'userRole';
     const provider = 'dummyProvider';
     const model = 'dummyModel';

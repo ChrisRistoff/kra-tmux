@@ -50,6 +50,7 @@ export function languageForPath(filePath: string): string | null {
     const ext = path.extname(filePath).toLowerCase();
     const lang = EXT_TO_LANG[ext];
     if (!lang) return null;
+
     return supportsLanguage(lang) ? lang : null;
 }
 

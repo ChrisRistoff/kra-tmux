@@ -41,31 +41,39 @@ import { createOrchestratorTranscript } from '@/AI/AIAgent/shared/main/orchestra
 import { handleAgentUserInput, handlePreToolUse } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { runMultiRepoIndexingFlow } from '@/AI/AIAgent/shared/main/agentIndexingFlow';
 import { setupSessionEventHandlers, updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
-import {
-    addAgentCommands,
-    addAgentFunctions,
-    createAgentChatFile,
-    focusAgentPrompt,
-    openAgentNeovim,
-    refreshAgentLayout,
-    setupAgentSplitLayout,
-} from '@/AI/AIAgent/shared/main/agentNeovimSetup';
-import { getErrorMessage, setupEventHandlers } from '@/AI/AIAgent/shared/main/agentPromptActions';
+import { formatUserDraftHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
+
+async function createAgentChatFile(chatFile: string): Promise<void> {
+    const initialContent = `# Copilot Agent Chat
+
+# Type your prompt in the bottom split.
+`;
+    await fs.writeFile(chatFile, `${initialContent}${formatUserDraftHeader()}`, 'utf8');
+}
+import { handleSubmit, setupEventHandlers, getErrorMessage } from '@/AI/AIAgent/shared/main/agentPromptActions';
 import { selectRepoRoots } from '@/AI/AIAgent/commands/repoSelection';
 import { getRepoIdentity } from '@/AI/AIAgent/shared/memory/registry';
 import { computeRepoKey } from '@/AI/AIAgent/shared/memory/repoKey';
 import type { WatcherHandle } from '@/AI/AIAgent/shared/memory/watcher';
+import type { createChatTuiApp } from '@/AI/TUI/chatTuiApp';
+import { bootstrapTuiApp } from '@/AI/TUI/host/bootstrapTui';
+import { createTuiAgentHost } from '@/AI/TUI/host/agentHost';
+import { buildWelcomeBanner } from '@/AI/TUI/widgets/welcomeBanner';
+import { createTuiChatHost } from '@/AI/TUI/host/chatHost';
+import { createTuiChatPickers } from '@/AI/TUI/host/pickers';
+import { wireSharedLeaderKeys } from '@/AI/TUI/host/leaderKeys';
+import { getAgentTurnHeaderRenderer } from '@/AI/AIAgent/shared/main/agentTurnHeaders';
+import { fileContexts } from '@/AI/shared/utils/conversationUtils/fileContextStore';
 
-const aiNeovimHelper = conversation;
 const fileContext = conversation;
 
 async function cleanup(state: AgentConversationState): Promise<void> {
     fileContext.clearFileContexts();
-    await updateAgentUi(state.nvim, 'finish_turn');
+    await updateAgentUi(state.host, 'finish_turn');
 
     const changedCount = state.history.listChangedPaths().length;
     if (changedCount > 0) {
-        console.log(`${changedCount} file(s) touched by agent (run rejectProposal to revert).`);
+        console.log(`${changedCount} file(s) touched by agent (use <leader>s to browse session history & revert per file).`);
     }
 
     await fs.rm(state.chatFile, { force: true });
@@ -82,10 +90,19 @@ async function cleanup(state: AgentConversationState): Promise<void> {
     }
     await state.session.disconnect();
     await state.client.stop();
-    process.exit(0);
 }
 
 export async function converseAgent(options: AgentConversationOptions): Promise<void> {
+    // Mirror the chat TUI: redirect every console.* write to a log file so
+    // the blessed framebuffer keeps exclusive ownership of the terminal.
+    // Without this, deprecation warnings / debug logs / our own informational
+    // `console.log`s below print AS RAW BYTES on top of the rendered UI,
+    // showing as ghost characters that survive scroll/redraw and as terminal
+    // background bleed in pane gaps.
+    // bootstrapTuiApp() (called below) installs the console redirect on
+    // first use so we don't need a separate redirect call here.
+
+
     fileContext.clearFileContexts();
 
     const repoRoots = await selectRepoRoots();
@@ -134,12 +151,47 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
     const chatFile = `/tmp/kra-agent-chat-${Date.now()}.md`;
     await createAgentChatFile(chatFile);
 
-    const nvimClient = await openAgentNeovim(chatFile);
+    // ── TUI bring-up ─────────────────────────────────────────────────────
+    // The Neovim front-end is gone. Mount the blessed TUI (same one the
+    // chat uses) and build an `AgentHost` that wraps it. Every prior call
+    // to `state.nvim.*` has been routed either through the host or through
+    // a polymorphic dispatcher (see updateAgentUi / handleAgentUserInput).
+    // `state.nvim` survives as a stub for the few deferred features still
+    // being ported (proposal review widget, memory browser, etc).
+    let onSubmitImpl: (text: string) => void = () => { /* set later */ };
+    // Shared bring-up with the chat: identical screen, pickers, ChatHost.
+    // The AgentHost composes the same ChatHost, so streaming, approval,
+    // file-context, and tool-history behaviour stays in lock-step —
+    // changes to the chat's TUI automatically apply here too.
+    const { app, pickers, chatHost: chatHostForFileContext } = bootstrapTuiApp({
+        title: `agent · ${options.model}`,
+        model: options.model,
+        onSubmit: (text) => onSubmitImpl(text),
+    });
+    const host = createTuiAgentHost({ app, pickers, chatHost: chatHostForFileContext });
 
-    // Index every selected repo in parallel. The indexer threads `repoKey`
-    // explicitly through to LanceDB so we no longer need to mutate WORKING_DIR
-    // around each call. One combined progress modal aggregates per-repo lines.
-    await runMultiRepoIndexingFlow(nvimClient, selectedRepos.map((r) => r.root));
+    {
+        const elWidth = (app.transcript.el as unknown as { width: number }).width;
+        const cols = (typeof elWidth === 'number' && elWidth > 0)
+            ? elWidth
+            : (process.stdout.columns ?? 80);
+        const bannerLines = buildWelcomeBanner({
+            title: '✦  K R A   ·   A I   A G E N T  ✦',
+            subtitle: `${options.model}`,
+            viewportWidth: cols,
+        });
+        for (const line of bannerLines) {
+            app.transcript.append(line.plain + '\n');
+            if (line.styled) {
+                app.transcript.setLineStyled(app.transcript.lineCount() - 2, line.styled);
+            }
+        }
+        app.scheduler.schedule();
+    }
+
+    // Index every selected repo in parallel. Progress is routed through
+    // the host (status bar / notify in chunk #1; full modal in chunk #4).
+    await runMultiRepoIndexingFlow(host, selectedRepos.map((r) => r.root));
 
     // Start the on-save reindex watcher across every selected repo. Deferred
     // until now (rather than in startAgentChat) because we don't know the
@@ -147,7 +199,26 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
     let watcher: WatcherHandle | null = null;
     try {
         const { startWatcher } = await import('@/AI/AIAgent/shared/memory/watcher');
-        watcher = await startWatcher(selectedRepos.map((r) => r.root));
+        watcher = await startWatcher(
+            selectedRepos.map((r) => r.root),
+            {
+                onEvent: (event) => {
+                    if (event.kind === 'remove') {
+                        if (event.chunksRemoved > 0) {
+                            host.notify(`🗑  ${event.rel} (${event.chunksRemoved} chunks removed)`, 2500);
+                        }
+                    } else {
+                        const { result } = event;
+                        if (result.chunksWritten > 0 || result.chunksDeleted > 0) {
+                            const parts: string[] = [];
+                            if (result.chunksWritten > 0) parts.push(`${result.chunksWritten} chunks`);
+                            if (result.chunksDeleted > 0) parts.push(`-${result.chunksDeleted}`);
+                            host.notify(`📄 ${event.rel} (${parts.join(', ')})`, 2500);
+                        }
+                    }
+                },
+            },
+        );
     } catch (err) {
         console.warn(`kra-memory: watcher failed to start: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -185,7 +256,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         try {
             return await handlePreToolUse(stateRef.current, input);
         } catch (error) {
-            await updateAgentUi(stateRef.current.nvim, 'show_error', [
+            await updateAgentUi(stateRef.current.host, 'show_error', [
                 `Pre-tool approval failed: ${input.toolName}`,
                 getErrorMessage(error),
             ]);
@@ -349,7 +420,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         onPreToolUse: orchestratorOnPreToolUse,
         onPostToolUse: orchestratorOnPostToolUse,
         onUserInputRequest: async (request) => handleAgentUserInput(
-            nvimClient,
+            host,
             request.question as string,
             request.choices as string[] | undefined,
             (request.allowFreeform as boolean | undefined) ?? true
@@ -373,7 +444,7 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         model: options.model,
         client: options.client,
         session,
-        nvim: nvimClient,
+        host,
         cwd,
         history,
         isStreaming: false,
@@ -461,41 +532,111 @@ export async function converseAgent(options: AgentConversationOptions): Promise<
         flushAssistantBuffer();
     });
 
-    const channelId = await nvimClient.channelId;
-
     try {
-        await aiNeovimHelper.addNeovimFunctions(nvimClient, channelId);
-        await aiNeovimHelper.addCommands(nvimClient);
-        await aiNeovimHelper.setupKeyBindings(nvimClient);
-        await addAgentFunctions(nvimClient, channelId);
-        await addAgentCommands(nvimClient);
-        await nvimClient.command(`edit ${chatFile}`);
-        // Enable fold markers for the tool-call log blocks (uses default {{{/}}} markers).
-        // foldlevel=99 keeps all folds open by default; user can fold with zc/za.
-        await nvimClient.command('setlocal foldmethod=marker foldlevel=99');
-        await setupAgentSplitLayout(nvimClient, channelId, chatFile);
-        await refreshAgentLayout(nvimClient);
-        await focusAgentPrompt(nvimClient);
         await setupSessionEventHandlers(state);
         await setupEventHandlers(state);
 
         const executableTools = state.session.listExecutableTools?.() ?? [];
-        await updateAgentUi(nvimClient, 'set_executable_tools', [executableTools]);
+        await updateAgentUi(host, 'set_executable_tools', [executableTools]);
 
-        let cleaningUp = false;
-        const runCleanup = (): void => {
-            if (cleaningUp) return;
-            cleaningUp = true;
-            cleanup(state).catch(() => process.exit(1));
+        // Wire the same leader-key surface the chat exposes, plus the
+        // agent-only stubs that will become real widgets in chunks #2-#4.
+        wireAgentLeaderKeys(app, host, state, pickers, chatHostForFileContext);
+
+        // Render the USER (draft) banner at startup so the user sees
+        // their turn waiting from the moment the TUI mounts — same as
+        // chat and the legacy nvim flow.
+        getAgentTurnHeaderRenderer(app).renderDraftBanner();
+
+        // Route the prompt-pane submit into the agent's send loop.
+        onSubmitImpl = (text: string): void => {
+            void handleSubmit(state, text).catch((err) => {
+                host.showError('Submit failed', err instanceof Error ? err.message : String(err));
+                state.isStreaming = false;
+            });
         };
 
-        nvimClient.on('disconnect', runCleanup);
-        process.once('SIGINT', runCleanup);
-        process.once('SIGTERM', runCleanup);
+        host.notify('ready', 1500);
+
+        let cleaningUp = false;
+        const runCleanup = async (): Promise<void> => {
+            if (cleaningUp) return;
+            cleaningUp = true;
+            try { await cleanup(state); } catch { /* swallow */ }
+        };
+        process.once('SIGINT', () => { void runCleanup(); });
+        process.once('SIGTERM', () => { void runCleanup(); });
+
+        // Block here until the user quits the TUI.
+        await app.done();
+        await runCleanup();
     } catch (error) {
         await cleanup(state);
         throw error;
     }
+}
+
+function wireAgentLeaderKeys(
+    app: ReturnType<typeof createChatTuiApp>,
+    host: ReturnType<typeof createTuiAgentHost>,
+    state: AgentConversationState,
+    pickers: ReturnType<typeof createTuiChatPickers>,
+    chatHost: ReturnType<typeof createTuiChatHost>,
+): void {
+    const headers = getAgentTurnHeaderRenderer(app);
+    const refreshAttachments = (): void => {
+        headers.setAttachments(fileContexts.map((c) => {
+            if (c.isPartial) {
+                const range = c.startLine === c.endLine
+                    ? `line ${c.startLine}`
+                    : `lines ${c.startLine}-${c.endLine}`;
+
+                return `${c.filePath} (${range})`;
+            }
+
+            return c.summary;
+        }));
+    };
+    // Use the SHARED leader-key wiring (same a/r/f/x/h/t items the chat
+    // shows) and pass agent-specific extras.
+    wireSharedLeaderKeys({
+        app, pickers, chatHost, chatFile: state.chatFile,
+        title: 'Agent leader (␣)',
+        onContextsChanged: refreshAttachments,
+        // C-c stops the in-flight agent run (and any spawned sub-agent)
+        // — it does NOT quit the app. C-q is the only quit key.
+        onCtrlC: () => {
+            if (!state.isStreaming) {
+                host.notify('nothing to stop — press C-q to quit', 1500);
+
+                return;
+            }
+            void (async () => {
+                if (state.activeSubAgentSession) {
+                    try { await state.activeSubAgentSession.abort(); } catch { /* noop */ }
+                }
+                try { await state.session.abort(); } catch { /* noop */ }
+                state.isStreaming = false;
+                host.notify('stream stopped', 1500);
+            })();
+        },
+        extraItems: [
+            { key: 'm', category: 'Memory',   label: 'Memory browser',  description: 'Browse kra-memory entries (Tab cycles view)', action: () => { void host.openMemoryBrowser('all'); } },
+            { key: 's', category: 'History',  label: 'Session history', description: 'Browse every recorded version of every file changed this session', action: () => { void host.openSessionHistory(state.history); } },
+            { key: 'i', category: 'Index',    label: 'Index progress',  description: 'Reopen the most recent indexing progress modal',  action: () => host.indexProgress.reopen() },
+            { key: 'y', category: 'Approval', label: 'Toggle YOLO',     description: 'Skip approvals for the rest of session',
+                action: () => {
+                    state.approvalMode = state.approvalMode === 'yolo' ? 'strict' : 'yolo';
+                    host.notify(`approval mode: ${state.approvalMode}`, 2000);
+                } },
+            { key: 'P', category: 'Approval', label: 'Reset approvals', description: 'Forget remembered tool-family approvals',
+                action: () => {
+                    state.allowedToolFamilies.clear();
+                    state.approvalMode = 'strict';
+                    host.notify('approvals reset', 2000);
+                } },
+        ],
+    });
 }
 
 interface OrchestratorSystemMessageOpts {
@@ -539,7 +680,7 @@ End every turn by calling \`ask_kra\` with a concise summary and 2–4 concrete 
 
 function buildWorkspaceBlock(selectedRepos?: { root: string; alias: string }[]): string {
     const lines: string[] = ['<workspace>'];
-    lines.push('You are in a detached proposal workspace. Edits land in the real repository only after the user reviews the resulting git diff in Neovim, so edit files freely.');
+    lines.push('Every file edit lands in the real repository only after the user reviews and approves the per-tool diff in the TUI. Approved edits are committed immediately; the user can revert any prior version via the session history browser (<leader>s).');
 
     if (selectedRepos && selectedRepos.length > 1) {
         lines.push('');

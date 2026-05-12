@@ -41,7 +41,15 @@ export async function saveChat(
 
     await fs.mkdir(`${aiHistoryPath}/${saveName}`);
 
-    const chatContent = await fs.readFile(chatFile, 'utf-8');
+    // Build the summary prompt from in-memory `chatHistory` instead of
+    // re-reading the chatFile. The chatFile is no longer the source of
+    // truth for the running TUI — it's an empty/transient file at this
+    // point. Reading it would feed an empty/stale string to the summary
+    // model and produce garbage summaries.
+    const chatContent = chatHistory
+        .map((entry) => formatChatEntry(entry.role, entry.message))
+        .join('\n');
+    void chatFile;
 
     const finalSummaryPrompt = `${summaryPrompt}:\n\n${chatContent}`;
 

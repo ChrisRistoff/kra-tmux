@@ -1,5 +1,4 @@
-import * as neovim from 'neovim';
-import type { VimValue } from 'neovim/lib/types/VimValue';
+import type { AgentHost } from '@/AI/TUI/host/agentHost';
 import {
     formatToolArguments,
     formatToolCompletion,
@@ -9,179 +8,139 @@ import {
     summarizeToolCall,
 } from '@/AI/AIAgent/shared/utils/agentUi';
 import { formatUserDraftHeader } from '@/AI/shared/utils/conversationUtils/chatHeaders';
-import {
-    appendToAgentChatLayout,
-    focusAgentPrompt,
-    refreshAgentLayout,
-} from '@/AI/AIAgent/shared/main/agentNeovimSetup';
-import * as bash from '@/utils/bashHelper';
+// agentNeovimSetup helpers (focusAgentPrompt, refreshAgentLayout,
+// appendToAgentChatLayout) are no longer used here — the TUI host owns
+// transcript writes and prompt focus.
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import type { AgentConversationState, AgentSession } from '@/AI/AIAgent/shared/types/agentTypes';
 import { setupQuotaTracking } from '@/AI/AIAgent/shared/utils/agentQuotaTracker';
 import { loadSettings } from '@/utils/common';
+import { computeDrainCount, resolvePacerConfig } from '@/AI/shared/streamPacer';
 
-function quote(value: string): string {
-    return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
-async function listProposalChanges(cwd: string): Promise<string[]> {
-    const [modified, untracked] = await Promise.all([
-        bash.execCommand(`git -C ${quote(cwd)} diff --name-only HEAD`)
-            .then(r => r.stdout.trim().split('\n').filter(Boolean)),
-        bash.execCommand(`git -C ${quote(cwd)} ls-files --others --exclude-standard`)
-            .then(r => r.stdout.trim().split('\n').filter(Boolean)),
-    ]);
 
-    return [...new Set([...modified, ...untracked])];
-}
-
-async function readProposalDiff(cwd: string): Promise<string> {
-    const savedTree = (await bash.execCommand(`git -C ${quote(cwd)} write-tree`)).stdout.trim();
-    try {
-        await bash.execCommand(`git -C ${quote(cwd)} add -A`);
-        const result = await bash.execCommand(`git --no-pager -C ${quote(cwd)} diff --cached HEAD`);
-
-        return result.stdout;
-    } finally {
-        await bash.execCommand(`git -C ${quote(cwd)} read-tree ${quote(savedTree)}`);
-    }
-}
-
-function escapeForSingleQuotes(s: string): string {
-    return s.replace(/'/g, `'\\''`);
-}
-
-function escapeForVimPath(s: string): string {
-    return s.replace(/[\\% #]/g, '\\$&');
-}
-
+/**
+ * Dispatch a UI lifecycle call to the active `AgentHost` (the blessed TUI).
+ */
 export async function updateAgentUi(
-    nvimClient: neovim.NeovimClient,
+    host: AgentHost,
     method: string,
     args: unknown[] = []
 ): Promise<void> {
     try {
-        await nvimClient.executeLua(`require('kra_agent.ui').${method}(...)`, args as VimValue[]);
+        dispatchHostUi(host, method, args);
     } catch {
         // Ignore UI update failures during startup/shutdown so the session itself can continue.
     }
+
+    return Promise.resolve();
 }
 
-export async function showProposalReview(nvimClient: neovim.NeovimClient, state: AgentConversationState): Promise<void> {
-    await state.nvim.command('silent! wall');
-    const diff = await readProposalDiff(state.cwd);
 
-    if (!diff.trim()) {
-        await nvimClient.command('echohl WarningMsg | echo "No proposal changes to review" | echohl None');
+function dispatchHostUi(host: AgentHost, method: string, args: unknown[]): void {
+    switch (method) {
+        case 'start_turn':
+            host.startTurn(typeof args[0] === 'string' ? args[0] : '');
 
-        return;
+            return;
+        case 'finish_turn':
+            host.finishTurn();
+
+            return;
+        case 'ready_for_next_prompt':
+            host.readyForNextPrompt();
+
+            return;
+        case 'stop_turn':
+            host.stopTurn(typeof args[0] === 'string' ? args[0] : 'stopped');
+
+            return;
+        case 'show_error':
+            host.showError(
+                typeof args[0] === 'string' ? args[0] : 'Error',
+                typeof args[1] === 'string' ? args[1] : '',
+            );
+
+            return;
+        case 'set_executable_tools':
+            host.setExecutableTools(Array.isArray(args[0]) ? (args[0] as unknown[]) : []);
+
+            return;
+        case 'show_tool_execution_result':
+            host.showToolExecutionResult(
+                typeof args[0] === 'string' ? args[0] : '',
+                typeof args[1] === 'string' ? args[1] : '',
+                typeof args[2] === 'string' ? args[2] : '',
+            );
+
+            return;
+        case 'start_tool': {
+            const toolName = typeof args[0] === 'string' ? args[0] : 'tool';
+            const details = typeof args[1] === 'string' ? args[1] : '';
+            const argsJson = typeof args[2] === 'string' ? args[2] : '{}';
+            const callId = typeof args[3] === 'string' ? args[3] : undefined;
+            host.recordToolStart({
+                toolName,
+                summary: details.split('\n')[0] ?? toolName,
+                details,
+                argsJson,
+                ...(callId ? { callId } : {}),
+            });
+
+            return;
+        }
+        case 'update_tool': {
+            // Streaming progress for an in-flight tool. Refresh the
+            // top-right indicator with the latest details so the user
+            // can see what the tool is currently doing.
+            const toolName = typeof args[0] === 'string' ? args[0] : 'tool';
+            const details = typeof args[1] === 'string' ? args[1] : '';
+            const callId = typeof args[2] === 'string' ? args[2] : undefined;
+            host.recordToolUpdate({
+                toolName,
+                summary: details.split('\n')[0] ?? toolName,
+                details,
+                ...(callId ? { callId } : {}),
+            });
+
+            return;
+        }
+        case 'complete_tool': {
+            const toolName = typeof args[0] === 'string' ? args[0] : 'tool';
+            const success = args[2] === true;
+            const fullResult = typeof args[3] === 'string' ? args[3] : '';
+            const callId = typeof args[4] === 'string' ? args[4] : undefined;
+            host.recordToolComplete({ toolName, success, result: fullResult, ...(callId ? { callId } : {}) });
+
+            return;
+        }
+        case 'show_index_progress_modal': {
+            const payload = (args[0] ?? {}) as { alias?: string; total_files?: number; mode?: string };
+            const title = payload.alias
+                ? `Indexing ${payload.alias}${payload.total_files ? ` (${payload.total_files} files)` : ''}`
+                : 'Indexing';
+            host.indexProgress.open(title);
+
+            return;
+        }
+        case 'append_index_progress': {
+            const payload = (args[0] ?? {}) as { line?: string };
+            host.indexProgress.append(payload.line ?? '');
+
+            return;
+        }
+        case 'set_index_progress_done': {
+            const payload = (args[0] ?? {}) as { summary?: string };
+            host.indexProgress.done(payload.summary);
+
+            return;
+        }
+        default:
+            // Unknown UI method — surface it as a notify so we notice during the port.
+            host.notify(`ui:${method}`, 1500);
     }
-
-    const lines = [
-        '# Proposal review',
-        '# a: apply  r: reject  o: open changed file  R: refresh  q: close',
-        '',
-        ...diff.split('\n'),
-    ];
-
-    await nvimClient.executeLua(`
-        local content = ...
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.cmd('tabnew')
-        vim.api.nvim_win_set_buf(0, buf)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
-        vim.api.nvim_buf_set_name(buf, 'kra-agent-review.diff')
-        vim.bo[buf].buftype = 'nofile'
-        vim.bo[buf].bufhidden = 'wipe'
-        vim.bo[buf].swapfile = false
-        vim.bo[buf].filetype = 'diff'
-        vim.keymap.set('n', 'q', function() vim.cmd('close') end, { buffer = buf, silent = true })
-        vim.keymap.set('n', 'a', function() vim.fn.rpcnotify(${await nvimClient.channelId}, 'prompt_action', 'apply_proposal') end, { buffer = buf, silent = true })
-        vim.keymap.set('n', 'r', function() vim.fn.rpcnotify(${await nvimClient.channelId}, 'prompt_action', 'reject_proposal') end, { buffer = buf, silent = true })
-        vim.keymap.set('n', 'o', function() vim.fn.rpcnotify(${await nvimClient.channelId}, 'prompt_action', 'open_proposal_file') end, { buffer = buf, silent = true })
-        vim.keymap.set('n', 'R', function() vim.fn.rpcnotify(${await nvimClient.channelId}, 'prompt_action', 'review_proposal') end, { buffer = buf, silent = true })
-    `, [lines]);
 }
 
-async function selectChangedProposalFile(
-    nvimClient: neovim.NeovimClient,
-    proposalFiles: string[]
-): Promise<string | null> {
-    const channelId = await nvimClient.channelId;
-
-    return new Promise((resolve) => {
-        const handler = (method: string, args: unknown[]): void => {
-            if (method !== 'proposal_file_selected') {
-                return;
-            }
-
-            nvimClient.removeListener('notification', handler);
-            resolve((args[0] as string) || null);
-        };
-
-        nvimClient.on('notification', handler);
-        nvimClient.executeLua(`
-            local files = ...
-            local actions = require('telescope.actions')
-            local action_state = require('telescope.actions.state')
-
-            require('telescope.pickers').new({}, {
-                prompt_title = 'Open proposal file',
-                finder = require('telescope.finders').new_table(files),
-                sorter = require('telescope.sorters').get_generic_fuzzy_sorter(),
-                attach_mappings = function(prompt_bufnr, map)
-                    actions.select_default:replace(function()
-                        local selection = action_state.get_selected_entry()
-                        actions.close(prompt_bufnr)
-                        vim.fn.rpcnotify(${channelId}, 'proposal_file_selected', selection and (selection.value or selection[1]) or nil)
-                    end)
-
-                    map('i', '<Esc>', function()
-                        actions.close(prompt_bufnr)
-                        vim.fn.rpcnotify(${channelId}, 'proposal_file_selected', nil)
-                    end)
-
-                    return true
-                end
-            }):find()
-        `, [proposalFiles]).catch(() => {
-            nvimClient.removeListener('notification', handler);
-            resolve(null);
-        });
-    });
-}
-
-export async function openChangedProposalFile(state: AgentConversationState): Promise<void> {
-    await state.nvim.command('silent! wall');
-    const changedFiles = await listProposalChanges(state.cwd);
-
-    if (!changedFiles.length) {
-        await state.nvim.command('echohl WarningMsg | echo "No changed proposal files" | echohl None');
-
-        return;
-    }
-
-    const selectedFile = await selectChangedProposalFile(state.nvim, changedFiles);
-
-    if (!selectedFile) {
-        await state.nvim.command('echohl WarningMsg | echo "No proposal file selected" | echohl None');
-
-        return;
-    }
-
-    await state.nvim.command(`tabedit ${escapeForVimPath(`${state.cwd}/${selectedFile}`)}`);
-}
-
-export async function applyProposal(state: AgentConversationState): Promise<void> {
-    await state.nvim.command('silent! wall');
-    const message = 'Changes are already written to the repository.';
-    await state.nvim.command(`echohl MoreMsg | echo '${escapeForSingleQuotes(message)}' | echohl None`);
-}
-
-export async function rejectCurrentProposal(state: AgentConversationState): Promise<void> {
-    await state.history.revertAll(state.nvim);
-    await state.nvim.command('echohl WarningMsg | echo "Rejected current proposal changes" | echohl None');
-}
 
 export interface SessionEventHandlerOptions {
     /**
@@ -192,6 +151,16 @@ export interface SessionEventHandlerOptions {
      * orchestrator).
      */
     agentLabel?: string;
+    /**
+     * Sub-agent only. Called from inside the `session.idle` handler
+     * AFTER `flushBuffer(true)` and `await writeChain` have settled, so
+     * the caller can guarantee the sub-agent's pending tokens are
+     * flushed to the transcript before it splices in the next header.
+     * Without this, the orchestrator's assistant header can arrive
+     * before the sub-agent's tail bytes drain, producing duplicated
+     * ("bleeding") characters under the next entry.
+     */
+    onDrained?: () => void;
 }
 
 export async function setupSessionEventHandlers(
@@ -203,9 +172,7 @@ export async function setupSessionEventHandlers(
     // ~250 chars/sec; bursts catch up via proportional drain so we never
     // fall behind the model. See `[ai.chatInterface]` in settings.toml.example.
     const iface = (await loadSettings()).ai?.chatInterface;
-    const PACER_INTERVAL_MS = iface?.pacerIntervalMs ?? 4;
-    const PACER_MIN_CHARS = iface?.pacerMinChars ?? 1;
-    const PACER_DIVISOR = iface?.pacerDivisor ?? 64;
+    const pacerCfg = resolvePacerConfig(iface);
     const agentLabel = opts.agentLabel;
     const labelTag = agentLabel ? `[${agentLabel}] ` : '';
     const isSubAgent = agentLabel !== undefined;
@@ -216,6 +183,37 @@ export async function setupSessionEventHandlers(
     let assistantStatusVisible = true;
     let firstToolThisTurn = true;
     let reasoningStarted = false;
+
+    // Close the ```thinking fence opened by reasoning_delta. Safe to call
+    // unconditionally; no-op when no reasoning is in flight.
+    const closeReasoningFence = (): void => {
+        if (!reasoningStarted) return;
+        reasoningStarted = false;
+        // Write to the live transcript SYNCHRONOUSLY so any caller (e.g.
+        // the ask_kra preToolUse hook) that follows up with `appendLine`
+        // sees its content rendered AFTER the fence-close, not before it.
+        // The chat-file write stays on the writeChain queue to preserve
+        // ordering relative to other deltas.
+        state.host.appendChunk('\n```\n\n');
+        enqueue(async () => {
+            await appendToChat(state.chatFile, '\n```\n\n');
+        });
+    };
+    // Expose to hooks (e.g. ask_kra in agentToolHook) that need to flush
+    // any open reasoning fence before writing top-level transcript entries.
+    state.closeReasoningFence = closeReasoningFence;
+
+    // Expose a force-drain so hooks that show a blocking modal (tool
+    // approval, ask_kra) can catch the transcript up to the model's
+    // current position before pausing the turn. Without this the model
+    // keeps streaming into `pendingBuffer` while the modal is up and
+    // the user only sees that prose AFTER answering — which makes the
+    // modal feel like it appeared mid-sentence.
+    state.flushPendingProse = async (): Promise<void> => {
+        clearFlushTimer();
+        while (pendingBuffer) flushBuffer(true);
+        await writeChain;
+    };
     const toolLabels = new Map<string, string>();
     const toolStartLabels = new Map<string, string>();
 
@@ -226,11 +224,11 @@ export async function setupSessionEventHandlers(
     };
 
     // Hot-path streaming append: write the same `content` to the chat file on
-    // disk AND push it directly into the transcript buffer via fire-and-forget
-    // rpcnotify. Avoids the synchronous `:edit!` reload that previously blocked
-    // Neovim's UI thread on every chunk.
+    // disk AND push it directly into the transcript pane via the host. The
+    // chat-file write keeps `saveChat` round-tripping identical to the legacy
+    // path; the host call drives the live UI.
     const nvimAppend = (content: string): void => {
-        appendToAgentChatLayout(state.nvim, content);
+        state.host.appendChunk(content);
     };
 
     const write = (content: string, refresh = true): void => {
@@ -251,12 +249,7 @@ export async function setupSessionEventHandlers(
             return;
         }
 
-        const drainCount = force
-            ? pendingBuffer.length
-            : Math.min(
-                pendingBuffer.length,
-                Math.max(PACER_MIN_CHARS, Math.ceil(pendingBuffer.length / PACER_DIVISOR)),
-            );
+        const drainCount = computeDrainCount(pendingBuffer.length, pacerCfg, force);
         const text = pendingBuffer.slice(0, drainCount);
         pendingBuffer = pendingBuffer.slice(drainCount);
         if (isSubAgent) {
@@ -289,7 +282,7 @@ export async function setupSessionEventHandlers(
             if (pendingBuffer) {
                 scheduleFlush();
             }
-        }, PACER_INTERVAL_MS);
+        }, pacerCfg.intervalMs);
     };
 
     const clearFlushTimer = (): void => {
@@ -303,33 +296,32 @@ export async function setupSessionEventHandlers(
     // REASONING & CONTENT STREAMING
     // ============================================================================
 
+    // Reasoning is rendered through the SAME pipeline the chat uses:
+    // wrap deltas in a ```thinking fenced block so the shared markdown
+    // streamRenderer styles them with the cyan side-bar and italic
+    // blue prose. Previously the agent emitted `> 💭` blockquotes which
+    // bypassed that styling and made the agent look different.
     session.on('assistant.reasoning_delta', (event) => {
         const isFirst = !reasoningStarted;
         reasoningStarted = true;
         enqueue(async () => {
-            const content = event.data.deltaContent.replace(/\n/g, '\n> ');
-            const prefix = isFirst ? `> 💭 ${labelTag}` : '';
-            await appendToChat(state.chatFile, `${prefix}${content}`);
-            nvimAppend(`${prefix}${content}`);
+            const opener = isFirst ? `\n\`\`\`thinking\n` : '';
+            const chunk = `${opener}${event.data.deltaContent}`;
+            await appendToChat(state.chatFile, chunk);
+            nvimAppend(chunk);
         });
     });
 
 
     session.on('assistant.message_delta', (event) => {
-        if (reasoningStarted) {
-            enqueue(async () => {
-                await appendToChat(state.chatFile, '\n\n');
-                nvimAppend('\n\n');
-            });
-            reasoningStarted = false;
-        }
+        closeReasoningFence();
 
         pendingBuffer += event.data.deltaContent;
         scheduleFlush();
 
         if (!isSubAgent && activeToolCount === 0 && !assistantStatusVisible) {
             assistantStatusVisible = true;
-            void updateAgentUi(state.nvim, 'start_turn', [state.model]);
+            void updateAgentUi(state.host, 'start_turn', [state.model]);
         }
     });
 
@@ -338,6 +330,7 @@ export async function setupSessionEventHandlers(
     // ============================================================================
 
     session.on('tool.execution_start', (event) => {
+        closeReasoningFence();
         activeToolCount += 1;
         const rawName = formatToolDisplayName(
             event.data.toolName,
@@ -357,19 +350,19 @@ export async function setupSessionEventHandlers(
 
         const details = `Running ${toolName}\n\nArguments:\n${formatToolArguments(event.data.arguments)}`;
         const argsJson = JSON.stringify(event.data.arguments ?? {}, null, 2);
-        void updateAgentUi(state.nvim, 'start_tool', [toolName, details, argsJson, event.data.toolCallId]);
+        void updateAgentUi(state.host, 'start_tool', [toolName, details, argsJson, event.data.toolCallId]);
     });
 
     session.on('tool.execution_progress', (event) => {
         currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Running tool\n\n${formatToolProgress(event.data.progressMessage)}`;
-        void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details, event.data.toolCallId]);
+        void updateAgentUi(state.host, 'update_tool', [currentToolLabel, details, event.data.toolCallId]);
     });
 
     session.on('tool.execution_partial_result', (event) => {
         currentToolLabel = toolLabels.get(event.data.toolCallId) ?? currentToolLabel;
         const details = `Streaming tool output\n\n${formatToolProgress(event.data.partialOutput)}`;
-        void updateAgentUi(state.nvim, 'update_tool', [currentToolLabel, details, event.data.toolCallId]);
+        void updateAgentUi(state.host, 'update_tool', [currentToolLabel, details, event.data.toolCallId]);
     });
 
     session.on('tool.execution_complete', (event) => {
@@ -383,7 +376,7 @@ export async function setupSessionEventHandlers(
 
         if (activeToolCount === 0) {
             firstToolThisTurn = true;
-            reasoningStarted = false;
+            closeReasoningFence();
         }
 
         write(formatToolLine(toolSummary, event.data.success));
@@ -392,7 +385,7 @@ export async function setupSessionEventHandlers(
         const fullResult = event.data.success
             ? (event.data.result?.detailedContent ?? event.data.result?.content ?? '')
             : (event.data.error ? String(event.data.error) : '');
-        void updateAgentUi(state.nvim, 'complete_tool', [
+        void updateAgentUi(state.host, 'complete_tool', [
             toolName,
             details,
             event.data.success,
@@ -400,12 +393,6 @@ export async function setupSessionEventHandlers(
             event.data.toolCallId,
         ]);
 
-        state.nvim
-            .executeLua(
-                `require('kra_agent.diff').finalize_pending_diff(...)`,
-                [event.data.success] as VimValue[]
-            )
-            .catch(() => { /* swallow */ });
     });
 
     // ============================================================================
@@ -414,6 +401,7 @@ export async function setupSessionEventHandlers(
 
     session.on('session.idle', () => {
         void (async () => {
+            closeReasoningFence();
             clearFlushTimer();
             // Force-drain the remaining buffer so the user doesn't watch a
             // typewriter tail after the model has already finished.
@@ -425,6 +413,11 @@ export async function setupSessionEventHandlers(
             assistantStatusVisible = false;
 
             if (isSubAgent) {
+                // Signal the orchestrator that the sub-agent's pending
+                // buffer + writeChain have fully drained, so it's safe
+                // to emit the next role header without bleeding.
+                try { opts.onDrained?.(); } catch { /* never let the hook break idle */ }
+
                 // Sub-agent finished its run; orchestrator owns the prompt UI.
                 return;
             }
@@ -432,9 +425,7 @@ export async function setupSessionEventHandlers(
             state.isStreaming = false;
 
             await appendToChat(state.chatFile, formatUserDraftHeader());
-            await refreshAgentLayout(state.nvim);
-            await updateAgentUi(state.nvim, 'ready_for_next_prompt');
-            await focusAgentPrompt(state.nvim);
+            await updateAgentUi(state.host, 'ready_for_next_prompt');
 
         })();
     });

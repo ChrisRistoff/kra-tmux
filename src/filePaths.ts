@@ -7,7 +7,7 @@ import path from 'path';
  * dotfiles repos or testing).
  */
 export function kraHome(): string {
-    return process.env.KRA_HOME || path.join(os.homedir(), '.kra');
+    return process.env.KRA_HOME ?? path.join(os.homedir(), '.kra');
 }
 
 const root = kraHome();
@@ -18,17 +18,17 @@ export const settingsFilePath = path.join(root, 'settings.toml');
 // git
 export const gitFilesFolder = path.join(root, 'git-files');
 
+// tmux files
+export const tmuxFiles = path.join(root, 'tmux-files')
+
 // tmux
-export const sessionFilesFolder = path.join(root, 'tmux-files', 'sessions');
+export const sessionFilesFolder = path.join(tmuxFiles, 'sessions');
 
 // nvim
-export const nvimSessionsPath = path.join(root, 'tmux-files', 'nvim-sessions');
+export const nvimSessionsPath = path.join(tmuxFiles, 'nvim-sessions');
 
 // ai
 export const aiHistoryPath = path.join(root, 'ai-files', 'chat-history');
-
-// Agent neovim UI (init.lua + lua/) ships with the package — see packagePaths.
-export { aiInitLuaPath as neovimConfig, aiLuaDir } from './packagePaths';
 
 // system
 export const systemFilesPath = path.join(root, 'system-files');

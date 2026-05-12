@@ -82,7 +82,7 @@ export interface RunDeepSearchOptions {
      * `allow-family` carries across the inner loop and back to the
      * outer chat.
      */
-    nvim?: import('neovim').NeovimClient;
+    host?: import('@/AI/TUI/host/chatHost').ChatHost;
     approval?: import('@/AI/AIChat/utils/chatToolApproval').ChatApprovalState;
 }
 
@@ -329,7 +329,7 @@ function parseToolArgs(raw: string): Record<string, unknown> | null {
 }
 
 export async function runDeepSearch(options: RunDeepSearchOptions): Promise<DeepSearchResult> {
-    const { query, hint, provider, model, settings, repoKey, signal, onProgress, nvim, approval } = options;
+    const { query, hint, provider, model, settings, repoKey, signal, onProgress, host, approval } = options;
 
     const emitProgress = async (msg: string): Promise<void> => {
         if (!onProgress) return;
@@ -491,8 +491,8 @@ export async function runDeepSearch(options: RunDeepSearchOptions): Promise<Deep
             } else {
                 let approvedArgs: Record<string, unknown> = parsed;
                 let denied: string | null = null;
-                if (nvim && approval) {
-                    const decision = await requestChatToolApproval(nvim, approval, {
+                if (host && approval) {
+                    const decision = await requestChatToolApproval(host, approval, {
                         toolName: fname,
                         toolArgs: parsed,
                         agentLabel: 'deep_search',

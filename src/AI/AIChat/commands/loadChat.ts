@@ -52,29 +52,22 @@ export async function loadChat(): Promise<void> {
             },
         });
 
-        const timestamp = Date.now();
-        const chatFile = `/tmp/ai-chat-${timestamp}.md`;
+        // Hand chatTui the saved JSON directly. No more transient
+        // /tmp/ai-chat-*.md scratch file — chatTui reads the JSON once at
+        // startup, hydrates `sessionTurns`/`sessionMessages`, and runs
+        // purely in memory afterwards. The saved JSON is the canonical
+        // persisted artifact and must never be deleted.
         const chatDataPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.json`);
         const chatData: ChatData = JSON.parse(await fs.readFile(chatDataPath, 'utf-8'));
-        const chatHistory = chatData.chatHistory ?? [];
         const chatSummaryPath = path.join(aiHistoryPath, selectedChat, 'summary.md');
 
         await fs.writeFile(chatSummaryPath, formatChatEntry('Chat Summary', `${chatData.summary ?? ''}\n`, true));
 
-        let chatTranscript: string | undefined;
-        if (chatHistory.length > 0) {
-            chatTranscript = formatFullChat({ ...chatData, chatHistory });
-        }
-
-        if (chatTranscript) {
-            await conversation.initializeChatFile(chatFile);
-            await fs.appendFile(chatFile, chatTranscript);
-        } else {
-            const chatHistoryPath = path.join(aiHistoryPath, selectedChat, `${selectedChat}.md`);
-            await fs.copyFile(chatHistoryPath, chatFile);
-        }
-
-        await fs.appendFile(chatFile, formatUserDraftHeader());
+        // No transcript materialization to disk — chatTui reads the
+        // saved JSON itself and renders the transcript straight into
+        // the in-memory blessed widget.
+        void formatFullChat;
+        void formatUserDraftHeader;
 
         if (!chatData.provider || !(await checkProviderAndModelValid(chatData.provider, chatData.model))) {
             console.log('Pick a new provider');
@@ -86,13 +79,13 @@ export async function loadChat(): Promise<void> {
             chatData.model = model;
         }
 
-        if (chatData.fileContexts && chatData.fileContexts.length > 0) {
-            await restoreFileContexts(chatFile, chatData.fileContexts);
-        }
+        // File-context restoration happens inside chatTui from the
+        // same saved JSON; no need to write blobs into a scratch file.
+        void restoreFileContexts;
 
         const chatFileLoaded = true;
         await conversation.converse(
-            chatFile,
+            chatDataPath,
             chatData.temperature,
             chatData.role,
             chatData.provider,

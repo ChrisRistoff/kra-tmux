@@ -50,11 +50,13 @@ export function loadOverridesSync(provider: string | undefined): Record<string, 
     } catch {
         // No cache yet, malformed JSON, or unreadable file — treat as empty.
     }
+
     return {};
 }
 
 export function getModelOverride(provider: string | undefined, model: string): ModelOverrides {
     const map = loadOverridesSync(provider);
+
     return map[model] ?? {};
 }
 
@@ -94,5 +96,6 @@ export async function recordOverride(
     });
 
     writeQueue.set(file, next);
+
     return next;
 }

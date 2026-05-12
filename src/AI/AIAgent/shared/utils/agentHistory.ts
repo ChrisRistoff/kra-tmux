@@ -3,7 +3,6 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import type * as neovim from 'neovim';
 import { execCommand } from '@/utils/bashHelper';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
@@ -80,9 +79,44 @@ async function loadOriginal(sha: string): Promise<string> {
     return await fs.readFile(filePath, 'utf8');
 }
 
+function countLineDelta(before: string | null, after: string | null): { added: number; removed: number } {
+    const a = before === null ? [] : before.split('\n');
+    const b = after === null ? [] : after.split('\n');
+    // Cheap, non-LCS estimate that works fine for the picker labels:
+    // lines unique to `b` are "added"; lines unique to `a" are "removed".
+    const setA = new Map<string, number>();
+    for (const line of a) setA.set(line, (setA.get(line) ?? 0) + 1);
+    let added = 0;
+    for (const line of b) {
+        const n = setA.get(line) ?? 0;
+        if (n > 0) setA.set(line, n - 1);
+        else added++;
+    }
+    let removed = 0;
+    for (const n of setA.values()) removed += n;
+
+    return { added, removed };
+}
+
 export interface BashSnapshot {
     /** git status snapshots keyed by repo cwd. */
     statusByCwd: Map<string, Map<string, string>>;
+}
+
+/** One recorded write event for a single path. `kind: 'original'` is the
+ *  synthesized pre-session entry; the rest are real recorded mutations. */
+export interface VersionEntry {
+    kind: 'original' | 'mutation';
+    seq: number; // 0 for original, 1..N for mutations in order
+    timestamp: number; // ms since epoch (0 for original)
+    source: string; // tool source label (writeFile/edit/bash/...)
+    /** SHA of pre-write content (null = file did not exist before this write). */
+    beforeSha: string | null;
+    /** SHA of post-write content (null = file was deleted by this write).
+     *  For the synthesized 'original' entry this equals the originalContent SHA. */
+    afterSha: string | null;
+    addedLines: number;
+    removedLines: number;
 }
 
 export interface AgentHistory {
@@ -97,9 +131,18 @@ export interface AgentHistory {
      *  Async because content is spilled to disk to keep heap small. */
     getOriginalContent: (filePath: string) => Promise<string | null | undefined>;
     /** Reverts every path in history back to its pre-session state. */
-    revertAll: (nvim: neovim.NeovimClient) => Promise<void>;
+    revertAll: () => Promise<void>;
     /** All absolute paths that have at least one recorded mutation. */
     listChangedPaths: () => string[];
+    /** Returns every recorded version for a path (newest last). The first
+     *  entry is always the synthesized pre-session 'original'. */
+    listVersions: (filePath: string) => VersionEntry[];
+    /** Loads the disk-spilled content for a sha (returned from a VersionEntry). */
+    loadVersionContent: (sha: string) => Promise<string>;
+    /** Restores the file at `path` to the state captured by `version` (writes to disk).
+     *  Returns true on success. Reverts are NOT recorded as new versions — the
+     *  version list stays stable so the user can scrub freely. */
+    revertToVersion: (filePath: string, version: VersionEntry) => Promise<boolean>;
     /** Snapshot git-tracked change state before a bash command runs. */
     bashSnapshotBefore: () => Promise<BashSnapshot>;
     /** Compare against prior snapshot and record any new mutations. */
@@ -163,6 +206,10 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
     // and revertAll. Replaces the old MutationEntry[] which double-stored the
     // before/after bytes for no reason.
     const changedPaths = new Set<string>();
+    // Per-path ordered list of recorded write events (excluding the synthesized
+    // pre-session 'original' which is rebuilt on demand from originalContent).
+    const versionsByPath = new Map<string, VersionEntry[]>();
+    let mutationSeq = 0;
 
     function recordMutation(opts: {
         path: string;
@@ -175,6 +222,66 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
             originalContent.set(opts.path, sha);
         }
         changedPaths.add(opts.path);
+
+        const beforeSha = opts.beforeContent === null ? null : spillOriginalSync(opts.beforeContent);
+        const afterSha = opts.afterContent === null ? null : spillOriginalSync(opts.afterContent);
+        const { added, removed } = countLineDelta(opts.beforeContent, opts.afterContent);
+
+        const entry: VersionEntry = {
+            kind: 'mutation',
+            seq: ++mutationSeq,
+            timestamp: Date.now(),
+            source: opts.source,
+            beforeSha,
+            afterSha,
+            addedLines: added,
+            removedLines: removed,
+        };
+        const list = versionsByPath.get(opts.path) ?? [];
+        list.push(entry);
+        versionsByPath.set(opts.path, list);
+    }
+
+    function listVersions(filePath: string): VersionEntry[] {
+        if (!originalContent.has(filePath) && !versionsByPath.has(filePath)) return [];
+        const originalSha = originalContent.get(filePath) ?? null;
+        const original: VersionEntry = {
+            kind: 'original',
+            seq: 0,
+            timestamp: 0,
+            source: 'pre-session',
+            beforeSha: null,
+            afterSha: originalSha,
+            addedLines: 0,
+            removedLines: 0,
+        };
+        const muts = versionsByPath.get(filePath) ?? [];
+
+        return [original, ...muts];
+    }
+
+    async function loadVersionContent(sha: string): Promise<string> {
+        return await loadOriginal(sha);
+    }
+
+    async function revertToVersion(filePath: string, version: VersionEntry): Promise<boolean> {
+        try {
+            // Reverts intentionally do NOT record a new VersionEntry — user wants
+            // the version list to stay stable across reverts so they can scrub
+            // freely without polluting history with their own undos.
+            if (version.afterSha === null) {
+                // Target state: file did not exist. Delete from disk.
+                await fs.rm(filePath, { force: true });
+            } else {
+                const content = await loadOriginal(version.afterSha);
+                await fs.mkdir(path.dirname(filePath), { recursive: true });
+                await fs.writeFile(filePath, content, 'utf8');
+            }
+
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     async function getOriginalContent(filePath: string): Promise<string | null | undefined> {
@@ -188,7 +295,7 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
         }
     }
 
-    async function revertAll(nvim: neovim.NeovimClient): Promise<void> {
+    async function revertAll(): Promise<void> {
         let reverted = 0;
         let failed = 0;
 
@@ -212,13 +319,9 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
             }
         }
 
-        const msg = failed > 0
-            ? `Reverted ${reverted} file(s); ${failed} failed.`
-            : `Reverted ${reverted} file(s).`;
-
-        try {
-            await nvim.command(`echo '${msg.replace(/'/g, `'\\''`)}'`);
-        } catch { /* nvim may be disconnecting */ }
+        // Caller is responsible for surfacing the result via the TUI host.
+        void reverted;
+        void failed;
     }
 
     function listChangedPaths(): string[] {
@@ -291,6 +394,9 @@ export function createAgentHistory(cwds: string[]): AgentHistory {
         getOriginalContent,
         revertAll,
         listChangedPaths,
+        listVersions,
+        loadVersionContent,
+        revertToVersion,
         bashSnapshotBefore,
         bashSnapshotAfter,
     };

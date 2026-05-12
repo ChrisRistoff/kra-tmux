@@ -4,16 +4,10 @@ import {
     formatAssistantHeader,
     materializeUserDraft,
 } from '@/AI/shared/utils/conversationUtils/chatHeaders';
-import {
-    clearAgentPrompt,
-    focusAgentPrompt,
-    getAgentPromptText,
-    refreshAgentLayout,
-} from '@/AI/AIAgent/shared/main/agentNeovimSetup';
+import { getAgentTurnHeaderRenderer } from './agentTurnHeaders';
 import * as conversation from '@/AI/shared/conversation';
 import { appendToChat } from '@/AI/AIAgent/shared/utils/agentToolHook';
 import { updateAgentUi } from '@/AI/AIAgent/shared/utils/agentSessionEvents';
-import { dispatchPromptAction } from './agentPromptActionDispatch';
 const fileContext = conversation;
 
 export function getErrorMessage(error: unknown): string {
@@ -29,17 +23,16 @@ export function getErrorMessage(error: unknown): string {
 }
 
 
-async function handleSubmit(state: AgentConversationState): Promise<void> {
+export async function handleSubmit(state: AgentConversationState, promptText: string): Promise<void> {
     if (state.isStreaming) {
-        await state.nvim.command('echohl WarningMsg | echo "Agent is still responding" | echohl None');
+        state.host.notify('Agent is still responding');
 
         return;
     }
 
-    const prompt = await getAgentPromptText(state.nvim);
-
+    const prompt = promptText.trim();
     if (!prompt) {
-        await state.nvim.command('echohl WarningMsg | echo "Type a prompt before submitting" | echohl None');
+        state.host.notify('Type a prompt before submitting');
 
         return;
     }
@@ -48,13 +41,19 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
 
     await materializeUserDraft(state.chatFile, turnTimestamp);
     await appendToChat(state.chatFile, formatSubmittedAgentPrompt(prompt));
-    await clearAgentPrompt(state.nvim);
+
+    // Render the user prompt header via the SHARED renderer so chat and
+    // agent stay visually identical (and the previous turn's "USER (draft)"
+    // banner gets rewound).
+    const headers = getAgentTurnHeaderRenderer(state.host.app);
+    headers.renderUserHeader(prompt, turnTimestamp);
 
     state.isStreaming = true;
-    await updateAgentUi(state.nvim, 'start_turn', [state.model]);
+    await updateAgentUi(state.host, 'start_turn', [state.model]);
     await appendToChat(state.chatFile, formatAssistantHeader(state.model, turnTimestamp));
-    await refreshAgentLayout(state.nvim);
-    await focusAgentPrompt(state.nvim);
+
+    // Assistant header via the SHARED renderer (same styling chat uses).
+    headers.renderAssistantHeader(state.model, turnTimestamp);
 
     const taggedFiles = await fileContext.getFileContextsTaggedBlock();
     const finalPrompt = taggedFiles ? `${prompt}\n\n${taggedFiles}` : prompt;
@@ -68,26 +67,12 @@ async function handleSubmit(state: AgentConversationState): Promise<void> {
 }
 
 export async function setupEventHandlers(state: AgentConversationState): Promise<void> {
-    state.nvim.on('notification', (method: string, args: unknown[]) => {
-        void (async (): Promise<void> => {
-            if (method !== 'prompt_action') {
-                return;
-            }
+    // Nvim-based prompt-action notifications are no longer used. Leader-key
+    // actions are wired directly into the TUI app via
+    // `wireAgentLeaderKeys` (see agentConversation.ts), and prompt submit
+    // is routed through the TUI's `onSubmit` callback to `handleSubmit`.
+    void state;
+    void getErrorMessage;
 
-            const action = typeof args[0] === 'string' ? args[0] : '';
-
-            try {
-                if (action === 'submit_pressed') {
-                    await handleSubmit(state);
-                } else {
-                    await dispatchPromptAction(state, action, args);
-                }
-            } catch (error) {
-                await updateAgentUi(state.nvim, 'show_error', [
-                    `Action failed: ${action}`,
-                    getErrorMessage(error),
-                ]);
-            }
-        })();
-    });
+    return Promise.resolve();
 }

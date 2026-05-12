@@ -9,6 +9,7 @@
 import path from 'path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { indexFile, isIndexable, removeFile, workspaceRoot } from './indexer';
+import type { PerFileResult } from './indexer';
 import { loadMemorySettings } from './settings';
 import { getRepoIdentity, upsertRegistryEntry, getRegistryEntry } from './registry';
 import { computeRepoKey } from './repoKey';
@@ -18,9 +19,17 @@ export interface WatcherHandle {
     close: () => Promise<void>;
 }
 
+export type WatcherEvent =
+    | { kind: 'index'; root: string; rel: string; result: PerFileResult }
+    | { kind: 'remove'; root: string; rel: string; chunksRemoved: number };
+
+export interface WatcherOptions {
+    onEvent?: (event: WatcherEvent) => void;
+}
+
 const DEBOUNCE_MS = 500;
 
-export async function startWatcher(roots?: string[]): Promise<WatcherHandle | null> {
+export async function startWatcher(roots?: string[], options: WatcherOptions = {}): Promise<WatcherHandle | null> {
     const settings = await loadMemorySettings();
 
     if (!settings.enabled || !settings.indexCodeOnSave) return null;
@@ -40,7 +49,7 @@ export async function startWatcher(roots?: string[]): Promise<WatcherHandle | nu
 
         pending.set(key, setTimeout(() => {
             pending.delete(key);
-            void run(root, kind, rel, currentSettings);
+            void run(root, kind, rel, currentSettings, options.onEvent);
         }, DEBOUNCE_MS));
     };
 
@@ -100,7 +109,7 @@ export async function startWatcher(roots?: string[]): Promise<WatcherHandle | nu
  * event targets the correct per-repo LanceDB without mutating WORKING_DIR.
  * That makes concurrent saves across multiple repos safe.
  */
-async function run(root: string, kind: 'index' | 'remove', rel: string, settings: MemorySettings): Promise<void> {
+async function run(root: string, kind: 'index' | 'remove', rel: string, settings: MemorySettings, onEvent?: (event: WatcherEvent) => void): Promise<void> {
     try {
         // Only the repos the user has explicitly opted into (i.e. a registry
         // entry exists) participate in incremental indexing. Without this
@@ -113,9 +122,11 @@ async function run(root: string, kind: 'index' | 'remove', rel: string, settings
         const repoKey = computeRepoKey(identity.id);
 
         if (kind === 'remove') {
-            await removeFile(rel, repoKey);
+            const chunksRemoved = await removeFile(rel, repoKey);
+            onEvent?.({ kind: 'remove', root, rel, chunksRemoved });
         } else {
-            await indexFile(rel, { settings, root, repoKey });
+            const result = await indexFile(rel, { settings, root, repoKey });
+            onEvent?.({ kind: 'index', root, rel, result });
         }
         await touchRegistryLastIndexed(root);
     } catch (err) {

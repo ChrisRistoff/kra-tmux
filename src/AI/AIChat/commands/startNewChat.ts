@@ -5,8 +5,11 @@ import * as ui from '@/UI/generalUI';
 import { menuChain } from '@/UI/menuChain';
 
 export async function startNewChat(): Promise<void> {
-    const timestamp = Date.now();
-    const chatFile = `/tmp/ai-chat-${timestamp}.md`;
+    // No more `/tmp/ai-chat-*.md` file. The chat TUI keeps everything in
+    // memory; the only persisted artifact is the JSON we write at exit
+    // via `saveChat`. Pass an empty hydration path — chatTui treats it
+    // as "start fresh".
+    const hydrationPath = '';
 
     const { role, pm, temperature } = await menuChain()
         .step('role', async () => ui.searchSelectAndReturnFromArray({
@@ -19,5 +22,5 @@ export async function startNewChat(): Promise<void> {
 
     console.log('Opening vim for prompt...');
     const { provider, model } = pm;
-    await conversation.converse(chatFile, temperature, role, provider, model);
+    await conversation.converse(hydrationPath, temperature, role, provider, model);
 }

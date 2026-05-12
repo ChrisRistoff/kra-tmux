@@ -92,6 +92,7 @@ export type ChatInterfaceSettings = {
     pacerIntervalMs?: number,
     pacerMinChars?: number,
     pacerDivisor?: number,
+    pacerDumpThreshold?: number,
     scrollTickMs?: number,
     scrollAcceleration?: number,
     appendDebounceMs?: number,

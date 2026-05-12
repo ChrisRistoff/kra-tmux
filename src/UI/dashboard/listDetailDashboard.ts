@@ -6,7 +6,6 @@ import {
 } from './screen';
 import {
     attachFocusCycleKeys,
-    type FocusRing,
 } from './focus';
 import {
     attachVerticalNavigation,
@@ -212,7 +211,7 @@ export async function createListDetailDashboard<Row>(
     let flashTimer: NodeJS.Timeout | null = null;
     let savedHeader: string | null = null;
     function flashHeader(msg: string, ms = 1800): void {
-        if (flashTimer === null) savedHeader = header.content as string;
+        if (flashTimer === null) savedHeader = header.content;
         if (flashTimer) clearTimeout(flashTimer);
         header.setContent(msg);
         screen.render();
@@ -223,12 +222,13 @@ export async function createListDetailDashboard<Row>(
             refreshHeader();
             screen.render();
         }, ms);
-        flashTimer.unref?.();
+        flashTimer.unref();
     }
 
     // ── List rendering / data ───────────────────────────────────────────────
     function visibleRows(): Row[] {
         if (!opts.filter || filterQuery === '' || !opts.filter.match) return rows;
+
         return rows.filter((r) => opts.filter!.match!(r, filterQuery));
     }
 
@@ -247,6 +247,7 @@ export async function createListDetailDashboard<Row>(
             for (let i = 0; i < detailPanels.length; i++) detailPanels[i].setContent('');
             lastPaintedKey = '';
             screen.render();
+
             return;
         }
         let restoreIdx = 0;
@@ -282,6 +283,7 @@ export async function createListDetailDashboard<Row>(
             if (ctx.isStale()) return;
             panel.setContent(`{red-fg}error:{/red-fg} ${(e as Error).message}`);
             screen.render();
+
             return;
         }
         if (ctx.isStale()) return;
@@ -300,7 +302,7 @@ export async function createListDetailDashboard<Row>(
         currentIdx = i;
         lastPaintedKey = key;
         if (opts.onSelectionChange) opts.onSelectionChange(row, api);
-        await Promise.all(detailPanels.map((_p, idx) => paintPanel(idx, row)));
+        await Promise.all(detailPanels.map(async (_p, idx) => paintPanel(idx, row)));
     }
 
     // ── API surface ─────────────────────────────────────────────────────────
@@ -318,6 +320,7 @@ export async function createListDetailDashboard<Row>(
                 lastPaintedKey = '';
                 for (let i = 0; i < detailPanels.length; i++) detailPanels[i].setContent('');
                 screen.render();
+
                 return;
             }
             let restore = 0;
@@ -344,6 +347,7 @@ export async function createListDetailDashboard<Row>(
             list.select(idx);
             screen.render();
             void selectIndex(idx);
+
             return true;
         },
         repaint: () => {
@@ -354,7 +358,7 @@ export async function createListDetailDashboard<Row>(
             lastPaintedKey = '';
             const row = currentRow();
             if (row !== undefined) {
-                void Promise.all(detailPanels.map((_p, idx) => paintPanel(idx, row)));
+                void Promise.all(detailPanels.map(async (_p, idx) => paintPanel(idx, row)));
             }
         },
         refreshHeader: () => {
@@ -402,18 +406,23 @@ export async function createListDetailDashboard<Row>(
         moveBy: (delta) => {
             if (opts.moveByOverride) {
                 opts.moveByOverride(delta, defaultMove, api);
+
                 return;
             }
             defaultMove(delta);
         },
         top: () => {
-            if (opts.onJumpTop) { opts.onJumpTop(api); return; }
+            if (opts.onJumpTop) { opts.onJumpTop(api);
+
+ return; }
             if (displayed.length === 0) return;
             list.select(0);
             screen.render();
         },
         bottom: () => {
-            if (opts.onJumpBottom) { opts.onJumpBottom(api); return; }
+            if (opts.onJumpBottom) { opts.onJumpBottom(api);
+
+ return; }
             if (displayed.length === 0) return;
             list.select(displayed.length - 1);
             screen.render();
@@ -502,14 +511,14 @@ export async function createListDetailDashboard<Row>(
                 lastPaintedKey = '';
                 const row = currentRow();
                 if (row !== undefined) {
-                    void Promise.all(detailPanels.map((_p, i) => paintPanel(i, row)));
+                    void Promise.all(detailPanels.map(async (_p, i) => paintPanel(i, row)));
                 }
             },
         });
     }
 
     // ── Focus + lifecycle ───────────────────────────────────────────────────
-    attachFocusCycleKeys(screen, ring as FocusRing);
+    attachFocusCycleKeys(screen, ring);
     screen.on('resize', () => {
         renderListItems();
         screen.render();

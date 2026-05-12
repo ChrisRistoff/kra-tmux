@@ -48,11 +48,6 @@ export const tmuxHooksShPath = path.join(automationScriptsDir, 'hooks', 'tmuxHoo
 export const attachTmuxSessionShPath = path.join(automationScriptsDir, 'hooks', 'attachTmuxSession.sh');
 export const neovimHooksLuaPath = path.join(automationScriptsDir, 'hooks', 'neovimHooks.lua');
 
-// AI agent neovim UI (init.lua + lua/ siblings) — shipped as package assets.
-// init.lua resolves its own dir via debug.getinfo, so package.path picks up lua/ automatically.
-export const aiFilesDir = assetPath('ai-files');
-export const aiInitLuaPath = path.join(aiFilesDir, 'init.lua');
-export const aiLuaDir = path.join(aiFilesDir, 'lua');
 
 // Compiled autosave entry points
 export const autoSaveManagerJsPath = assetPath('dest', 'automationScripts', 'autosave', 'autoSaveManager.js');
