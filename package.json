@@ -26,6 +26,7 @@
         "dest",
         "automationScripts",
         "settings.toml.example",
+        "tmux-files",
         "start.js",
         "README.md",
         "LICENSE.md",
