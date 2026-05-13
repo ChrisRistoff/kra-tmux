@@ -27,6 +27,7 @@
         "automationScripts",
         "settings.toml.example",
         "tmux-files",
+        "notes-files",
         "start.js",
         "README.md",
         "LICENSE.md",

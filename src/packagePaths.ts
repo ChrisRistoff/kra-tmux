@@ -66,3 +66,6 @@ export const docsPythonRequirementsPath = path.join(automationScriptsDir, 'pytho
 export const settingsExamplePath = assetPath('settings.toml.example');
 export const defaultTmuxConfPath = assetPath('tmux-files', '.tmux.conf');
 
+// notes nvim config bundled with the package
+export const notesNvimInitLuaPath = assetPath('notes-files', 'init.lua');
+

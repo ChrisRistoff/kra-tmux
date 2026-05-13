@@ -28,6 +28,10 @@ export const singleSessionFilesFolder = path.join(tmuxFiles, 'single-sessions');
 // nvim
 export const nvimSessionsPath = path.join(tmuxFiles, 'nvim-sessions');
 
+// notes (kra notes markdown note app)
+export const notesRoot = path.join(root, 'notes');
+export const notesNvimDataDir = path.join(notesRoot, '.nvim-data');
+
 // ai
 export const aiHistoryPath = path.join(root, 'ai-files', 'chat-history');
 

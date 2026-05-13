@@ -65,6 +65,9 @@ With **on-demand activation** and **intelligent event-driven architecture**, Kra
 ### ⚡ [Autosave System](#autosave-system)
 *Enterprise-grade automated workspace persistence*
 
+### 📝 [Notes](docs/notes.md)
+*Self-contained markdown note app — bundled Neovim config, render-markdown, telescope picker, wiki-links & backlinks*
+
 ### 🛠️ [System Utilities](#system-utilities)
 *Developer productivity tools and utilities*
 
