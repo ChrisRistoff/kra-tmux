@@ -1,7 +1,7 @@
 #!/bin/bash
 
 preexec() {
-    if [[ "$1" == "kra tmux load-server" ]]; then
+    if [[ "$1" == "kra tmux load-server" || "$1" == "kra tmux load-session" ]]; then
         _kra_tmux_running=1
     fi
 }

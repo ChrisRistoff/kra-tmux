@@ -19,13 +19,17 @@ export const tmuxAscii = `
     +-------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
     | save-server       | 💾  Save the current tmux server with sessions, windows, panes, paths, and editor state.                                                   |
     |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+    | save-session      | 💾  Save individual sessions with windows, panes, paths, and editor state.                                                                 |
+    |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
     | load-server       | ♻️  Restore a saved tmux server layout back into tmux.                                                                                     |
     |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-    | manage-server     | 🧰  Open the dashboard for saved session files, previews, rename or delete actions, and the save builder.                                  |
+    | load-session      | ♻️  Restore a saved tmux session layout back into tmux.                                                                                    |
+    |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+    | manage-saves      | 🧰  Open the dashboard for saved session files, previews, rename or delete actions, and the save builder.                                  |
     |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
     | list-sessions     | 📋  Print a read-only summary of the tmux sessions that are live right now.                                                                |
     |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-    | kill              | ❌  Kill the active tmux server and all sessions attached to it.                                                                            |
+    | kill              | ❌  Kill the active tmux server and all sessions attached to it.                                                                           |
     +-------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
 
     Use: kra tmux <command>

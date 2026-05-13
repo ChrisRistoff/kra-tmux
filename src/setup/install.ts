@@ -56,7 +56,8 @@ function ensureKraHomeSkeleton(home: string): boolean {
     const subdirs = [
         '',
         'git-files',
-        'tmux-files/sessions',
+        'tmux-files/servers',
+        'tmux-files/single-sessions',
         'tmux-files/nvim-sessions',
         'ai-files/chat-history',
         'ai-files/chat-history',
@@ -298,6 +299,20 @@ export function installedMarkerPath(home: string = kraHome()): string {
     return path.join(home, '.installed');
 }
 
+
+function migrateLegacyServerFolder(home: string): void {
+    const legacy = path.join(home, 'tmux-files', 'sessions');
+    const target = path.join(home, 'tmux-files', 'servers');
+    if (!fs.existsSync(legacy)) return;
+    if (fs.existsSync(target)) {
+        const targetEmpty = fs.readdirSync(target).length === 0;
+        if (!targetEmpty) return;
+        fs.rmdirSync(target);
+    }
+    fs.renameSync(legacy, target);
+    console.log(`[kra] migrated tmux-files/sessions -> tmux-files/servers`);
+}
+
 export function isInstalled(): boolean {
     return fs.existsSync(installedMarkerPath());
 }
@@ -307,6 +322,7 @@ export function runInstall(opts: InstallOptions = {}): void {
 
     // Idempotent file-presence checks run unconditionally so that defaults
     // added in newer package versions are seeded for existing installs too.
+    migrateLegacyServerFolder(home);
     const fresh = ensureKraHomeSkeleton(home);
     ensureDefaultSettings(home);
     ensureDefaultTmuxConf(home);

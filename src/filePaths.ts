@@ -22,7 +22,8 @@ export const gitFilesFolder = path.join(root, 'git-files');
 export const tmuxFiles = path.join(root, 'tmux-files')
 
 // tmux
-export const sessionFilesFolder = path.join(tmuxFiles, 'sessions');
+export const serverFilesFolder = path.join(tmuxFiles, 'servers');
+export const singleSessionFilesFolder = path.join(tmuxFiles, 'single-sessions');
 
 // nvim
 export const nvimSessionsPath = path.join(tmuxFiles, 'nvim-sessions');

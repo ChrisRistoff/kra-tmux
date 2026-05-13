@@ -1,13 +1,13 @@
 import * as fs from 'fs/promises';
 import * as utils from '@/utils/common';
 import * as generalUI from '@/UI/generalUI';
-import { getCurrentSessions, getSavedSessionsNames } from '@/tmux/utils/sessionUtils';
+import { getCurrentSessions, getSavedServerNames } from '@/tmux/utils/sessionUtils';
 import { printSessions } from '@/tmux/commands/printSessions';
 import * as tmux from '@/tmux/utils/common';
-import { saveSessionsToFile } from '@/tmux/commands/saveSessions';
+import { saveServerToFile } from '@/tmux/commands/saveServer';
 import { createLockFile, LockFiles } from '@/../eventSystem/lockFiles';
 import * as bash from '@/utils/bashHelper';
-import { loadSession, getSessionsFromSaved, handleSessionsIfServerIsRunning } from '@/tmux/commands/loadSession';
+import { loadServer, getServerFromSaved, handleServerIfRunning } from '@/tmux/commands/loadServer';
 import { TmuxSessions } from '@/types/sessionTypes';
 
 jest.mock('fs/promises');
@@ -16,23 +16,23 @@ jest.mock('@/UI/generalUI');
 jest.mock('@/tmux/utils/sessionUtils');
 jest.mock('@/tmux/commands/printSessions');
 jest.mock('@/tmux/utils/common');
-jest.mock('@/tmux/commands/saveSessions');
+jest.mock('@/tmux/commands/saveServer');
 jest.mock('@/../eventSystem/lockFiles');
 jest.mock('@/utils/bashHelper');
 jest.mock('@/filePaths', () => ({
     nvimSessionsPath: '/mock/nvim/sessions',
-    sessionFilesFolder: '/mock/session/files'
+    serverFilesFolder: '/mock/session/files'
 }));
 
-describe('loadSession', () => {
+describe('loadServer', () => {
     const mockFs = jest.mocked(fs);
     const mockUtils = jest.mocked(utils);
     const mockGeneralUI = jest.mocked(generalUI);
-    const mockGetSavedSessionsNames = jest.mocked(getSavedSessionsNames);
+    const mockGetSavedSessionsNames = jest.mocked(getSavedServerNames);
     const mockGetCurrentSessions = jest.mocked(getCurrentSessions);
     const mockPrintSessions = jest.mocked(printSessions);
     const mockTmux = jest.mocked(tmux);
-    const mockSaveSessionsToFile = jest.mocked(saveSessionsToFile);
+    const mockSaveSessionsToFile = jest.mocked(saveServerToFile);
     const mockCreateLockFile = jest.mocked(createLockFile);
     const mockBash = jest.mocked(bash);
 
@@ -50,7 +50,7 @@ describe('loadSession', () => {
         mockFs.rm.mockResolvedValue();
     });
 
-    describe('loadSession', () => {
+    describe('loadServer', () => {
         it('should successfully load a session', async () => {
             const mockSessionNames = ['server1', 'server2'];
             const mockSavedData: TmuxSessions = {
@@ -91,7 +91,7 @@ describe('loadSession', () => {
 
             const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-            await loadSession();
+            await loadServer();
 
             expect(mockCreateLockFile).toHaveBeenCalledWith(LockFiles.LoadInProgress);
             expect(mockGetSavedSessionsNames).toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('loadSession', () => {
 
             const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-            await loadSession();
+            await loadServer();
 
             expect(consoleSpy).toHaveBeenCalledWith('No saved sessions found.');
             consoleSpy.mockRestore();
@@ -129,14 +129,14 @@ describe('loadSession', () => {
 
             const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-            await loadSession();
+            await loadServer();
 
             expect(consoleSpy).toHaveBeenCalledWith('Load session error:', expect.any(Error));
             consoleSpy.mockRestore();
         });
     });
 
-    describe('getSessionsFromSaved', () => {
+    describe('getServerFromSaved', () => {
         it('should successfully read and parse session data', async () => {
             const mockData: TmuxSessions = {
                 session1: {
@@ -155,7 +155,7 @@ describe('loadSession', () => {
 
             mockFs.readFile.mockResolvedValue(Buffer.from(JSON.stringify(mockData)));
 
-            const result = await getSessionsFromSaved('test-server');
+            const result = await getServerFromSaved('test-server');
 
             expect(mockFs.readFile).toHaveBeenCalledWith('/mock/session/files/test-server');
             expect(result).toEqual(mockData);
@@ -164,17 +164,17 @@ describe('loadSession', () => {
         it('should handle file read errors', async () => {
             mockFs.readFile.mockRejectedValue(new Error('File not found'));
 
-            await expect(getSessionsFromSaved('nonexistent')).rejects.toThrow('File not found');
+            await expect(getServerFromSaved('nonexistent')).rejects.toThrow('File not found');
         });
 
         it('should handle JSON parse errors', async () => {
             mockFs.readFile.mockResolvedValue(Buffer.from('invalid json'));
 
-            await expect(getSessionsFromSaved('corrupt-file')).rejects.toThrow();
+            await expect(getServerFromSaved('corrupt-file')).rejects.toThrow();
         });
     });
 
-    describe('handleSessionsIfServerIsRunning', () => {
+    describe('handleServerIfRunning', () => {
         it('should handle server with existing sessions and save them', async () => {
             const mockCurrentSessions = {
                 session1: {
@@ -194,7 +194,7 @@ describe('loadSession', () => {
             mockGetCurrentSessions.mockResolvedValue(mockCurrentSessions);
             mockGeneralUI.promptUserYesOrNo.mockResolvedValue(true);
 
-            await handleSessionsIfServerIsRunning();
+            await handleServerIfRunning();
 
             expect(mockPrintSessions).toHaveBeenCalledWith(mockCurrentSessions);
             expect(mockGeneralUI.promptUserYesOrNo).toHaveBeenCalledWith(
@@ -224,7 +224,7 @@ describe('loadSession', () => {
             mockGetCurrentSessions.mockResolvedValue(mockCurrentSessions);
             mockGeneralUI.promptUserYesOrNo.mockResolvedValue(false);
 
-            await handleSessionsIfServerIsRunning();
+            await handleServerIfRunning();
 
             expect(mockPrintSessions).toHaveBeenCalledWith(mockCurrentSessions);
             expect(mockGeneralUI.promptUserYesOrNo).toHaveBeenCalledWith(
@@ -238,7 +238,7 @@ describe('loadSession', () => {
         it('should handle server with no existing sessions', async () => {
             mockGetCurrentSessions.mockResolvedValue({});
 
-            await handleSessionsIfServerIsRunning();
+            await handleServerIfRunning();
 
             expect(mockPrintSessions).not.toHaveBeenCalled();
             expect(mockGeneralUI.promptUserYesOrNo).not.toHaveBeenCalled();
@@ -285,7 +285,7 @@ describe('loadSession', () => {
 
             const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-            await loadSession();
+            await loadServer();
 
             expect(consoleSpy).toHaveBeenCalledWith('Failed to create session session1:', expect.any(Error));
 
@@ -355,7 +355,7 @@ describe('loadSession', () => {
 
             const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-            await loadSession();
+            await loadServer();
 
             expect(consoleSpy).toHaveBeenCalledWith('Sessions loaded successfully');
 
@@ -402,7 +402,7 @@ describe('loadSession', () => {
 
             const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
-            await loadSession();
+            await loadServer();
 
             expect(consoleSpy).toHaveBeenCalledWith('Load session error:', expect.any(Error));
             expect(mockFs.rm).toHaveBeenCalled(); // should still clean up
