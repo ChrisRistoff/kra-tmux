@@ -11,6 +11,7 @@ export type CommandCatalog<T extends string> = Record<T, CommandDefinition>;
 
 export type SystemCommandName = 'grep' | 'scripts' | 'process-manager' | 'disk-usage';
 export type TmuxCommandName = 'save-server' | 'load-server' | 'save-session' | 'load-session' | 'list-sessions' | 'manage-saves' | 'find-session' | 'kill';
+export type NotesCommandName = 'open' | 'new' | 'pick' | 'journal';
 export type GitCommandName =
     | 'restore'
     | 'cache-untracked'
@@ -33,10 +34,11 @@ export type AiCommandName =
     | 'delete'
     | 'quota-agent'
     | 'index';
-export type CommandType = 'sys' | 'tmux' | 'git' | 'ai' | 'memory' | 'settings';
+export type CommandType = 'sys' | 'tmux' | 'git' | 'ai' | 'memory' | 'settings' | 'notes';
 
 export type SystemCommands = CommandCatalog<SystemCommandName>;
 export type TmuxCommands = CommandCatalog<TmuxCommandName>;
+export type NotesCommands = CommandCatalog<NotesCommandName>;
 export type GitCommands = CommandCatalog<GitCommandName>;
 export type AiCommands = CommandCatalog<AiCommandName>;
 

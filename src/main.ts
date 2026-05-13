@@ -53,6 +53,16 @@ const commandTypeOptions: ReadonlyArray<MenuOption<CommandType>> = [
         ],
     },
     {
+        name: 'notes',
+        description: 'Markdown note-taking app (nvim + render-markdown + telescope)',
+        details: 'Open the bundled markdown note app powered by nvim with a self-contained config. Notes live under ~/.kra/notes/ with category sub-directories. In-buffer markdown render, fuzzy file picker, link following, backlinks, and quick-insert keymaps under <leader> (space).',
+        highlights: [
+            'In-buffer markdown rendering and Telescope picker out of the box.',
+            'Sub-directory categories (e.g. work/idea-x), wiki-style [[link]] follow, and backlinks.',
+            'Quick-insert keymaps for tasks, dates, headings, code blocks, lists, and links.',
+        ],
+    },
+    {
         name: 'sys',
         description: 'System cleanup and automation-script utilities',
         details: 'Operational helpers for cleaning up files or directories and running local automation scripts. This group stays focused on filesystem maintenance and repo-specific scripted workflows.',
@@ -136,6 +146,25 @@ const main = async (): Promise<void> => {
     if (commandType === 'memory') {
         const { memoryDashboard } = await import('@/AI');
         await memoryDashboard();
+
+        return;
+    }
+
+    if (commandType === 'notes') {
+        // Notes is dispatched directly so bare `kra notes` and `kra notes <name>`
+        // both work without going through the command-selection menu.
+        const { notesCommands } = await import('@/commandsMaps/notesCommands');
+        const sub = args[1];
+        const rest = args.slice(2);
+        if (sub === 'new') {
+            await notesCommands.new.run(rest);
+        } else if (sub === 'pick') {
+            await notesCommands.pick.run(rest);
+        } else if (sub === 'journal') {
+            await notesCommands.journal.run(rest);
+        } else {
+            await notesCommands.open.run(sub ? [sub, ...rest] : []);
+        }
 
         return;
     }
