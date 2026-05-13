@@ -1,20 +1,14 @@
 #!/usr/bin/env node
 
 import { aiAscii } from '@/AI/shared/data/ai-ascii';
-import { aiCommands } from '@/commandsMaps/aiCommands';
 import { pickMenuOption, resolveCommandSelection } from '@/commandsMaps/commandMenu';
-import { gitCommands } from '@/commandsMaps/gitCommands';
 import { Command, CommandType, MenuOption } from '@/commandsMaps/types/commandTypes';
 import { workflowAscii } from '@/data/workflow-ascii';
 import { gitAscii } from '@/git/data/git-ascii';
 import { getAsciiHelp, isHelpFlag } from '@/utils/cliHelp';
-import { handleChangeSettings } from '@/manageSettings';
-import { memoryDashboard } from '@/AI';
 import { runInstall, isInstalled } from '@/setup/install';
 import { sysAscii } from '@/system/data/sys-ascii';
-import { systemCommands } from '@/commandsMaps/systemCommands';
 import { tmuxAscii } from '@/tmux/data/tmux-ascii';
-import { tmuxCommands } from '@/commandsMaps/tmuxCommands';
 import { UserCancelled } from '@/UI/menuChain';
 
 const commandTypeOptions: ReadonlyArray<MenuOption<CommandType>> = [
@@ -133,12 +127,14 @@ const main = async (): Promise<void> => {
     const commandName = hasValidCommandType ? args[1] : undefined;
 
     if (commandType === 'settings') {
+        const { handleChangeSettings } = await import('@/manageSettings');
         await handleChangeSettings();
 
         return;
     }
 
     if (commandType === 'memory') {
+        const { memoryDashboard } = await import('@/AI');
         await memoryDashboard();
 
         return;
@@ -146,7 +142,9 @@ const main = async (): Promise<void> => {
 
     const command = await (async (): Promise<Command> => {
         switch (commandType) {
-            case 'sys':
+            case 'sys': {
+                const { systemCommands } = await import('@/commandsMaps/systemCommands');
+
                 return (await resolveCommandSelection({
                     title: 'kra sys',
                     header: `${sysAscii}\n\nPick a system command.`,
@@ -154,7 +152,10 @@ const main = async (): Promise<void> => {
                     invalidLabel: 'system command',
                     commands: systemCommands,
                 })).run;
-            case 'tmux':
+            }
+            case 'tmux': {
+                const { tmuxCommands } = await import('@/commandsMaps/tmuxCommands');
+
                 return (await resolveCommandSelection({
                     title: 'kra tmux',
                     header: `${tmuxAscii}\n\nPick a tmux command.`,
@@ -162,7 +163,10 @@ const main = async (): Promise<void> => {
                     invalidLabel: 'tmux command',
                     commands: tmuxCommands,
                 })).run;
-            case 'git':
+            }
+            case 'git': {
+                const { gitCommands } = await import('@/commandsMaps/gitCommands');
+
                 return (await resolveCommandSelection({
                     title: 'kra git',
                     header: `${gitAscii}\n\nPick a git command.`,
@@ -170,7 +174,10 @@ const main = async (): Promise<void> => {
                     invalidLabel: 'git command',
                     commands: gitCommands,
                 })).run;
-            case 'ai':
+            }
+            case 'ai': {
+                const { aiCommands } = await import('@/commandsMaps/aiCommands');
+
                 return (await resolveCommandSelection({
                     title: 'kra ai',
                     header: `${aiAscii}\n\nPick an AI command.`,
@@ -178,6 +185,7 @@ const main = async (): Promise<void> => {
                     invalidLabel: 'AI command',
                     commands: aiCommands,
                 })).run;
+            }
         }
     })();
 

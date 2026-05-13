@@ -1,5 +1,12 @@
-import { highlight, supportsLanguage } from 'cli-highlight';
 import * as path from 'path';
+
+type CliHighlight = typeof import('cli-highlight');
+let cliHighlight: CliHighlight | null = null;
+function loadCliHighlight(): CliHighlight {
+    if (!cliHighlight) cliHighlight = require('cli-highlight') as CliHighlight;
+
+    return cliHighlight;
+}
 
 const EXT_TO_LANG: Record<string, string> = {
     '.ts': 'typescript',
@@ -51,14 +58,14 @@ export function languageForPath(filePath: string): string | null {
     const lang = EXT_TO_LANG[ext];
     if (!lang) return null;
 
-    return supportsLanguage(lang) ? lang : null;
+    return loadCliHighlight().supportsLanguage(lang) ? lang : null;
 }
 
 export function highlightCode(text: string, filePath: string): string {
     const lang = languageForPath(filePath);
     if (!lang) return text;
     try {
-        return highlight(text, { language: lang, ignoreIllegals: true });
+        return loadCliHighlight().highlight(text, { language: lang, ignoreIllegals: true });
     } catch {
         return text;
     }

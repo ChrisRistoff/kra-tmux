@@ -41,6 +41,17 @@ export const tmuxCommands: TmuxCommands = {
             'Does not modify saved sessions or server state.',
         ],
     },
+    'find-session': {
+        run: sessions.findSession,
+        description: 'Telescope-style fuzzy picker for live tmux sessions and windows',
+        details: 'Two-tab dashboard for the running tmux server. Tab 1 lists live sessions with a summary and window list preview; tab 2 lists every window across every session with a live capture-pane preview. Fuzzy filter on /, enter switches the current client to the selection.',
+        highlights: [
+            'Tab 1 sessions, tab 2 windows; press 1 / 2 to switch.',
+            'Fuzzy search via the / search box (matches name, command, cwd).',
+            'Enter switches the current client to the selected session or window.',
+        ],
+    },
+
     'manage-saves': {
         run: sessions.manageSaves,
         description: 'Open the tmux save-management dashboard (servers + sessions)',
