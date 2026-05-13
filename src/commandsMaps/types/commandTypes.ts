@@ -10,7 +10,7 @@ export interface CommandDefinition {
 export type CommandCatalog<T extends string> = Record<T, CommandDefinition>;
 
 export type SystemCommandName = 'grep' | 'scripts' | 'process-manager' | 'disk-usage';
-export type TmuxCommandName = 'save-server' | 'load-server' | 'save-session' | 'load-session' | 'list-sessions' | 'manage-saves' | 'kill';
+export type TmuxCommandName = 'save-server' | 'load-server' | 'save-session' | 'load-session' | 'list-sessions' | 'manage-saves' | 'find-session' | 'kill';
 export type GitCommandName =
     | 'restore'
     | 'cache-untracked'
