@@ -236,10 +236,41 @@ function ensureDefaultSettings(home: string): void {
 
 function patchShellRcs(): void {
     const sourceLine = `source ${sourceAllShPath}`;
+    // Match any line that sources a kra-workflow source-all.sh, regardless of
+    // install path or `source`/`.` style. Lets us detect and update stale
+    // entries when the package path changes (e.g. local link -> global npm).
+    const kraSourceRe = /^[ \t]*(?:source|\.)[ \t]+(?:"([^"]*\/automationScripts\/source-all\.sh)"|'([^']*\/automationScripts\/source-all\.sh)'|(\S*\/automationScripts\/source-all\.sh))[ \t]*$/;
+
     for (const rc of [`${os.homedir()}/.bashrc`, `${os.homedir()}/.zshrc`]) {
-        if (appendLineIfMissing(rc, sourceLine)) {
-            console.log(`[kra] added kra-workflow source line to ${rc}`);
+        if (!fs.existsSync(rc)) continue;
+
+        const original = fs.readFileSync(rc, 'utf8');
+        const lines = original.split('\n');
+        let matchedIdx = -1;
+        let matchedPath = '';
+        for (let i = 0; i < lines.length; i++) {
+            const m = lines[i].match(kraSourceRe);
+            if (m) {
+                matchedIdx = i;
+                matchedPath = m[1] || m[2] || m[3] || '';
+                break;
+            }
         }
+
+        if (matchedIdx === -1) {
+            const sep = original.length === 0 || original.endsWith('\n') ? '' : '\n';
+            fs.appendFileSync(rc, `${sep}${sourceLine}\n`);
+            console.log(`[kra] added kra-workflow source line to ${rc}`);
+            continue;
+        }
+
+        if (matchedPath === sourceAllShPath) {
+            continue;
+        }
+
+        lines[matchedIdx] = sourceLine;
+        fs.writeFileSync(rc, lines.join('\n'));
+        console.log(`[kra] updated kra-workflow source line in ${rc} (was: ${matchedPath})`);
     }
 }
 
@@ -279,14 +310,14 @@ export function runInstall(opts: InstallOptions = {}): void {
     const fresh = ensureKraHomeSkeleton(home);
     ensureDefaultSettings(home);
     ensureDefaultTmuxConf(home);
+    patchShellRcs();
+    patchNeovimConfig();
 
     if (isInstalled() && !opts.force) return;
 
     if (fresh) {
         migrateFromLegacy(home);
     }
-    patchShellRcs();
-    patchNeovimConfig();
 
     fs.writeFileSync(installedMarkerPath(home), `installed-from=${packageRoot()}\nat=${new Date().toISOString()}\n`);
     console.log('[kra] setup complete. Restart your shell (or `source ~/.bashrc`) to enable autocompletion.');
