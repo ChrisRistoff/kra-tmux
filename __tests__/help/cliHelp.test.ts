@@ -16,7 +16,7 @@ describe('cliHelp', () => {
 
     it('returns group-specific help banners', () => {
         expect(getAsciiHelp('git')).toContain('| checkout');
-        expect(getAsciiHelp('tmux')).toContain('| manage-server');
+        expect(getAsciiHelp('tmux')).toContain('| manage-saves');
         expect(getAsciiHelp('ai')).toContain('| quota-agent');
         expect(getAsciiHelp('sys')).toContain('| grep');
         expect(getAsciiHelp('settings')).toContain('Use: kra settings');

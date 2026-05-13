@@ -1,12 +1,12 @@
 import * as blessed from 'blessed';
 import * as fs from 'fs/promises';
-import { sessionFilesFolder } from '@/filePaths';
+import { serverFilesFolder, singleSessionFilesFolder } from '@/filePaths';
 import { TmuxSessions } from '@/types/sessionTypes';
 import {
-    getSavedSessionsNames,
-    getSavedSessionsByFilePath,
+    getSavedFileByPath,
     getDateString,
 } from '@/tmux/utils/sessionUtils';
+import { listSavedNames } from '@/tmux/utils/savedSessionsIO';
 import {
     escTag,
     modalText,
@@ -26,11 +26,11 @@ interface FileEntry {
     parseError?: string;
 }
 
-async function loadFileEntries(): Promise<FileEntry[]> {
-    const names = await getSavedSessionsNames();
+async function loadFileEntries(folder: string): Promise<FileEntry[]> {
+    const names = await listSavedNames(folder);
     const entries: FileEntry[] = [];
     for (const name of names) {
-        const fp = `${sessionFilesFolder}/${name}`;
+        const fp = `${folder}/${name}`;
         try {
             const st = await fs.stat(fp);
             entries.push({ name, path: fp, sizeBytes: st.size, mtimeMs: st.mtimeMs });
@@ -46,7 +46,7 @@ async function loadFileEntries(): Promise<FileEntry[]> {
 async function ensureSessions(entry: FileEntry): Promise<void> {
     if (entry.sessions || entry.parseError) return;
     try {
-        entry.sessions = await getSavedSessionsByFilePath(entry.path);
+        entry.sessions = await getSavedFileByPath(entry.path);
     } catch (e) {
         entry.parseError = e instanceof Error ? e.message : String(e);
     }
@@ -498,11 +498,60 @@ async function buildNewSaveFlow(parentScreen: blessed.Widgets.Screen): Promise<T
     });
 }
 
-export async function manageSessions(): Promise<void> {
-    let entries = await loadFileEntries();
+type SavesMode = 'servers' | 'sessions';
+
+interface ModeConfig {
+    folder: string;
+    title: string;
+    listLabel: string;
+    headerLabel: string;
+    runLoad: (fileName: string) => Promise<void>;
+}
+
+async function getModeConfig(mode: SavesMode): Promise<ModeConfig> {
+    if (mode === 'servers') {
+        const { loadServer, handleServerIfRunning } = await import('@/tmux/commands/loadServer');
+
+        return {
+            folder: serverFilesFolder,
+            title: 'tmux · manage saves · servers',
+            listLabel: 'server saves',
+            headerLabel: 'server saves',
+            runLoad: async (name: string) => {
+                await handleServerIfRunning();
+                await loadServer(name);
+            },
+        };
+    }
+
+    const { loadSession } = await import('@/tmux/commands/loadSession');
+
+    return {
+        folder: singleSessionFilesFolder,
+        title: 'tmux · manage saves · sessions',
+        listLabel: 'session saves',
+        headerLabel: 'session saves',
+        runLoad: async (name: string) => {
+            await loadSession(name);
+        },
+    };
+}
+
+async function runSavesDashboard(mode: SavesMode): Promise<void> {
+    const cfg = await getModeConfig(mode);
+    let entries = await loadFileEntries(cfg.folder);
+    let nextMode: SavesMode | null = null;
+
+    function tabsHeader(active: SavesMode): string {
+        const tab = (label: string, key: SavesMode): string => active === key
+            ? `{yellow-fg}{bold}${label}{/bold}{/yellow-fg}`
+            : `{gray-fg}${label}{/gray-fg}`;
+
+        return `${tab('1 Servers', 'servers')}   ${tab('2 Sessions', 'sessions')}`;
+    }
 
     await createListDetailDashboard<FileEntry>({
-        title: 'tmux · manage saves',
+        title: cfg.title,
         initialRows: entries,
         rowKey: (e) => e.name,
         renderListItem: (e) => {
@@ -511,13 +560,13 @@ export async function manageSessions(): Promise<void> {
 
             return `${theme.date(age)}  ${theme.size(size)}  ${theme.value(escTag(e.name))}`;
         },
-        listLabel: 'saves',
-        listFocusName: 'saves',
+        listLabel: cfg.listLabel,
+        listFocusName: cfg.listLabel,
         listWidth: '50%',
         headerContent: () => {
             const total = entries.length;
 
-            return `${theme.title('tmux saves')}  ${theme.dim('|')}  ${theme.count(total)} files`;
+            return `${theme.title('tmux saves')}  ${theme.dim('|')}  ${theme.count(total)} files   ${tabsHeader(mode)}`;
         },
         detailPanels: [
             {
@@ -540,7 +589,7 @@ export async function manageSessions(): Promise<void> {
             },
         ],
         keymapText: () =>
-            `${theme.key('j/k')} nav   ${theme.key('[ ]')} ±10   ${theme.key('{ }')} ±100   ` +
+            `${theme.key('1/2')} tab   ${theme.key('j/k')} nav   ${theme.key('[ ]')} ±10   ${theme.key('{ }')} ±100   ` +
             `${theme.key('enter')} load   ` +
             `${theme.key('n')} new save   ` +
             `${theme.key('d')} delete   ` +
@@ -549,15 +598,29 @@ export async function manageSessions(): Promise<void> {
             `${theme.key('q')} quit`,
         actions: [
             {
+                keys: '1',
+                handler: async (_cur, api) => {
+                    if (mode === 'servers') return;
+                    nextMode = 'servers';
+                    api.destroy();
+                },
+            },
+            {
+                keys: '2',
+                handler: async (_cur, api) => {
+                    if (mode === 'sessions') return;
+                    nextMode = 'sessions';
+                    api.destroy();
+                },
+            },
+            {
                 keys: 'enter',
                 handler: async (cur, api) => {
                     if (!cur) return;
                     const ok = await modalConfirm(api.screen, 'Load save', `Load save "${escTag(cur.name)}"? This will run the load flow.`);
                     if (!ok) return;
                     api.destroy();
-                    const { loadSession, handleSessionsIfServerIsRunning } = await import('@/tmux/commands/loadSession');
-                    await handleSessionsIfServerIsRunning();
-                    await loadSession(cur.name);
+                    await cfg.runLoad(cur.name);
                 },
             },
             {
@@ -568,7 +631,7 @@ export async function manageSessions(): Promise<void> {
                     if (!ok) return;
                     try {
                         await fs.rm(cur.path);
-                        entries = await loadFileEntries();
+                        entries = await loadFileEntries(cfg.folder);
                         api.setRows(entries);
                         api.refreshHeader();
                     } catch (e) {
@@ -584,10 +647,10 @@ export async function manageSessions(): Promise<void> {
                     if (!next.value?.trim()) return;
                     const trimmed = next.value.trim();
                     if (trimmed === cur.name) return;
-                    const newPath = `${sessionFilesFolder}/${trimmed}`;
+                    const newPath = `${cfg.folder}/${trimmed}`;
                     try {
                         await fs.rename(cur.path, newPath);
-                        entries = await loadFileEntries();
+                        entries = await loadFileEntries(cfg.folder);
                         api.setRows(entries, { preserveKey: trimmed });
                         api.refreshHeader();
                     } catch (e) {
@@ -598,7 +661,7 @@ export async function manageSessions(): Promise<void> {
             {
                 keys: 'R',
                 handler: async (_cur, api) => {
-                    entries = await loadFileEntries();
+                    entries = await loadFileEntries(cfg.folder);
                     api.setRows(entries);
                     api.refreshHeader();
                 },
@@ -608,14 +671,22 @@ export async function manageSessions(): Promise<void> {
                 handler: async (_cur, api) => {
                     const built = await buildNewSaveFlow(api.screen);
                     if (!built) return;
+
+                    let payload = built;
+                    if (mode === 'sessions' && Object.keys(built).length > 1) {
+                        await modalConfirm(api.screen, 'Notice', 'Single-session saves contain exactly one session. Only the first will be kept.');
+                        const firstName = Object.keys(built)[0];
+                        payload = { [firstName]: built[firstName] };
+                    }
+
                     const defaultName = `manual-${getDateString()}`;
                     const name = await modalText(api.screen, 'Save as file name', defaultName);
                     if (!name.value?.trim()) return;
                     const fname = name.value.trim();
-                    const newPath = `${sessionFilesFolder}/${fname}`;
+                    const newPath = `${cfg.folder}/${fname}`;
                     try {
-                        await fs.writeFile(newPath, JSON.stringify(built, null, 2), 'utf-8');
-                        entries = await loadFileEntries();
+                        await fs.writeFile(newPath, JSON.stringify(payload, null, 2), 'utf-8');
+                        entries = await loadFileEntries(cfg.folder);
                         api.setRows(entries, { preserveKey: fname });
                         api.refreshHeader();
                     } catch (e) {
@@ -625,4 +696,12 @@ export async function manageSessions(): Promise<void> {
             },
         ],
     });
+
+    if (nextMode) {
+        await runSavesDashboard(nextMode);
+    }
+}
+
+export async function manageSaves(): Promise<void> {
+    await runSavesDashboard('servers');
 }

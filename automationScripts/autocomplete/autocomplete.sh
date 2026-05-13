@@ -16,7 +16,7 @@ _kra_completions() {
     if [[ "$prev" == "git" ]]; then
         COMPREPLY=( $(compgen -W "checkout create-branch open-pr view-changed restore cache-untracked retrieve-untracked hard-reset log stash stash-drop-multiple conflict-handle reflog scout" -- "$cur") )
     elif [[ "$prev" == "tmux" ]]; then
-        COMPREPLY=( $(compgen -W "save-server load-server list-sessions kill manage-server" -- "$cur") )
+        COMPREPLY=( $(compgen -W "save-server load-server list-sessions kill manage-saves load-session save-session" -- "$cur") )
     elif [[ "$prev" == "sys" ]]; then
         COMPREPLY=( $(compgen -W "scripts grep process-manager disc-usage" -- "$cur") )
     elif [[ "$prev" == "ai" ]]; then

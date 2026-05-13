@@ -1,14 +1,18 @@
 import * as sessions from '@/tmux/index';
 import { TmuxCommands } from '@/commandsMaps/types/commandTypes';
 
+async function loadServer(): Promise<void> {
+    await sessions.handleServerIfRunning();
+    await sessions.loadServer();
+}
+
 async function loadSession(): Promise<void> {
-    await sessions.handleSessionsIfServerIsRunning();
     await sessions.loadSession();
 }
 
 export const tmuxCommands: TmuxCommands = {
     'save-server': {
-        run: sessions.saveSessionsToFile,
+        run: sessions.saveServerToFile,
         description: 'Save the current tmux server state into a named file',
         details: 'Capture the running tmux server so it can be restored later with its sessions, windows, panes, working directories, and editor state.',
         highlights: [
@@ -18,7 +22,7 @@ export const tmuxCommands: TmuxCommands = {
         ],
     },
     'load-server': {
-        run: loadSession,
+        run: loadServer,
         description: 'Load a saved tmux session file back into tmux',
         details: 'Choose a saved server file and rebuild the tmux layout it describes, including the working directories and saved session structure.',
         highlights: [
@@ -37,14 +41,34 @@ export const tmuxCommands: TmuxCommands = {
             'Does not modify saved sessions or server state.',
         ],
     },
-    'manage-server': {
-        run: sessions.manageSessions,
-        description: 'Open the tmux save-management dashboard',
-        details: 'Shared multi-pane dashboard for browsing saved tmux files, previewing their structure, deleting or renaming saves, and building a new save interactively.',
+    'manage-saves': {
+        run: sessions.manageSaves,
+        description: 'Open the tmux save-management dashboard (servers + sessions)',
+        details: 'Two-tab dashboard for browsing saved tmux files. Press 1 for server saves, 2 for single-session saves. Browse, preview, rename, delete, or build a new save interactively.',
         highlights: [
-            'Shows meaningful save details in side panels, not just a file list.',
-            'Includes management actions and the save-builder overlay.',
-            'Acts as the main home for saved tmux workspace maintenance.',
+            'Tab 1 manages full-server saves; tab 2 manages single-session saves.',
+            'Same browsing, rename, delete, and new-save flow on both tabs.',
+            'Press 1 / 2 at any time to switch tabs.',
+        ],
+    },
+    'save-session': {
+        run: sessions.saveSession,
+        description: 'Save a single tmux session into a named file',
+        details: 'Pick one running tmux session (defaulting to the attached one) and persist just that session\'s windows and panes, including nvim editor state, into the single-session save folder.',
+        highlights: [
+            'Captures one session, not the whole server.',
+            'Useful for sharing or reloading individual workspaces.',
+            'Does not touch the autosave current-session marker.',
+        ],
+    },
+    'load-session': {
+        run: loadSession,
+        description: 'Load a saved single-session file into the current tmux server',
+        details: 'Pick a saved single-session file and recreate that one session inside the running tmux server, leaving any other sessions untouched. On a name collision you can rename, overwrite, or cancel.',
+        highlights: [
+            'Adds a session to the current server instead of replacing it.',
+            'Pairs with save-session for round-trip persistence of one session.',
+            'Prompts before clobbering an existing session of the same name.',
         ],
     },
     'kill': {

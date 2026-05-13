@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as bash from '@/utils/bashHelper';
-import { sessionFilesFolder } from '@/filePaths';
+import { serverFilesFolder } from '@/filePaths';
 import { TmuxSessions, Window, Pane } from '@/types/sessionTypes';
 import { formatWindow, formatPane } from '@/tmux/utils/formatters';
 import { filterGitKeep } from '@/utils/common';
@@ -8,8 +8,8 @@ import {
     getCurrentSessions,
     getWindowsForSession,
     getPanesForWindow,
-    getSavedSessionsNames,
-    getSavedSessionsByFilePath,
+    getSavedServerNames,
+    getSavedFileByPath,
     getDateString
 } from '@/tmux/utils/sessionUtils';
 
@@ -31,7 +31,7 @@ const mockedFormatWindow = formatWindow as jest.MockedFunction<typeof formatWind
 const mockedFormatPane = formatPane as jest.MockedFunction<typeof formatPane>;
 const mockedFilterGitKeep = filterGitKeep as jest.MockedFunction<typeof filterGitKeep>;
 
-(sessionFilesFolder as any) = '/mock/sessions/path';
+(serverFilesFolder as any) = '/mock/sessions/path';
 
 describe('Tmux Session Management', () => {
     beforeEach(() => {
@@ -351,7 +351,7 @@ describe('Tmux Session Management', () => {
         });
     });
 
-    describe('getSavedSessionsNames', () => {
+    describe('getSavedServerNames', () => {
         it('should return filtered session names', async () => {
             const mockFiles = ['session1.json', 'session2.json', '.gitkeep'];
             const filteredFiles = ['session1.json', 'session2.json'];
@@ -359,10 +359,10 @@ describe('Tmux Session Management', () => {
             mockedFs.readdir.mockResolvedValueOnce(mockFiles as any);
             mockedFilterGitKeep.mockReturnValueOnce(filteredFiles);
 
-            const result = await getSavedSessionsNames();
+            const result = await getSavedServerNames();
 
             expect(result).toEqual(filteredFiles);
-            expect(mockedFs.readdir).toHaveBeenCalledWith(sessionFilesFolder);
+            expect(mockedFs.readdir).toHaveBeenCalledWith(serverFilesFolder);
             expect(mockedFilterGitKeep).toHaveBeenCalledWith(mockFiles);
         });
 
@@ -370,7 +370,7 @@ describe('Tmux Session Management', () => {
             const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
             mockedFs.readdir.mockRejectedValueOnce(new Error('Directory not found'));
 
-            const result = await getSavedSessionsNames();
+            const result = await getSavedServerNames();
 
             expect(result).toEqual([]);
             expect(consoleSpy).toHaveBeenCalledWith('Error reading directory:', expect.any(Error));
@@ -379,7 +379,7 @@ describe('Tmux Session Management', () => {
         });
     });
 
-    describe('getSavedSessionsByFilePath', () => {
+    describe('getSavedFileByPath', () => {
         it('should parse and return sessions from file', async () => {
             const mockSessionData: TmuxSessions = {
                 'saved-session': {
@@ -398,7 +398,7 @@ describe('Tmux Session Management', () => {
 
             mockedFs.readFile.mockResolvedValueOnce(Buffer.from(JSON.stringify(mockSessionData)));
 
-            const result = await getSavedSessionsByFilePath('/path/to/session.json');
+            const result = await getSavedFileByPath('/path/to/session.json');
 
             expect(result).toEqual(mockSessionData);
             expect(mockedFs.readFile).toHaveBeenCalledWith('/path/to/session.json');
@@ -407,14 +407,14 @@ describe('Tmux Session Management', () => {
         it('should throw error for invalid JSON', async () => {
             mockedFs.readFile.mockResolvedValueOnce(Buffer.from('invalid json'));
 
-            await expect(getSavedSessionsByFilePath('/path/to/invalid.json'))
+            await expect(getSavedFileByPath('/path/to/invalid.json'))
                 .rejects.toThrow();
         });
 
         it('should throw error when file read fails', async () => {
             mockedFs.readFile.mockRejectedValueOnce(new Error('File not found'));
 
-            await expect(getSavedSessionsByFilePath('/path/to/missing.json'))
+            await expect(getSavedFileByPath('/path/to/missing.json'))
                 .rejects.toThrow('File not found');
         });
     });

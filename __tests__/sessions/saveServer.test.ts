@@ -6,7 +6,7 @@ import { getCurrentSessions, getDateString } from '@/tmux/utils/sessionUtils';
 import { TmuxSessions } from '@/types/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
 import { updateCurrentSession } from '@/tmux/utils/common';
-import { quickSave, saveSessionsToFile } from '@/tmux/commands/saveSessions';
+import { quickSaveServer, saveServerToFile } from '@/tmux/commands/saveServer';
 
 jest.mock('fs/promises');
 jest.mock('@/utils/bashHelper');
@@ -17,7 +17,7 @@ jest.mock('@/utils/common');
 jest.mock('@/tmux/utils/common');
 jest.mock('@/filePaths', () => ({
     nvimSessionsPath: '/mock/nvim/sessions',
-    sessionFilesFolder: '/mock/session/files'
+    serverFilesFolder: '/mock/session/files'
 }));
 
 describe('saveSessions', () => {
@@ -93,9 +93,9 @@ describe('saveSessions', () => {
         mockUpdateCurrentSession.mockResolvedValue();
     });
 
-    describe('quickSave', () => {
+    describe('quickSaveServer', () => {
         it('should save sessions to file when sessions exist', async () => {
-            await quickSave('quick-save-test');
+            await quickSaveServer('quick-save-test');
 
             expect(mockGetCurrentSessions).toHaveBeenCalled();
             expect(mockFs.writeFile).toHaveBeenCalledWith(
@@ -108,7 +108,7 @@ describe('saveSessions', () => {
         it('should not save when no sessions exist', async () => {
             mockGetCurrentSessions.mockResolvedValue({});
 
-            await quickSave('empty-sessions');
+            await quickSaveServer('empty-sessions');
 
             expect(mockGetCurrentSessions).toHaveBeenCalled();
             expect(mockFs.writeFile).not.toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe('saveSessions', () => {
 
             mockGetCurrentSessions.mockResolvedValue(complexSessions);
 
-            await quickSave('complex-save');
+            await quickSaveServer('complex-save');
 
             expect(mockFs.writeFile).toHaveBeenCalledWith(
                 '/mock/session/files/complex-save',
@@ -170,12 +170,12 @@ describe('saveSessions', () => {
         });
     });
 
-    describe('saveSessionsToFile', () => {
+    describe('saveServerToFile', () => {
         it('should save sessions with user-provided filename', async () => {
             mockGeneralUI.searchAndSelect.mockResolvedValue('my-session');
             const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             expect(mockGetCurrentSessions).toHaveBeenCalled();
             expect(mockGeneralUI.searchAndSelect).toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe('saveSessions', () => {
             mockGetCurrentSessions.mockResolvedValue({});
             const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             expect(consoleSpy).toHaveBeenCalledWith('No sessions found to save!');
             expect(mockFs.writeFile).not.toHaveBeenCalled();
@@ -213,7 +213,7 @@ describe('saveSessions', () => {
             mockGeneralUI.searchAndSelect.mockResolvedValue(userInput);
             mockFilterGitKeep.mockReturnValue(['existing-session', 'another-session']);
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             const expectedFileName = `${branchName}-${userInput}-2024-01-15`;
 
@@ -233,7 +233,7 @@ describe('saveSessions', () => {
             mockBash.execCommand.mockRejectedValue(new Error('Not a git repository'));
             mockGeneralUI.searchAndSelect.mockResolvedValue('manual-session');
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             expect(mockGeneralUI.searchAndSelect).toHaveBeenCalledWith({
                 itemsArray: [],
@@ -255,7 +255,7 @@ describe('saveSessions', () => {
             mockGeneralUI.searchAndSelect.mockResolvedValue('custom-session');
             mockFilterGitKeep.mockReturnValue(['session1', 'session2']);
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             expect(mockGeneralUI.promptUserYesOrNo).toHaveBeenCalledWith(
                 `Would you like to use ${branchName} as part of your name for your save?`
@@ -312,7 +312,7 @@ describe('saveSessions', () => {
             mockGetCurrentSessions.mockResolvedValue(mixedSessions);
             mockGeneralUI.searchAndSelect.mockResolvedValue('mixed-save');
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             expect(mockNvim.saveNvimSession).toHaveBeenCalledTimes(2);
             expect(mockNvim.saveNvimSession).toHaveBeenCalledWith('mixed-save', 'mixed-session', 0, 0);
@@ -324,7 +324,7 @@ describe('saveSessions', () => {
             mockGeneralUI.searchAndSelect.mockResolvedValue('');
             const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             expect(consoleSpy).toHaveBeenCalledWith('Save cancelled.');
             expect(mockFs.writeFile).not.toHaveBeenCalled();
@@ -366,7 +366,7 @@ describe('saveSessions', () => {
             mockGetCurrentSessions.mockResolvedValue(sessionsWithMixedCommands);
             mockGeneralUI.searchAndSelect.mockResolvedValue('cleanup-test');
 
-            await saveSessionsToFile();
+            await saveServerToFile();
 
             // cleanup happens asynchronously, so we need to wait a bit
             await new Promise(resolve => setTimeout(resolve, 10));

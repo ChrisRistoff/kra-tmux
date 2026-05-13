@@ -6,7 +6,7 @@ import * as nvim from 'neovim';
 import fs from 'fs/promises';
 import { loadSettings } from '@/utils/common';
 import { Settings } from '@/types/settingsTypes';
-import { quickSave } from '@/tmux';
+import { quickSaveServer } from '@/tmux';
 
 let saveTimer: NodeJS.Timeout | undefined;
 let server: IPCServer | undefined;
@@ -56,7 +56,7 @@ async function resetSaveTimer(timeout: number = undefined!) {
                 }
             }
 
-            await quickSave(saveFileName);
+            await quickSaveServer(saveFileName);
         } catch (error) {
             console.log(error);
         } finally {

@@ -1,14 +1,13 @@
 import * as fs from 'fs/promises';
 import * as bash from '@/utils/bashHelper';
-import * as nvim from '@/utils/neovimHelper';
 import * as generalUI from '@/UI/generalUI';
-import { nvimSessionsPath, sessionFilesFolder } from '@/filePaths';
+import { serverFilesFolder } from '@/filePaths';
 import { getCurrentSessions, getDateString } from '@/tmux/utils/sessionUtils';
-import { TmuxSessions } from '@/types/sessionTypes';
 import { filterGitKeep } from '@/utils/common';
 import { updateCurrentSession } from '@/tmux/utils/common';
+import { saveNvimForSessions, cleanUpStaleNvimSaves } from '@/tmux/utils/nvimSaveSync';
 
-export async function quickSave(fileName: string): Promise<void> {
+export async function quickSaveServer(fileName: string): Promise<void> {
     const currentSessions = await getCurrentSessions();
     const sessionString = JSON.stringify(currentSessions, null, 2);
 
@@ -16,11 +15,11 @@ export async function quickSave(fileName: string): Promise<void> {
         return;
     }
 
-    const filePath = `${sessionFilesFolder}/${fileName}`;
+    const filePath = `${serverFilesFolder}/${fileName}`;
     await fs.writeFile(filePath, sessionString, 'utf-8');
 }
 
-export async function saveSessionsToFile(): Promise<void> {
+export async function saveServerToFile(): Promise<void> {
     const currentSessions = await getCurrentSessions();
     const sessionString = JSON.stringify(currentSessions, null, 2);
 
@@ -38,9 +37,9 @@ export async function saveSessionsToFile(): Promise<void> {
         return;
     }
 
-    await saveNeovimSessions(currentSessions, fileName);
+    await saveNvimForSessions(currentSessions, fileName);
 
-    const filePath = `${sessionFilesFolder}/${fileName}`;
+    const filePath = `${serverFilesFolder}/${fileName}`;
     await fs.writeFile(filePath, sessionString, 'utf-8');
 
     cleanUpStaleNvimSaves(currentSessions);
@@ -48,22 +47,6 @@ export async function saveSessionsToFile(): Promise<void> {
     await updateCurrentSession(fileName);
 
     console.log('Save Successful!');
-}
-
-function cleanUpStaleNvimSaves(sessions: TmuxSessions): void {
-    Object.keys(sessions).forEach((session) => {
-        sessions[session].windows.forEach((window, windowIndex) => {
-            window.panes.forEach(async (pane, paneIndex): Promise<void> => {
-                if (pane.currentCommand !== 'nvim') {
-                    const nvimSessionFileName = `${session}_${windowIndex}_${paneIndex}`
-                    try {
-                        await fs.rm(`${nvimSessionsPath}/${nvimSessionFileName}`);
-                    } catch (_err) {
-                    }
-                }
-            })
-        })
-    });
 }
 
 async function getFileNameFromUser(): Promise<string> {
@@ -75,7 +58,7 @@ async function getFileNameFromUser(): Promise<string> {
         branchName = '';
     }
 
-    const itemsArray = filterGitKeep(await fs.readdir(sessionFilesFolder));
+    const itemsArray = filterGitKeep(await fs.readdir(serverFilesFolder));
 
     if (!branchName) {
         return await generalUI.searchAndSelect({
@@ -100,16 +83,4 @@ async function getFileNameFromUser(): Promise<string> {
     });
 
     return `${branchName}-${sessionName}-${getDateString()}`;
-}
-
-async function saveNeovimSessions(sessions: TmuxSessions, fileName: string): Promise<void> {
-    for (const [sessionName, session] of Object.entries(sessions)) {
-        for (const [windowIndex, window] of session.windows.entries()) {
-            for (const [paneIndex, pane] of window.panes.entries()) {
-                if (pane.currentCommand === 'nvim') {
-                    await nvim.saveNvimSession(fileName, sessionName, windowIndex, paneIndex);
-                }
-            }
-        }
-    }
 }

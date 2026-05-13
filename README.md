@@ -86,7 +86,9 @@ kra tmux
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **save-server** 💾    | Save entire servers — including all sessions, windows, panes, and Neovim states. Perfect for multitasking across different projects or tickets. |
 | **load-server** ♻️    | Reload your saved server *exactly* how you left it — including repos (auto-clones if missing), directories, layouts, and editor states.         |
-| **delete-server** 🧹  | Clean up specific saved servers. Preview the structure (sessions, windows, names) before confirming deletion.                                   |
+| **save-session** 💾   | Save a single tmux session (pre-selecting the attached one) into its own file. Captures windows, panes, and Neovim state for that session only. |
+| **load-session** ♻️   | Load a saved single-session file into the running tmux server *without* tearing down the rest. Prompts to rename or overwrite on a name collision. |
+| **manage-saves** 🗂️   | Two-tab dashboard for browsing saved files. Press `1` for server saves, `2` for single-session saves. Browse, preview, rename, delete, or build a new save interactively. |
 | **list-sessions** 📋  | View a summary of the current server's sessions and windows with rich formatting.                                                                    |
 | **kill** ❌           | Terminate the currently running server instantly with graceful cleanup.                                                                                                |
 

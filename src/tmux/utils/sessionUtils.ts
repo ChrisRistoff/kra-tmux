@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as bash from '@/utils/bashHelper';
-import { sessionFilesFolder } from '@/filePaths';
+import { serverFilesFolder } from '@/filePaths';
 import { TmuxSessions, Window, Pane } from '@/types/sessionTypes';
 import { formatWindow, formatPane } from '@/tmux/utils/formatters';
 import { filterGitKeep } from '@/utils/common';
@@ -80,9 +80,9 @@ export async function getPanesForWindow(session: string, windowIndex: number): P
  * @returns Promise resolving to array of session names, excluding .gitkeep files.
  *          Returns empty array if directory read fails.
  */
-export async function getSavedSessionsNames(): Promise<string[]> {
+export async function getSavedServerNames(): Promise<string[]> {
     try {
-        return filterGitKeep(await fs.readdir(sessionFilesFolder));
+        return filterGitKeep(await fs.readdir(serverFilesFolder));
     } catch (error) {
         console.error('Error reading directory:', error);
 
@@ -95,7 +95,7 @@ export async function getSavedSessionsNames(): Promise<string[]> {
  * @param filePath - Full path to the session configuration file
  * @returns Promise resolving to TmuxSessions object parsed from JSON file
  */
-export async function getSavedSessionsByFilePath(filePath: string): Promise<TmuxSessions> {
+export async function getSavedFileByPath(filePath: string): Promise<TmuxSessions> {
     const latestSessions = await fs.readFile(filePath);
 
     return JSON.parse(latestSessions.toString());
